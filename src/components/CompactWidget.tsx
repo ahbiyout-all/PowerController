@@ -47,6 +47,8 @@ interface CompactWidgetProps {
   currentThemeConfig: any;
   formatTimeStr: (s: number) => string;
   getPowerModeKorean: (m: PowerMode) => string;
+  isPowerSavingActive?: boolean;
+  batteryLevel?: number;
 }
 
 export default function CompactWidget({
@@ -87,8 +89,13 @@ export default function CompactWidget({
   currentThemeConfig,
   formatTimeStr,
   getPowerModeKorean,
+  isPowerSavingActive = false,
+  batteryLevel
 }: CompactWidgetProps) {
   const [showConfigDrawer, setShowConfigDrawer] = useState<boolean>(false);
+
+  // When power saving mode is active (battery <= 20%), automatically reduce opacity and dim background/animations
+  const effectiveOpacity = isPowerSavingActive ? Math.min(widgetOpacity * 0.65, 45) : widgetOpacity;
 
   const currentTimeFormatted = new Date().toLocaleTimeString(lang === 'en' ? 'en-US' : 'ko-KR', {
     hour12: false,
@@ -342,11 +349,13 @@ export default function CompactWidget({
       <motion.div
         layout
         initial={{ opacity: 0, scale: 0.9 }}
-        animate={{ opacity: widgetOpacity / 100, scale: 1 }}
+        animate={{ opacity: effectiveOpacity / 100, scale: 1 }}
         style={{ width: `${widgetWidth}px` }}
         className={`rounded-2xl overflow-hidden shadow-2xl border-2 flex flex-col max-h-[calc(100vh-2rem)] transition-all duration-300 ease-in-out ${
           isWarningActive 
             ? 'border-red-500/95 shadow-red-500/30 ring-4 ring-red-500/15' 
+            : isPowerSavingActive
+            ? 'border-emerald-500/60 shadow-none ring-0'
             : 'border-blue-500/80 shadow-blue-500/10'
         } ${currentThemeConfig.windowBg} ${selectedFont}`}
       >
@@ -354,6 +363,8 @@ export default function CompactWidget({
         <div className={`shrink-0 text-white text-[13.5px] py-2 px-3 font-semibold flex items-center justify-between transition-all duration-300 ease-in-out ${
           isWarningActive 
             ? 'bg-gradient-to-r from-red-600 to-rose-700 animate-pulse' 
+            : isPowerSavingActive
+            ? 'bg-gradient-to-r from-emerald-800/80 via-slate-800 to-slate-900'
             : 'bg-gradient-to-r from-blue-700 via-indigo-700 to-slate-800'
         }`}>
           <div className="flex items-center gap-2">
@@ -361,6 +372,11 @@ export default function CompactWidget({
               <img src="/PowerController.png" alt="Icon" className="w-full h-full object-cover scale-105" />
             </div>
             <span className="font-bold tracking-tight">{isWarningActive ? '🚨 1분 미만 임박' : (lang === 'en' ? 'Compact Power Widget' : '컴팩트 전원 위젯')}</span>
+            {isPowerSavingActive && (
+              <span className="px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-mono font-bold flex items-center gap-0.5">
+                🌱 {lang === 'en' ? 'Eco' : '절전'} {batteryLevel ? `${batteryLevel}%` : ''}
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-1">
             <button
@@ -465,7 +481,7 @@ export default function CompactWidget({
       <motion.div
         layout
         initial={{ opacity: 0, scale: 0.9 }}
-        animate={{ opacity: widgetOpacity / 100, scale: 1 }}
+        animate={{ opacity: effectiveOpacity / 100, scale: 1 }}
         style={{ width: `${widgetWidth}px` }}
         className="rounded-xl overflow-hidden shadow-2xl border-2 border-cyan-500/80 bg-gray-950 text-cyan-400 font-mono select-none flex flex-col max-h-[calc(100vh-2rem)] transition-all duration-300 ease-in-out"
       >
@@ -474,6 +490,11 @@ export default function CompactWidget({
           <div className="flex items-center gap-1.5 text-cyan-300">
             <Terminal className="w-3.5 h-3.5" />
             <span>SYS.HUD // {getPowerModeKorean(powerMode).toUpperCase()}</span>
+            {isPowerSavingActive && (
+              <span className="px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[9.5px] font-mono font-bold">
+                ECO {batteryLevel ? `${batteryLevel}%` : ''}
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-1">
             <button
@@ -569,7 +590,7 @@ export default function CompactWidget({
       <motion.div
         layout
         initial={{ opacity: 0, scale: 0.9 }}
-        animate={{ opacity: widgetOpacity / 100, scale: 1 }}
+        animate={{ opacity: effectiveOpacity / 100, scale: 1 }}
         style={{ width: `${widgetWidth}px` }}
         className="rounded-full shadow-2xl border border-blue-500/50 bg-gray-900/95 px-3 py-2 text-white flex items-center justify-between gap-2 select-none transition-all duration-300 ease-in-out"
       >
@@ -590,6 +611,11 @@ export default function CompactWidget({
 
         {/* Center / Middle Content: Clock & Timer */}
         <div className="flex-1 min-h-0 flex items-center justify-center gap-2 font-mono transition-all duration-300 ease-in-out">
+          {isPowerSavingActive && (
+            <span className="px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 text-[10px] font-bold">
+              🌱
+            </span>
+          )}
           {showCurrentTimeCompact && (
             <span style={{ fontSize: `${clockFontSize}px` }} className="text-gray-400 transition-all duration-300 ease-in-out">
               {currentTimeFormatted}
@@ -656,13 +682,20 @@ export default function CompactWidget({
       <motion.div
         layout
         initial={{ opacity: 0, scale: 0.9 }}
-        animate={{ opacity: widgetOpacity / 100, scale: 1 }}
+        animate={{ opacity: effectiveOpacity / 100, scale: 1 }}
         style={{ width: `${widgetWidth}px` }}
         className="rounded-2xl overflow-hidden shadow-2xl border-4 border-[#2b2416] bg-[#140f07] text-[#f59e0b] select-none flex flex-col max-h-[calc(100vh-2rem)] transition-all duration-300 ease-in-out"
       >
         {/* Retro Header */}
         <div className="shrink-0 bg-[#1f170b] border-b border-[#3d2c10] px-3 py-1.5 flex items-center justify-between text-[13.5px] font-bold tracking-widest text-[#d97706] transition-all duration-300 ease-in-out">
-          <span>DIGITAL POWER CONTROLLER // LED-7S</span>
+          <div className="flex items-center gap-1.5">
+            <span>DIGITAL POWER CONTROLLER // LED-7S</span>
+            {isPowerSavingActive && (
+              <span className="px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-400 text-[9.5px]">
+                ECO
+              </span>
+            )}
+          </div>
           <div className="flex items-center gap-1">
             <button onClick={() => setShowConfigDrawer(!showConfigDrawer)} className="p-1 hover:text-white">
               <Sliders className="w-3 h-3" />
@@ -734,7 +767,7 @@ export default function CompactWidget({
     <motion.div
       layout
       initial={{ opacity: 0, scale: 0.9 }}
-      animate={{ opacity: widgetOpacity / 100, scale: 1 }}
+      animate={{ opacity: effectiveOpacity / 100, scale: 1 }}
       style={{ width: `${widgetWidth}px` }}
       className={`rounded-2xl overflow-hidden shadow-2xl border border-gray-500/20 flex flex-col max-h-[calc(100vh-2rem)] transition-all duration-300 ease-in-out ${currentThemeConfig.windowBg} ${selectedFont}`}
     >
@@ -743,6 +776,11 @@ export default function CompactWidget({
         <div className="flex items-center gap-2">
           <Activity className="w-4 h-4 text-blue-500" />
           <span className="font-bold text-[13.5px]">{lang === 'en' ? 'Power Widget' : '전원 관리 미니창'}</span>
+          {isPowerSavingActive && (
+            <span className="px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 text-[10px] font-mono font-bold">
+              🌱 {lang === 'en' ? 'Eco' : '절전'}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-1">
           <button

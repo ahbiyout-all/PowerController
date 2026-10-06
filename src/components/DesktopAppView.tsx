@@ -23,6 +23,11 @@ import {
   AlertTriangle,
   Lock,
   BatteryCharging,
+  Battery,
+  BatteryFull,
+  BatteryMedium,
+  BatteryLow,
+  Zap,
   Maximize2,
   Minimize2,
   X,
@@ -32,8 +37,10 @@ import {
   Sparkles,
   Download
 } from 'lucide-react';
-import { APP_VERSION } from '../types';
+import { APP_VERSION, SoundTheme } from '../types';
+import { soundEngine, SOUND_THEMES } from '../utils/soundEngine';
 import { UpdateModal } from './GitHubUpdateBanner';
+import BatteryHistoryChart from './BatteryHistoryChart';
 
 export type DesktopWindowType = 'main' | 'network' | 'injector';
 
@@ -41,6 +48,12 @@ interface DesktopAppViewProps {
   onSwitchToWeb?: () => void;
   onOpenLicense?: () => void;
   isWebAvailable?: boolean;
+  battery?: {
+    level: number;
+    charging: boolean;
+    statusText?: string;
+  };
+  isPowerSavingActive?: boolean;
 }
 
 interface ScheduleRuleItem {
@@ -56,7 +69,9 @@ interface ScheduleRuleItem {
 export const DesktopAppView: React.FC<DesktopAppViewProps> = ({
   onSwitchToWeb,
   onOpenLicense,
-  isWebAvailable = true
+  isWebAvailable = true,
+  battery,
+  isPowerSavingActive = false
 }) => {
   // Active desktop program
   const [activeApp, setActiveApp] = useState<DesktopWindowType>('main');
@@ -86,6 +101,14 @@ export const DesktopAppView: React.FC<DesktopAppViewProps> = ({
   const [minimizeToTray, setMinimizeToTray] = useState(true);
   const [forceClose, setForceClose] = useState(true);
   const [networkReceive, setNetworkReceive] = useState(true);
+  const [powerSavingToggle, setPowerSavingToggle] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('power_saving_mode');
+      return saved !== null ? saved === 'true' : true;
+    } catch {
+      return true;
+    }
+  });
 
   // Settings popup inside desktop
   const [showSettingsModal, setShowSettingsModal] = useState(false);
@@ -284,6 +307,41 @@ export const DesktopAppView: React.FC<DesktopAppViewProps> = ({
             <span>ApplySharedSchedules.exe</span>
           </button>
         </div>
+
+        {/* Battery Status Indicator */}
+        {battery && (
+          <div
+            className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-950/80 border border-slate-800 rounded text-slate-200 shadow-inner"
+            title={`배터리 상태: ${battery.level}% (${battery.charging ? '충전 중' : '배터리 사용 중'}${battery.statusText ? ` - ${battery.statusText}` : ''})`}
+          >
+            <div className="relative flex items-center">
+              {battery.charging ? (
+                <BatteryCharging className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
+              ) : battery.level <= 20 ? (
+                <BatteryLow className="w-3.5 h-3.5 text-rose-400" />
+              ) : battery.level <= 60 ? (
+                <BatteryMedium className="w-3.5 h-3.5 text-amber-400" />
+              ) : (
+                <BatteryFull className="w-3.5 h-3.5 text-emerald-400" />
+              )}
+            </div>
+            <span className="font-mono font-bold text-xs">{battery.level}%</span>
+            <span className={`text-[10px] px-1 py-0.2 rounded font-semibold ${
+              battery.charging
+                ? 'bg-emerald-500/20 text-emerald-400'
+                : battery.level <= 20
+                ? 'bg-rose-500/20 text-rose-400'
+                : 'bg-slate-800 text-slate-300'
+            }`}>
+              {battery.charging ? '충전중' : '배터리'}
+            </span>
+            {isPowerSavingActive && (
+              <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-1 py-0.2 rounded font-bold flex items-center gap-0.5 animate-pulse">
+                🍃 절전 중
+              </span>
+            )}
+          </div>
+        )}
 
         {/* Web Switcher, Update Button & License Button */}
         <div className="flex items-center gap-2">
@@ -680,6 +738,17 @@ export const DesktopAppView: React.FC<DesktopAppViewProps> = ({
                           </div>
                         </div>
                       </div>
+                    </div>
+
+                    {/* 60-Minute Battery Consumption & Prediction Chart (Recharts) */}
+                    <div className="mt-3">
+                      <BatteryHistoryChart
+                        currentBattery={battery}
+                        timerState={isTimerRunning ? 'running' : 'idle'}
+                        secondsRemaining={remainingSeconds}
+                        lang="ko"
+                        theme="dark"
+                      />
                     </div>
 
                     {/* Quick +Preset Buttons */}
@@ -1165,12 +1234,68 @@ export const DesktopAppView: React.FC<DesktopAppViewProps> = ({
                 </div>
               </div>
 
-              {/* 4. Real-time Update Section */}
+              {/* 4. Sound & Alert Themes (Pixabay Sound Effects) */}
+              <div className="bg-[#18181b] p-3 rounded space-y-2 border border-[#27272a]">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-emerald-400">4. 알림 효과음 사운드 뱅크 (Pixabay 선별)</span>
+                  <span className="text-[10px] text-emerald-300/80 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20 font-mono">
+                    7개 테마
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-1.5 pt-1">
+                  {SOUND_THEMES.map((th) => (
+                    <button
+                      key={th.id}
+                      type="button"
+                      onClick={() => {
+                        soundEngine.play(th.id, 'preview');
+                        showInAppToast(`[${th.nameKo}] 효과음 재생`);
+                      }}
+                      className="p-1.5 bg-[#2b2b36] hover:bg-[#383848] border border-[#3f3f46] rounded text-left flex items-center justify-between transition-colors"
+                    >
+                      <div className="flex items-center gap-1.5 truncate">
+                        <span>{th.icon}</span>
+                        <span className="font-bold text-slate-200 truncate">{th.nameKo}</span>
+                      </div>
+                      <span className="text-[10px] text-emerald-400 font-bold ml-1">▶ 재생</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 5. Smart Power Saving Mode (<20% battery auto dimming) */}
+              <div className="bg-[#18181b] p-3 rounded space-y-2 border border-[#27272a]">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-emerald-400 flex items-center gap-1.5">
+                    🍃 5. 스마트 절전 모드 (배터리 20% 이하 감지)
+                  </span>
+                  <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={powerSavingToggle}
+                      onChange={(e) => {
+                        setPowerSavingToggle(e.target.checked);
+                        try {
+                          localStorage.setItem('power_saving_mode', e.target.checked ? 'true' : 'false');
+                        } catch {}
+                        showInAppToast(e.target.checked ? '스마트 절전 모드가 활성화되었습니다.' : '스마트 절전 모드가 비활성화되었습니다.');
+                      }}
+                      className="sr-only peer"
+                    />
+                    <div className="relative w-7 h-4 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-600"></div>
+                  </label>
+                </div>
+                <div className="text-[11px] text-slate-300 leading-relaxed">
+                  배터리 잔량이 20% 이하로 떨어지면 플로팅 위젯의 투명도를 자동으로 낮추고 배경 애니메이션을 어둡게 감쇠하여 배터리 방전을 지연시킵니다.
+                </div>
+              </div>
+
+              {/* 6. Real-time Update Section */}
               <div className="bg-gradient-to-r from-blue-950/40 to-indigo-950/40 p-3 rounded space-y-2 border border-blue-500/30">
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-blue-300 flex items-center gap-1.5">
                     <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                    4. GitHub 실시간 업데이트 & 버전 정보
+                    6. GitHub 실시간 업데이트 & 버전 정보
                   </span>
                   <span className="font-mono font-bold text-blue-400">v{APP_VERSION}</span>
                 </div>

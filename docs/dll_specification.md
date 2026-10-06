@@ -219,6 +219,63 @@ Windows 세션 변경 알림(`WTSRegisterSessionNotification`) 및 하드웨어 
 
 ---
 
+### [F] DiskFlushNative.dll
+
+강제 종료/재부팅 전 RAM 캐시에 잔류 중인 모든 파일시스템 버퍼를 물리 스토리지로 강제 동기화하는 순수 창작 C 모듈입니다.
+
+#### `int NativeFlushAllVolumes(void)`
+* **기능**: C:, D: 등 마운트된 모든 논리 볼륨의 파일시스템 Write-back 캐시 버퍼를 `FlushFileBuffers`로 강제 플러시합니다.
+
+---
+
+### [G] AudioDimmerNative.dll
+
+Windows Core Audio API (`IAudioEndpointVolume`) 직결 오디오 페이드아웃 및 볼륨 제어 모듈입니다.
+
+#### `BOOL NativeFadeMasterVolume(float target_scalar, int fade_ms)`
+* **기능**: 오디오 출력을 `target_scalar`(0.0~1.0)까지 지정된 `fade_ms` 동안 부드러운 S-커브로 페이드다운합니다.
+
+---
+
+### [H] DisplayDdcNative.dll
+
+Dxva2.dll 및 VESA DDC/CI 기반 모니터 백라이트 하드웨어 밝기 제어기입니다.
+
+#### `int NativeSetHardwareBrightness(int brightness_percent)`
+* **기능**: 연결된 모니터의 하드웨어 백라이트 밝기(0~100%)를 직접 조절합니다.
+
+---
+
+### [I] LowLevelInputIdleNative.dll
+
+Win32 `GetLastInputInfo` 기반 무동작 유휴 시간 감시 모듈입니다.
+
+#### `double NativeGetSystemIdleSeconds(void)`
+* **기능**: 마지막 키보드/마우스 입력 이후 경과된 유휴 시간(초)을 정밀 계산하여 반환합니다.
+
+---
+
+### [J] CommanderTcpDispatcherNative.dll
+
+커맨더(`PowerNetworkScheduler.exe`) 전용 Winsock2 비동기 소켓 스케줄 배포 엔진입니다.
+
+#### `BOOL NativeSendSingleRuleCommand(const char* ip, int port, const char* payload, int payload_len)`
+* **기능**: 대상 PC(TCP 9988)로 암호화 스케줄 봉투를 1.5s 타임아웃 백그라운드 소켓 스레드로 초고속 발송합니다.
+
+---
+
+### [K] CommanderPingScannerNative.dll
+
+커맨더 타워 전용 `IcmpSendEcho` ICMP/ARP LAN PC 생존 스캐너 및 WoL 매직 패킷 송출기입니다.
+
+#### `BOOL NativePingSingleTarget(const char* ip_str, DWORD timeout_ms, DWORD* out_rtt_ms)`
+* **기능**: 서브프로세스 생성 없이 C 레벨 원자적 ICMP Ping으로 대상 PC 활성화 상태를 스캔합니다.
+
+#### `BOOL NativeSendWakeOnLan(const char* mac_hex_str, int port)`
+* **기능**: 원격 꺼진 PC 기상을 위한 Wake-on-LAN Magic Packet (6*0xFF + 16*MAC)을 송출합니다.
+
+---
+
 ## 🐍 3. 파이썬 연동 (`native_bridge.py`)
 
 파이썬 코드에서는 복잡한 C API를 직접 호출하지 않고, **`native_bridge.py`** 모듈을 통해 아래와 같이 안전하게 사용합니다:

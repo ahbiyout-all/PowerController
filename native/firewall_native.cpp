@@ -36,7 +36,7 @@ static BOOL g_ComInitialized = FALSE;
 static void EnsureComInitialized(void) {
     if (!g_ComInitialized) {
         HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
-        if (SUCCEEDED(hr) || hr == RPC_E_CHANGED_MODE) {
+        if (hr == S_OK || hr == S_FALSE) {
             g_ComInitialized = TRUE;
         }
     }

@@ -16,6 +16,8 @@ export type TimerState = 'idle' | 'running' | 'paused' | 'complete';
 
 export type ThemeType = 'dark' | 'gray' | 'beige';
 
+export type SoundTheme = 'classic' | 'marimba' | 'crystal' | 'scifi' | 'westminster' | 'urgent' | 'bubble';
+
 export type ExplorerFolder = 'timer' | 'scheduler' | 'packager' | 'command' | 'favorites' | 'logs';
 
 export interface FavoritePreset {

@@ -333,6 +333,28 @@
 - 원격 저장소에 기존 커밋이나 동일 태그가 이미 존재할 때 푸시가 거부되던 현상을 원천 방지하기 위해 `github_sync.py`, `push_to_github.bat`, `push_to_github.ps1`, `push_to_github.sh`에 `--force` 동기화 및 태그 자동 갱신 로직 탑재.
 - PC (Windows) 배포 파이프라인에 집중하도록 모바일 패키징 설정 정리 완료.
 
+---
+
+### 📅 [2026-10-06] - Pixabay 음향 엔진, 배터리 소모 분석 차트, 스마트 절전 모드 및 11대 C/C++ 네이티브 DLL 아키텍처 완성
+
+#### 1. Pixabay 선별 알림음 사운드 뱅크 및 Web Audio 오디오 오디션 허브 구축
+- Pixabay 우수 시스템 효과음 분석 기반 7가지 알림음 테마 (`classic`, `marimba`, `crystal`, `scifi`, `westminster`, `urgent`, `bubble`) 구현.
+- Web Audio API 기반 오디오 믹서, 0~100% 볼륨 슬라이더, 음소거 토글, 상황별(정각 종소리, 카운트다운 틱, 알람 완료, 작업 성공) 오디션 테스트 허브 연동.
+
+#### 2. Recharts 최근 60분 배터리 소모 차트 & Battery Health Insights 분석 바
+- `BatteryHistoryChart`: 최근 60분 실시간 잔량 트렌드 및 15% 임계점 가이드라인 시각화.
+- `Battery Health Insights`: 예상 잔여 사용 시간(완전 방전/15% 도달), 방전율(%/h) 텔레메트리 3열 지표 구축.
+
+#### 3. 타이머 가동 중 배터리 15% 이하 지속 알림(토스트) & 스마트 절전 모드 (<20%)
+- 타이머 동작 중 배터리 15% 이하 진입 시 AC 어댑터 연결 유도 persistent 경고 토스트.
+- 스마트 절전 모드: 배터리 20% 이하 감지 시 위젯 투명도 자동 감쇠(effectiveOpacity ≤ 45%) 및 배경 링 애니메이션 자동 어둡게 처리.
+
+#### 4. 11대 순수 창작 C/C++ 네이티브 DLL 전체 구축 및 감사 최적화
+- 기존 5대 DLL 정밀 감사: `power_core_native.c` 1회 스냅샷 트래버스 최적화, `firewall_native.cpp` COM 초기화 참조 카운트 가드, `schedule_crypto.c` Constant-time HMAC 검증.
+- 6대 신규 DLL 소스 개발: `disk_flush_native.c`, `audio_dimmer_native.cpp`, `display_ddc_native.cpp`, `low_level_input_idle_native.c`, `commander_tcp_dispatcher.cpp`, `commander_ping_scanner.c`.
+- `native_bridge.py` 바인딩 및 Fallback 완비, `docs/pure_custom_dll_architecture.md` 문서 등록.
+
+
 
 
 

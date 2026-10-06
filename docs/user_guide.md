@@ -138,6 +138,26 @@ PowerController는 단순한 종료 예약기를 넘어 데스크톱의 편리�
 ### 24. 📉 기능 보존 무손실 파일 용량 최적화 (v2.9.1)
 *   Vite 번들 코드 스플리팅, PNG 메타데이터 스트립, Inno Setup LZMA2/Ultra64 고효율 압축 및 ZIP 레벨 9 패키징을 통해 앱의 모든 기능을 100% 온전히 유지하면서 배포본 크기를 획기적으로 경량화하였습니다.
 
+### 25. 🎵 Pixabay 선별 알림음 사운드 뱅크 & Web Audio 오디오 엔진 (v2.9.1+)
+*   **7가지 고음질 프리미엄 알림음 테마**: Pixabay 인기 알림음 분석 기반 7종 테마 (`Classic Bell`, `Melodic Marimba`, `Crystal Chime`, `Sci-Fi Pulse`, `Westminster Tower`, `Urgent Siren`, `Bubble Pop`).
+*   **상황별 알림음 믹서 및 테스트 허브**: 정각 종소리(`hourlyChime`), 카운트다운 틱(`warningTick`), 알람 완료(`timerAlarm`), 작업 성공(`actionSuccess`) 사운드 오디션 모듈 지원.
+*   **볼륨 및 Mute 제어**: 0~100% 미세 볼륨 조절 및 원클릭 음소거 기능 제공.
+
+### 26. 📊 Recharts 기반 최근 60분 배터리 소모 차트 & Battery Health Insights (v2.9.1+)
+*   **60분 배터리 영역 차트 (`BatteryHistoryChart`)**: 최근 60분간의 실시간 배터리 잔량 트렌드를 Recharts 그라디언트 카드로 시각화. 15% 저전력 경고 가이드라인과 1시간당 소모율(`%/h`) 계산 기능 포함.
+*   **Battery Health Insights 분석 바**:
+    *   ⏱️ **예상 잔여 사용 시간**: 현재 작업 부하 방전 속도 기준 0% 완전 방전까지 남은 시간을 실시간 계산 (AC 연결 시 `상시 지속` 표기).
+    *   ⚡ **시간당 소모율**: 시간당 소모율(`-% / hr`) 및 충전 속도 3열 카드 표시.
+    *   🛡️ **안전 작동 한계**: 15% 저전력 경고 토스트가 트리거되기 전까지 여유 골든타임 안내.
+
+### 27. 🔋 타이머 가동 중 배터리 15% 이하 지속 알림 & 스마트 절전 모드 (<20%) (v2.9.1+)
+*   **지속형 경고 토스트 (<15%)**: 전원 제어 타이머 동작 중 배터리가 15% 이하로 떨어지면 AC 어댑터 연결을 유도하는 persistent 토스트 알림 표출.
+*   **스마트 절전 모드 (<20%)**: 배터리 20% 이하 감지 시 상단 고정 위젯 투명도를 45% 이하로 자동 낮추고 배경 애니메이션을 감쇠시켜 배터리 소모 차단.
+
+### 28. 🛠️ 11대 순수 창작 C/C++ 네이티브 DLL 시스템 (v2.9.1+)
+*   **PowerCoreNative, NetBeaconEngine, FirewallNative, SysPowerHook, ScheduleCrypto, DiskFlushNative, AudioDimmerNative, DisplayDdcNative, LowLevelInputIdleNative, CommanderTcpDispatcherNative, CommanderPingScannerNative** 등 11개 순수 C/C++ 네이티브 DLL이 탑재되어, 외부 라이브러리 설치 없이 초고속(0.0001초~0.05초) 시스템 제어를 수행합니다.
+*   자세한 아키텍처 및 C ABI 명세는 [`pure_custom_dll_architecture.md`](./pure_custom_dll_architecture.md) 및 [`dll_specification.md`](./dll_specification.md) 문서를 참고하십시오.
+
 ---
 
 ## 🎵 사운드 & 오디오 테마 가이드

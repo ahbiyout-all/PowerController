@@ -312,10 +312,13 @@ POPULAR_SCHEDULE_TITLES_EN = [
 # --------------------------------------------------------------------
 # 스크롤 가능 프레임 엘리먼트 정의 (고급 스케줄러 목록용)
 # --------------------------------------------------------------------
-class ScrollableFrame(tk.Frame):
+_base_frame_class = tk.Frame if tk is not None else object
+class ScrollableFrame(_base_frame_class):
     _active_frame = None
 
-    def __init__(self, container, *args, **kwargs):
+    def __init__(self, container=None, *args, **kwargs):
+        if tk is None:
+            return
         super().__init__(container, *args, **kwargs)
         self.canvas = tk.Canvas(self, bg=DARK_BG, bd=0, highlightthickness=0)
         self.scrollbar = tk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
@@ -627,6 +630,18 @@ class PowerTimerApp:
         self.widget_width = tk.IntVar(value=286)
         self.widget_height = tk.IntVar(value=95)
         self.mini_context_popup = None
+        self.settings_popup = None
+        self.old_theme = {
+            "bg": DARK_BG,
+            "card": DARK_CARD,
+            "text": TEXT_COLOR,
+            "blue": ACCENT_BLUE,
+            "red": ACCENT_RED,
+            "yellow": ACCENT_YELLOW,
+            "green": "#10b981",
+            "subtext": "#9ca3af",
+            "secondary": "#374151"
+        }
         self.clock_font_size = tk.IntVar(value=13)
         self.timer_font_size = tk.IntVar(value=20)
         self.hourly_chime_enabled = tk.BooleanVar(value=True)
@@ -714,6 +729,8 @@ class PowerTimerApp:
             if P_TRAY_AVAILABLE:
                 self.log_event("컴퓨터 시작(부팅) 감지: 메인창을 띄우지 않고 시스템 트레이 백그라운드로 안전하게 시작합니다." if self.lang == "ko" else "System startup detected: Starting silently in system tray without showing main window.")
                 self.root.after(150, self.start_tray_icon)
+            if self.always_on_top.get():
+                self.root.after(200, self.sync_always_on_top_mini_win)
         else:
             self.root.deiconify()
             self.sync_always_on_top_mini_win()
@@ -1012,30 +1029,50 @@ class PowerTimerApp:
         FONT_LABELS = {
             "ko": {
                 "font-sans": "산세리프 (Inter)",
+                "font-segoe": "Segoe UI (Windows 기본)",
+                "font-malgun": "맑은 고딕 (Malgun Gothic)",
+                "font-dotum": "돋움 (Dotum)",
+                "font-gulim": "굴림 (Gulim)",
+                "font-batang": "바탕 (Batang)",
+                "font-gungsuh": "궁서 (Gungsuh)",
+                "font-consolas": "Consolas (코딩용 고정폭)",
+                "font-arial": "Arial (영문 표준)",
+                "font-tahoma": "Tahoma (윈도우)",
+                "font-calibri": "Calibri (윈도우)",
                 "font-display": "테크 (Grotesk)",
                 "font-mono": "고정폭 (Mono)",
-                "font-serif": "명조 (나눔명조)",
-                "font-malgun": "맑은 고딕 (Malgun)",
-                "font-gulim": "굴림 (Gulim)",
-                "font-batang": "바탕 (Batang)"
+                "font-serif": "명조 (나눔명조)"
             },
             "en": {
                 "font-sans": "Sans (Inter)",
+                "font-segoe": "Segoe UI (Windows System)",
+                "font-malgun": "Malgun Gothic",
+                "font-dotum": "Dotum",
+                "font-gulim": "Gulim",
+                "font-batang": "Batang",
+                "font-gungsuh": "Gungsuh",
+                "font-consolas": "Consolas (Mono)",
+                "font-arial": "Arial",
+                "font-tahoma": "Tahoma",
+                "font-calibri": "Calibri",
                 "font-display": "Tech (Grotesk)",
                 "font-mono": "Mono (Coding)",
-                "font-serif": "Serif (Myeongjo)",
-                "font-malgun": "Malgun Gothic",
-                "font-gulim": "Gulim",
-                "font-batang": "Batang"
+                "font-serif": "Serif (Myeongjo)"
             }
         }
         if hasattr(self, "opt_font"):
             self.opt_font['menu'].delete(0, 'end')
-            for option in ["font-sans", "font-display", "font-mono", "font-serif", "font-malgun", "font-gulim", "font-batang"]:
-                lbl = FONT_LABELS[self.lang][option]
+            font_options = [
+                "font-sans", "font-segoe", "font-malgun", "font-dotum", "font-gulim", "font-batang",
+                "font-gungsuh", "font-consolas", "font-arial", "font-tahoma", "font-calibri",
+                "font-display", "font-mono", "font-serif"
+            ]
+            for option in font_options:
+                lbl = FONT_LABELS[self.lang].get(option, option)
                 self.opt_font['menu'].add_command(label=lbl, command=lambda o=option: self.handle_font_change(o))
             # Sync label value
-            self.selected_font_label.set(FONT_LABELS[self.lang].get(self.selected_font.get(), "Unknown"))
+            cur_f = self.selected_font.get()
+            self.selected_font_label.set(FONT_LABELS[self.lang].get(cur_f, cur_f))
 
         # Re-populate Font Weight OptionMenu with translated display names
         if hasattr(self, "opt_font_weight"):
@@ -4892,6 +4929,7 @@ if __name__ == "__main__":
         if hasattr(self, "popup_window") and self.popup_window and self.popup_window.winfo_exists():
             try:
                 self.popup_window.deiconify()
+                self.popup_window.attributes("-topmost", True)
                 self.popup_window.lift()
                 self.popup_window.focus_force()
             except Exception:
@@ -4900,14 +4938,35 @@ if __name__ == "__main__":
 
         self.popup_window = tk.Toplevel(self.root)
         self.popup_window.title("다중 스케줄러 & 실시간 모니터링" if self.lang == "ko" else "Advanced Scheduler & Monitoring Terminal")
-        self.popup_window.geometry("616x780")
         self.popup_window.configure(bg=DARK_BG)
-        self.popup_window.transient(self.root)
         
-        # Center dialog
-        x = self.root.winfo_x() + (self.root.winfo_width() // 2) - 308
-        y = self.root.winfo_y() + (self.root.winfo_height() // 2) - 390
-        self.popup_window.geometry(f"+{x}+{y}")
+        is_root_visible = False
+        try:
+            is_root_visible = (self.root.state() == "normal" and self.root.winfo_viewable() and self.root.winfo_width() > 100)
+        except Exception:
+            is_root_visible = False
+
+        if is_root_visible:
+            try:
+                self.popup_window.transient(self.root)
+            except Exception:
+                pass
+        
+        sw = self.popup_window.winfo_screenwidth()
+        sh = self.popup_window.winfo_screenheight()
+        w = 616
+        h = min(780, sh - 60)
+
+        if is_root_visible:
+            x = self.root.winfo_x() + (self.root.winfo_width() // 2) - (w // 2)
+            y = self.root.winfo_y() + (self.root.winfo_height() // 2) - (h // 2)
+        else:
+            x = (sw - w) // 2
+            y = (sh - h) // 2
+            
+        x = max(20, min(x, sw - w - 20))
+        y = max(20, min(y, sh - h - 20))
+        self.popup_window.geometry(f"{w}x{h}+{x}+{y}")
 
         # Frame with scrollable contents
         popup_scroll = ScrollableFrame(self.popup_window, bg=DARK_BG)
@@ -6961,24 +7020,39 @@ if __name__ == "__main__":
         FONT_LABELS = {
             "ko": {
                 "font-sans": "산세리프 (Inter)",
+                "font-segoe": "Segoe UI (Windows 기본)",
+                "font-malgun": "맑은 고딕 (Malgun Gothic)",
+                "font-dotum": "돋움 (Dotum)",
+                "font-gulim": "굴림 (Gulim)",
+                "font-batang": "바탕 (Batang)",
+                "font-gungsuh": "궁서 (Gungsuh)",
+                "font-consolas": "Consolas (코딩용 고정폭)",
+                "font-arial": "Arial (영문 표준)",
+                "font-tahoma": "Tahoma (윈도우)",
+                "font-calibri": "Calibri (윈도우)",
                 "font-display": "테크 (Grotesk)",
                 "font-mono": "고정폭 (Mono)",
-                "font-serif": "명조 (나눔명조)",
-                "font-malgun": "맑은 고딕 (Malgun)",
-                "font-gulim": "굴림 (Gulim)",
-                "font-batang": "바탕 (Batang)"
+                "font-serif": "명조 (나눔명조)"
             },
             "en": {
                 "font-sans": "Sans (Inter)",
+                "font-segoe": "Segoe UI (Windows System)",
+                "font-malgun": "Malgun Gothic",
+                "font-dotum": "Dotum",
+                "font-gulim": "Gulim",
+                "font-batang": "Batang",
+                "font-gungsuh": "Gungsuh",
+                "font-consolas": "Consolas (Mono)",
+                "font-arial": "Arial",
+                "font-tahoma": "Tahoma",
+                "font-calibri": "Calibri",
                 "font-display": "Tech (Grotesk)",
                 "font-mono": "Mono (Coding)",
-                "font-serif": "Serif (Myeongjo)",
-                "font-malgun": "Malgun Gothic",
-                "font-gulim": "Gulim",
-                "font-batang": "Batang"
+                "font-serif": "Serif (Myeongjo)"
             }
         }
-        self.selected_font_label.set(FONT_LABELS[self.lang].get(val, "Unknown"))
+        friendly_label = FONT_LABELS[self.lang].get(val, val)
+        self.selected_font_label.set(friendly_label)
         self.save_settings()
         self.apply_current_font_to_widgets()
         
@@ -7003,38 +7077,58 @@ if __name__ == "__main__":
         self.log_event(log_msg, in_app_toast=True)
 
     def get_font(self, family_key, size, weight=""):
-        current_font = self.selected_font.get() # 'font-sans', 'font-display', 'font-mono', 'font-serif'
+        current_font = self.selected_font.get()
         current_weight = self.selected_font_weight.get() if hasattr(self, "selected_font_weight") else "normal"
         
         try:
             import tkinter.font as tkfont
-            avail_families = [f.lower() for f in tkfont.families()]
+            avail_families_map = {f.lower(): f for f in tkfont.families()}
         except Exception:
-            avail_families = []
+            avail_families_map = {}
             
         def find_best_family(candidates):
             for c in candidates:
-                if c.lower() in avail_families:
-                    return c
+                if c.lower() in avail_families_map:
+                    return avail_families_map[c.lower()]
             return candidates[-1] # Fallback to standard
             
-        if current_font == 'font-display':
+        # 1. Direct match with any Windows installed font family
+        clean_key = current_font.replace("font-", "")
+        if current_font.lower() in avail_families_map:
+            best = avail_families_map[current_font.lower()]
+        elif clean_key.lower() in avail_families_map:
+            best = avail_families_map[clean_key.lower()]
+        elif current_font == 'font-segoe':
+            best = find_best_family(["Segoe UI", "Segoe UI Variable", "Malgun Gothic", "Arial"])
+        elif current_font == 'font-malgun':
+            best = find_best_family(["맑은 고딕", "Malgun Gothic", "Segoe UI", "Arial"])
+        elif current_font == 'font-dotum':
+            best = find_best_family(["돋움", "Dotum", "맑은 고딕", "Arial"])
+        elif current_font == 'font-gulim':
+            best = find_best_family(["굴림", "Gulim", "맑은 고딕", "Arial"])
+        elif current_font == 'font-batang':
+            best = find_best_family(["바탕", "Batang", "Nanum Myeongjo", "Times New Roman"])
+        elif current_font == 'font-gungsuh':
+            best = find_best_family(["궁서", "Gungsuh", "바탕", "Batang"])
+        elif current_font == 'font-consolas':
+            best = find_best_family(["Consolas", "Courier New", "Lucida Console"])
+        elif current_font == 'font-arial':
+            best = find_best_family(["Arial", "Segoe UI", "Tahoma"])
+        elif current_font == 'font-tahoma':
+            best = find_best_family(["Tahoma", "Segoe UI", "Arial"])
+        elif current_font == 'font-calibri':
+            best = find_best_family(["Calibri", "Segoe UI", "Arial"])
+        elif current_font == 'font-display':
             best = find_best_family(["Space Grotesk", "Century Gothic", "Trebuchet MS", "Arial"])
         elif current_font == 'font-mono':
             best = find_best_family(["JetBrains Mono", "Consolas", "Courier New"])
         elif current_font == 'font-serif':
             best = find_best_family(["Nanum Myeongjo", "Batang", "Georgia", "Times New Roman"])
-        elif current_font == 'font-malgun':
-            best = find_best_family(["Malgun Gothic", "맑은 고딕", "Arial"])
-        elif current_font == 'font-gulim':
-            best = find_best_family(["Gulim", "굴림", "Arial"])
-        elif current_font == 'font-batang':
-            best = find_best_family(["Batang", "바탕", "Times New Roman"])
         else: # font-sans
-            best = find_best_family(["Inter", "Segoe UI", "Malgun Gothic", "Arial"])
+            best = find_best_family(["Segoe UI", "Inter", "맑은 고딕", "Malgun Gothic", "Arial"])
             
         if family_key == "mono":
-            best = find_best_family(["JetBrains Mono", "Consolas", "Courier New"])
+            best = find_best_family(["Consolas", "JetBrains Mono", "Courier New"])
             
         # Determine the final weight to apply
         if current_weight == "bold":
@@ -7044,14 +7138,14 @@ if __name__ == "__main__":
             
         # Optical size normalization to prevent UI truncation across different font metrics
         adj_size = size
-        if current_font in ['font-malgun', 'font-batang', 'font-gulim', 'font-serif']:
+        if current_font in ['font-malgun', 'font-batang', 'font-gulim', 'font-dotum', 'font-gungsuh', 'font-serif'] or any(k in best.lower() for k in ['gothic', 'batang', 'gulim', 'dotum', 'gungsuh', '고딕', '바탕', '굴림', '돋움', '궁서']):
             if adj_size >= 28:
                 adj_size = max(20, adj_size - 4)
             elif adj_size >= 16:
                 adj_size = max(13, adj_size - 2)
             elif adj_size >= 10:
                 adj_size = max(8, adj_size - 1)
-        elif current_font == 'font-mono':
+        elif current_font in ['font-mono', 'font-consolas'] or 'consolas' in best.lower():
             if adj_size >= 28:
                 adj_size = max(20, adj_size - 4)
             elif adj_size >= 13:
@@ -7064,6 +7158,180 @@ if __name__ == "__main__":
                 adj_size = max(9, adj_size - 1)
 
         return (best, adj_size, final_weight)
+
+    def open_windows_system_font_picker(self, parent_win=None):
+        """윈도우에 설치된 모든 시스템 폰트를 동적으로 호출하여 실시간 미리보기 및 선택을 제공하는 다이얼로그"""
+        try:
+            import tkinter.font as tkfont
+            # Filter out vertical @ fonts and empty names, sort alphabetically
+            raw_families = tkfont.families()
+            system_fonts = sorted(list(set([f for f in raw_families if not f.startswith('@') and f.strip()])))
+        except Exception:
+            system_fonts = ["Malgun Gothic", "Segoe UI", "Gulim", "Dotum", "Batang", "Gungsuh", "Consolas", "Arial"]
+
+        p_win = parent_win if (parent_win and parent_win.winfo_exists()) else self.root
+        picker = tk.Toplevel(p_win)
+        picker.title("🔤 윈도우 시스템 폰트 탐색기" if self.lang == "ko" else "🔤 Windows System Fonts Explorer")
+        picker.configure(bg=DARK_BG)
+        picker.resizable(True, True)
+        
+        pw = 520
+        ph = 580
+        sw = picker.winfo_screenwidth()
+        sh = picker.winfo_screenheight()
+        px = max(20, (sw - pw) // 2)
+        py = max(20, (sh - ph) // 2)
+        picker.geometry(f"{pw}x{ph}+{px}+{py}")
+        
+        try:
+            picker.attributes("-topmost", True)
+        except Exception:
+            pass
+
+        # Title
+        tk.Label(
+            picker,
+            text=f"🔤 Windows 시스템 설치 폰트 (총 {len(system_fonts)}종)" if self.lang == "ko" else f"🔤 Windows Installed Fonts ({len(system_fonts)} total)",
+            font=("Arial", 11, "bold"),
+            fg=ACCENT_BLUE,
+            bg=DARK_BG,
+            pady=8
+        ).pack()
+
+        # Search Bar
+        f_search = tk.Frame(picker, bg=DARK_BG)
+        f_search.pack(fill="x", padx=12, pady=(0, 6))
+
+        tk.Label(
+            f_search,
+            text="🔍 폰트 검색:" if self.lang == "ko" else "🔍 Search Font:",
+            font=("Arial", 10, "bold"),
+            fg=getattr(self, "current_subtext", "#9ca3af"),
+            bg=DARK_BG
+        ).pack(side="left", padx=(0, 6))
+
+        search_var = tk.StringVar()
+        entry_search = tk.Entry(
+            f_search,
+            textvariable=search_var,
+            bg=DARK_CARD,
+            fg=TEXT_COLOR,
+            insertbackground="white",
+            relief="flat",
+            font=("Arial", 10),
+            bd=1
+        )
+        entry_search.pack(side="left", fill="x", expand=True)
+
+        # Listbox Frame with Scrollbar
+        f_list = tk.Frame(picker, bg=DARK_BG)
+        f_list.pack(fill="both", expand=True, padx=12, pady=4)
+
+        scrollbar = tk.Scrollbar(f_list)
+        scrollbar.pack(side="right", fill="y")
+
+        font_listbox = tk.Listbox(
+            f_list,
+            bg=DARK_CARD,
+            fg=TEXT_COLOR,
+            selectbackground=ACCENT_BLUE,
+            selectforeground="white",
+            font=("Arial", 10),
+            relief="flat",
+            yscrollcommand=scrollbar.set,
+            exportselection=False
+        )
+        font_listbox.pack(side="left", fill="both", expand=True)
+        scrollbar.config(command=font_listbox.yview)
+
+        # Preview Frame
+        f_prev = tk.LabelFrame(
+            picker,
+            text="실시간 미리보기 (Live Preview)" if self.lang == "ko" else "Live Preview",
+            font=("Arial", 10, "bold"),
+            fg=getattr(self, "current_subtext", "#9ca3af"),
+            bg=DARK_BG,
+            bd=1,
+            relief="solid",
+            padx=10,
+            pady=8
+        )
+        f_prev.pack(fill="x", padx=12, pady=6)
+
+        lbl_prev_sample = tk.Label(
+            f_prev,
+            text="PowerController 2.9.1 / 12:34:56\n스마트 전원 및 자동 종료 예약 제어기",
+            font=("Arial", 11),
+            fg=TEXT_COLOR,
+            bg=DARK_CARD,
+            pady=8
+        )
+        lbl_prev_sample.pack(fill="x")
+
+        # Action Buttons
+        f_actions = tk.Frame(picker, bg=DARK_BG)
+        f_actions.pack(fill="x", padx=12, pady=(4, 10))
+
+        def on_select_font(event=None):
+            sel = font_listbox.curselection()
+            if sel:
+                chosen = font_listbox.get(sel[0])
+                try:
+                    lbl_prev_sample.config(font=(chosen, 11), text=f"[{chosen}]\nPowerController 2.9.1 / 12:34:56\n스마트 전원 및 자동 종료 제어기 (Smart Power Agent)")
+                except Exception:
+                    pass
+
+        def update_list(*args):
+            query = search_var.get().strip().lower()
+            font_listbox.delete(0, "end")
+            filtered = [f for f in system_fonts if query in f.lower()] if query else system_fonts
+            for f in filtered:
+                font_listbox.insert("end", f)
+            if filtered:
+                font_listbox.selection_set(0)
+                on_select_font()
+
+        font_listbox.bind("<<ListboxSelect>>", on_select_font)
+        search_var.trace_add("write", update_list)
+
+        def apply_chosen_font():
+            sel = font_listbox.curselection()
+            if sel:
+                chosen = font_listbox.get(sel[0])
+                self.handle_font_change(chosen)
+                try:
+                    picker.destroy()
+                except Exception:
+                    pass
+
+        btn_apply = tk.Button(
+            f_actions,
+            text="선택한 폰트로 적용 (Apply Font)" if self.lang == "ko" else "Apply Selected Font",
+            font=("Arial", 10, "bold"),
+            bg=ACCENT_BLUE,
+            fg="white",
+            relief="flat",
+            pady=6,
+            cursor="hand2",
+            command=apply_chosen_font
+        )
+        btn_apply.pack(side="left", fill="x", expand=True, padx=(0, 6))
+
+        btn_cancel = tk.Button(
+            f_actions,
+            text="닫기 (Close)" if self.lang == "ko" else "Close",
+            font=("Arial", 10),
+            bg="#374151",
+            fg="white",
+            relief="flat",
+            pady=6,
+            cursor="hand2",
+            command=picker.destroy
+        )
+        btn_cancel.pack(side="right", padx=(6, 0))
+
+        # Initial populate
+        update_list()
 
     def apply_current_font_to_widgets(self, parent=None):
         if parent is None:
@@ -7183,44 +7451,98 @@ if __name__ == "__main__":
                 try:
                     theme = getattr(self, "sound_theme", "classic")
                     if sound_type == "tick":
-                        if theme == "classic":
-                            winsound.Beep(1000, 100)
-                        elif theme == "scifi":
+                        if theme == "scifi":
                             winsound.Beep(2000, 50)
-                        else: # cozy
-                            winsound.Beep(523, 150)
+                        elif theme == "marimba":
+                            winsound.Beep(880, 80)
+                        elif theme == "crystal":
+                            winsound.Beep(1568, 70)
+                        elif theme == "urgent":
+                            winsound.Beep(1760, 60)
+                        elif theme == "westminster":
+                            winsound.Beep(659, 100)
+                        elif theme == "bubble":
+                            winsound.Beep(980, 50)
+                        elif theme == "cozy":
+                            winsound.Beep(523, 120)
+                        else: # classic
+                            winsound.Beep(1000, 80)
                     elif sound_type == "alert":
-                        if theme == "classic":
+                        if theme == "marimba":
+                            winsound.Beep(523, 100)
+                            winsound.Beep(659, 100)
+                            winsound.Beep(784, 120)
+                        elif theme == "crystal":
+                            winsound.Beep(1046, 120)
+                            winsound.Beep(1568, 180)
+                        elif theme == "westminster":
+                            winsound.Beep(659, 120)
+                            winsound.Beep(523, 120)
                             winsound.Beep(587, 120)
-                            winsound.Beep(880, 180)
+                            winsound.Beep(392, 220)
+                        elif theme == "urgent":
+                            winsound.Beep(1175, 100)
+                            winsound.Beep(1568, 100)
+                            winsound.Beep(1760, 160)
                         elif theme == "scifi":
                             winsound.Beep(1200, 80)
                             winsound.Beep(1800, 120)
-                        else: # cozy
+                        elif theme == "cozy":
                             winsound.Beep(698, 120)
                             winsound.Beep(932, 200)
+                        else: # classic
+                            winsound.Beep(587, 120)
+                            winsound.Beep(880, 180)
                     elif sound_type == "chime":
-                        if theme == "classic":
-                            winsound.Beep(523, 120)
-                            winsound.Beep(659, 120)
-                            winsound.Beep(783, 150)
+                        if theme == "marimba":
+                            winsound.Beep(523, 100)
+                            winsound.Beep(659, 100)
+                            winsound.Beep(784, 100)
+                            winsound.Beep(1046, 180)
+                        elif theme == "crystal":
+                            winsound.Beep(1046, 120)
+                            winsound.Beep(1318, 120)
+                            winsound.Beep(1568, 140)
+                            winsound.Beep(2093, 220)
+                        elif theme == "westminster":
+                            winsound.Beep(659, 140)
+                            winsound.Beep(523, 140)
+                            winsound.Beep(587, 140)
+                            winsound.Beep(392, 280)
+                        elif theme == "urgent":
+                            winsound.Beep(880, 100)
+                            winsound.Beep(1175, 100)
+                            winsound.Beep(1568, 200)
                         elif theme == "scifi":
                             winsound.Beep(880, 80)
                             winsound.Beep(1760, 80)
                             winsound.Beep(2200, 120)
-                        else: # cozy
+                        elif theme == "cozy":
                             winsound.Beep(523, 100)
                             winsound.Beep(698, 100)
                             winsound.Beep(880, 100)
                             winsound.Beep(1046, 180)
+                        else: # classic
+                            winsound.Beep(523, 120)
+                            winsound.Beep(659, 120)
+                            winsound.Beep(783, 150)
                     elif sound_type == "alarm":
-                        # Repeats twice or three times, beautiful alarm melody
+                        # Repeats 3 times, beautiful alarm melody
                         import time
                         for _ in range(3):
-                            winsound.Beep(880, 150)
-                            winsound.Beep(987, 150)
-                            winsound.Beep(1046, 250)
-                            time.sleep(0.1)
+                            if theme == "urgent":
+                                winsound.Beep(1175, 100)
+                                winsound.Beep(1568, 150)
+                            elif theme == "marimba":
+                                winsound.Beep(523, 90)
+                                winsound.Beep(659, 90)
+                                winsound.Beep(784, 90)
+                                winsound.Beep(1046, 140)
+                            else:
+                                winsound.Beep(880, 120)
+                                winsound.Beep(987, 120)
+                                winsound.Beep(1046, 200)
+                            time.sleep(0.08)
                 except Exception:
                     try:
                         self.root.bell()
@@ -7623,23 +7945,87 @@ if __name__ == "__main__":
         self.is_boot_startup = False  # 설정 팝업 조작 시 활성 사용자 모드로 전환
         # If settings window is already active/open, raise and focus it
         if hasattr(self, "settings_popup") and self.settings_popup and self.settings_popup.winfo_exists():
-            self.settings_popup.lift()
-            self.settings_popup.focus_force()
+            try:
+                self.settings_popup.deiconify()
+                self.settings_popup.attributes("-topmost", True)
+                self.settings_popup.lift()
+                self.settings_popup.focus_force()
+            except Exception:
+                pass
             return
 
-        self.settings_popup = tk.Toplevel(self.root)
+        # Determine parent window: If self.root is withdrawn (e.g. boot-up tray mode),
+        # use self.mini_win as master if available to prevent Windows OS from hiding owned windows of a hidden master
+        parent_master = self.root
+        if hasattr(self, "mini_win") and self.mini_win and self.mini_win.winfo_exists():
+            try:
+                if self.root.state() == "withdrawn":
+                    parent_master = self.mini_win
+            except Exception:
+                pass
+
+        self.settings_popup = tk.Toplevel(parent_master)
         self.settings_popup.title("⚙️ 설정 (Settings)" if self.lang == "ko" else "⚙️ Settings")
         self.settings_popup.configure(bg=DARK_BG)
         self.settings_popup.resizable(False, False)
+
+        # Ensure it is immediately deiconified, topmost, and raised
+        try:
+            self.settings_popup.deiconify()
+            self.settings_popup.attributes("-topmost", True)
+            self.settings_popup.lift()
+        except Exception:
+            pass
         
-        # Transient window keeps it above the main window
-        self.settings_popup.transient(self.root)
+        # Check whether the main root window is currently normal and visible on screen
+        is_root_visible = False
+        try:
+            is_root_visible = (self.root.state() == "normal" and self.root.winfo_viewable() and self.root.winfo_width() > 100)
+        except Exception:
+            is_root_visible = False
+
+        # IMPORTANT: When root window is withdrawn (e.g. system boot or tray background mode),
+        # DO NOT call self.settings_popup.transient(self.root)!
+        # In Tkinter on Windows, a transient window whose master is withdrawn is automatically
+        # hidden/suppressed by the Windows OS Window Manager.
+        if is_root_visible:
+            try:
+                self.settings_popup.transient(self.root)
+            except Exception:
+                pass
         
-        # Central placement relative to the main window
+        # Calculate safe on-screen dimensions and placement
         w = 528
-        h = min(780, self.root.winfo_screenheight() - 60)
-        rx = self.root.winfo_x() + (self.root.winfo_width() // 2) - (w // 2)
-        ry = self.root.winfo_y() + (self.root.winfo_height() // 2) - (h // 2)
+        sw = self.settings_popup.winfo_screenwidth()
+        sh = self.settings_popup.winfo_screenheight()
+        h = min(780, sh - 60)
+        
+        if is_root_visible:
+            rx = self.root.winfo_x() + (self.root.winfo_width() // 2) - (w // 2)
+            ry = self.root.winfo_y() + (self.root.winfo_height() // 2) - (h // 2)
+        elif hasattr(self, "mini_win") and self.mini_win and self.mini_win.winfo_exists():
+            try:
+                # Center near the mini window if possible, else center of screen
+                mx = self.mini_win.winfo_x()
+                my = self.mini_win.winfo_y()
+                mw = self.mini_win.winfo_width()
+                mh = self.mini_win.winfo_height()
+                rx = mx + (mw // 2) - (w // 2)
+                ry = my + mh + 10
+                if rx + w > sw - 10:
+                    rx = sw - w - 20
+                if ry + h > sh - 10:
+                    ry = max(20, (sh - h) // 2)
+            except Exception:
+                rx = max(20, (sw - w) // 2)
+                ry = max(20, (sh - h) // 2)
+        else:
+            rx = max(20, (sw - w) // 2)
+            ry = max(20, (sh - h) // 2)
+            
+        # Absolute boundary check to ensure window is 100% visible on screen
+        rx = max(10, min(rx, sw - w - 10))
+        ry = max(10, min(ry, sh - h - 10))
         self.settings_popup.geometry(f"{w}x{h}+{rx}+{ry}")
         
         # Title Label
@@ -8138,12 +8524,19 @@ if __name__ == "__main__":
             frm_mw_bottom,
             self.selected_font_label,
             "산세리프 (Inter)",
+            "Segoe UI (Windows 기본)",
+            "맑은 고딕 (Malgun Gothic)",
+            "돋움 (Dotum)",
+            "굴림 (Gulim)",
+            "바탕 (Batang)",
+            "궁서 (Gungsuh)",
+            "Consolas (코딩용 고정폭)",
+            "Arial (영문 표준)",
+            "Tahoma (윈도우)",
+            "Calibri (윈도우)",
             "테크 (Grotesk)",
             "고정폭 (Mono)",
-            "명조 (나눔명조)",
-            "맑은 고딕 (Malgun)",
-            "굴림 (Gulim)",
-            "바탕 (Batang)"
+            "명조 (나눔명조)"
         )
         self.opt_font.config(
             bg=DARK_CARD,
@@ -8165,6 +8558,20 @@ if __name__ == "__main__":
             font=("Arial", 10)
         )
         self.opt_font.pack(side="left", padx=2, expand=True, fill="x")
+
+        btn_browse_sys_fonts = tk.Button(
+            frm_mw_bottom,
+            text="🔍 탐색" if self.lang == "ko" else "🔍 Browse",
+            font=("Arial", 9, "bold"),
+            bg="#374151",
+            fg="white",
+            relief="flat",
+            padx=6,
+            pady=1,
+            cursor="hand2",
+            command=lambda: self.open_windows_system_font_picker(parent_win=self.settings_popup)
+        )
+        btn_browse_sys_fonts.pack(side="left", padx=(2, 4))
 
         lbl_font_weight_title = tk.Label(
             frm_mw_bottom, 
@@ -8517,9 +8924,11 @@ if __name__ == "__main__":
             try:
                 if getattr(ScrollableFrame, "_active_frame", None) == scroll_container:
                     ScrollableFrame._active_frame = None
-                self.settings_popup.destroy()
+                if hasattr(self, "settings_popup") and self.settings_popup:
+                    self.settings_popup.destroy()
             except Exception:
                 pass
+            self.settings_popup = None
 
         # Confirm Close Button at bottom of popup
         btn_close = tk.Button(
@@ -8547,6 +8956,15 @@ if __name__ == "__main__":
 
         # Recursively bind mouse wheel to all inner widgets in settings so mousewheel scrolling works seamlessly anywhere
         scroll_container.bind_children_mousewheel()
+
+        # Ensure settings popup is completely deiconified, topmost above all other windows, lifted, and focused
+        try:
+            self.settings_popup.deiconify()
+            self.settings_popup.attributes("-topmost", True)
+            self.settings_popup.lift()
+            self.settings_popup.focus_force()
+        except Exception:
+            pass
 
     def start_share_injector_build_thread(self):
         import tkinter.messagebox as messagebox

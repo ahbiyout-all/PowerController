@@ -176,7 +176,24 @@ static BOOL TerminateSingleProcessSilent(DWORD pid) {
     return ok;
 }
 
-/* Recursive process tree termination */
+/* High-efficiency single-snapshot recursive process tree collection */
+typedef struct {
+    DWORD pid;
+    DWORD parentPid;
+} ProcNode;
+
+static void CollectSubtree(DWORD currentPid, const ProcNode* allNodes, int totalNodes, DWORD* outPids, int maxPids, int* outCount) {
+    for (int i = 0; i < totalNodes; i++) {
+        if (allNodes[i].parentPid == currentPid && allNodes[i].pid != currentPid) {
+            if (*outCount < maxPids) {
+                outPids[(*outCount)++] = allNodes[i].pid;
+                /* Recurse to grand-children */
+                CollectSubtree(allNodes[i].pid, allNodes, totalNodes, outPids, maxPids, outCount);
+            }
+        }
+    }
+}
+
 static void CollectChildPids(DWORD parentPid, DWORD* pids, int maxPids, int* count) {
     HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if (hSnap == INVALID_HANDLE_VALUE) {
@@ -186,19 +203,24 @@ static void CollectChildPids(DWORD parentPid, DWORD* pids, int maxPids, int* cou
     PROCESSENTRY32W pe;
     pe.dwSize = sizeof(PROCESSENTRY32W);
 
-    if (Process32FirstW(hSnap, &pe)) {
+    ProcNode* allNodes = (ProcNode*)malloc(sizeof(ProcNode) * 1024);
+    int totalNodes = 0;
+
+    if (allNodes != NULL && Process32FirstW(hSnap, &pe)) {
         do {
-            if (pe.th32ParentProcessID == parentPid && pe.th32ProcessID != parentPid) {
-                if (*count < maxPids) {
-                    pids[(*count)++] = pe.th32ProcessID;
-                    /* Recurse to grand-children */
-                    CollectChildPids(pe.th32ProcessID, pids, maxPids, count);
-                }
+            if (totalNodes < 1024) {
+                allNodes[totalNodes].pid = pe.th32ProcessID;
+                allNodes[totalNodes].parentPid = pe.th32ParentProcessID;
+                totalNodes++;
             }
         } while (Process32NextW(hSnap, &pe));
     }
-
     CloseHandle(hSnap);
+
+    if (allNodes != NULL) {
+        CollectSubtree(parentPid, allNodes, totalNodes, pids, maxPids, count);
+        free(allNodes);
+    }
 }
 
 POWER_CORE_API int NativeKillProcessTree(unsigned long root_pid) {

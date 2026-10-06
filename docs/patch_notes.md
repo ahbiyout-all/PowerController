@@ -5,7 +5,38 @@
 
 ---
 
-## [v2.9.1] - 2026-09-26 (최신 릴리즈)
+## [v2.9.1+] - 2026-10-06 (최신 피처 및 C/C++ 네이티브 엔지니어링 패치)
+
+### 🎵 1. Pixabay 선별 알림음 사운드 뱅크 & Web Audio 오디오 엔진
+- **7가지 고음질 프리미엄 알림음 테마 구축**: Pixabay 우수 알림음 분석 기반 (`classic`, `marimba`, `crystal`, `scifi`, `westminster`, `urgent`, `bubble`).
+- **상황별 알림음 믹서 및 테스트 허브**: 정각 종소리(`hourlyChime`), 카운트다운 틱(`warningTick`), 알람 완료(`timerAlarm`), 작업 성공(`actionSuccess`) 테스트 버튼 탑재.
+- **볼륨 슬라이더 및 음소거**: 0~100% 볼륨 제어 및 즉시 Mute/Unmute 기능 구현.
+
+### 📊 2. Recharts 기반 최근 60분 배터리 소모 차트 & 방전 예측 분석 엔진
+- **60분 배터리 영역 차트 (`BatteryHistoryChart`)**: 최근 60분 실시간 잔량 트렌드 및 15% 임계점 가이드라인 시각화.
+- **`Battery Health Insights` 카카오형 텔레메트리 바**:
+  - ⏱️ **예상 잔여 사용 시간**: 현재 소모 속도 기준 0% 완전 방전 시점 시각화 (AC 연결 시 `상시 지속` 표기).
+  - ⚡ **시간당 소모율**: 시간당 소모율(`-% / hr`) 및 충전 속도 계산.
+  - 🛡️ **안전 작동 한계**: 15% 저전력 경고 토스트 발동 전까지 여유 시간 표시.
+
+### 🔋 3. 타이머 가동 중 배터리 15% 이하 지속 알림(토스트) & 스마트 절전 모드 (<20%)
+- **지속형 경고 토스트 (<15%)**: 전원 제어 타이머 동작 중 배터리가 15% 이하로 떨어지면 AC 충전기 연결 유도 persistent 토스트 표출.
+- **스마트 절전 모드 (<20%)**: 배터리 20% 이하 감지 시 상단 고정 플로팅 위젯 투명도를 45% 이하로 낮추고 배경 링 애니메이션을 자동 감쇠하여 방전 억제.
+
+### 🛠️ 4. 11대 순수 창작 저수준 C/C++ 네이티브 DLL 아키텍처 완성
+- **기존 5대 DLL 정밀 감사 패치**: `power_core_native.c` 단일 패스 스냅샷 트래버스 최적화, `firewall_native.cpp` COM 참조 카운트 방어, `schedule_crypto.c` Constant-time 서명 비교 패치.
+- **6대 신규 순수 창작 DLL 모듈 추가**:
+  1. `disk_flush_native.c` (`DiskFlushNative.dll`): 볼륨 파일시스템 캐시/Dirty Page 즉시 플러시
+  2. `audio_dimmer_native.cpp` (`AudioDimmerNative.dll`): Core Audio 페이드아웃 및 볼륨 제어
+  3. `display_ddc_native.cpp` (`DisplayDdcNative.dll`): Dxva2 VESA DDC/CI 백라이트 하드웨어 밝기 절전
+  4. `low_level_input_idle_native.c` (`LowLevelInputIdleNative.dll`): 사용자 무동작/유휴 시간 0.001초 정밀 측정
+  5. `commander_tcp_dispatcher.cpp` (`CommanderTcpDispatcherNative.dll`): 커맨더 타워 500대 PC 동시 스케줄 비동기 배포
+  6. `commander_ping_scanner.c` (`CommanderPingScannerNative.dll`): ICMP Echo / SendARP 원자적 LAN PC 스캐너 및 WoL 매직 패킷 송출
+- **문서 등록**: [`docs/pure_custom_dll_architecture.md`](/docs/pure_custom_dll_architecture.md) 및 [`docs/dll_specification.md`](/docs/dll_specification.md) 전면 업데이트.
+
+---
+
+## [v2.9.1] - 2026-09-26
 
 ### 🚀 핵심 패치 사항: 원격 무인 설치(Silent/Unattended Install) 시 기존 프로세스 즉시 강제 종료 및 파일 락(멈춤 현상) 완벽 해결
 

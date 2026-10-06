@@ -276,6 +276,14 @@ CRYPTO_API BOOL NativeGenerateHMAC(const char* data, const char* key, char* out_
     return TRUE;
 }
 
+static int constant_time_compare(const char* a, const char* b, size_t len) {
+    int diff = 0;
+    for (size_t i = 0; i < len; i++) {
+        diff |= ((unsigned char)a[i] ^ (unsigned char)b[i]);
+    }
+    return (diff == 0);
+}
+
 /*
  * Verifies digital signature (HMAC-SHA256)
  */
@@ -287,7 +295,7 @@ CRYPTO_API BOOL NativeVerifyScheduleSignature(const char* json_data, const char*
         return FALSE;
     }
 
-    return (strcmp(computed, signature_hex) == 0);
+    return (constant_time_compare(computed, signature_hex, 64) != 0);
 }
 
 /*

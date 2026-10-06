@@ -14,7 +14,8 @@
 | **사용자 가이드 (User Manual)** | [`user_guide.md`](./user_guide.md) | 일반 사용자를 위한 기능 안내 (타이머, 스케줄러, 위젯 커스터마이징, 네트워크 전송, 모바일 원격 제어 등) |
 | **설치 및 패키징 가이드 (Installation)** | [`installation_guide.md`](./installation_guide.md) | Inno Setup 6 배포용 인스톨러 컴파일, PC 배포 패키지 빌더, 무인 설치/제거 안내 |
 | **개발자 가이드 (Development)** | [`development.md`](./development.md) | 시스템 아키텍처, Vite 번들 최적화, 컴포넌트 구조, 테마 시스템 및 개발 환경 구축 가이드 |
-| **순수 창작 DLL 명세서 (DLL Specification)** | [`dll_specification.md`](./dll_specification.md) | 5대 순수 창작 DLL (PowerCoreNative, NetBeaconEngine, FirewallNative, SysPowerHook, ScheduleCrypto) 명세 |
+| **순수 창작 DLL 명세서 (DLL Specification)** | [`dll_specification.md`](./dll_specification.md) | 11대 순수 창작 DLL C ABI 인터페이스 및 파이썬 바인딩 명세 |
+| **순수 창작 DLL 아키텍처 (DLL Architecture)** | [`pure_custom_dll_architecture.md`](./pure_custom_dll_architecture.md) | 11대 순수 창작 네이티브 C/C++ DLL 아키텍처, 동작 원리, 메모리 구조, 컴파일 매트릭스 상세 |
 | **보안 가이드라인 (Security Guidelines)** | [`security_guidelines.md`](./security_guidelines.md) | 네트워크 통신 아키텍처, 취약점 대응 이력, 사내망 운영 보안 지침 및 토큰 복구 절차 |
 | **작업 로그 및 로드맵 (WorkLog)** | [`WorkLog.md`](./WorkLog.md) | 일자별 개발 기록, 최적화 작업 내역 및 로드맵 완수 기록 |
 | **데스크톱 문제 해결 가이드** | [`desktop_troubleshooting_guide.md`](./desktop_troubleshooting_guide.md) | 데스크톱 앱 변경사항 미반영 원인 분석, APPDATA 저장소 분리, `build.bat` 컴파일 절차 |

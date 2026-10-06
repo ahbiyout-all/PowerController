@@ -1242,5 +1242,290 @@ def decrypt_schedule_payload(encrypted_b64: str, master_key: str = "") -> Option
         return None
 
 
+# ==============================================================================
+# 6. DiskFlushNative.dll: Atomic Disk Cache & Volume Buffer Flush
+# ==============================================================================
+
+_DISKFLUSH_DLL: Optional[ctypes.CDLL] = None
+_IS_DISKFLUSH_LOADED: bool = False
+
+def _init_diskflush_dll():
+    global _DISKFLUSH_DLL, _IS_DISKFLUSH_LOADED
+    if _IS_DISKFLUSH_LOADED:
+        return
+    path = _find_dll_in_candidates("DiskFlushNative.dll")
+    if path:
+        try:
+            dll = ctypes.CDLL(path)
+            dll.NativeFlushAllVolumes.argtypes = []
+            dll.NativeFlushAllVolumes.restype = ctypes.c_int
+            dll.NativePreShutdownSync.argtypes = []
+            dll.NativePreShutdownSync.restype = ctypes.c_int
+            _DISKFLUSH_DLL = dll
+            _IS_DISKFLUSH_LOADED = True
+        except Exception:
+            _DISKFLUSH_DLL = None
+
+
+def flush_all_volumes_sync() -> int:
+    """모든 마운트된 디스크 드라이브의 파일시스템 캐시를 강제 플러시하여 데이터 손실을 방지합니다."""
+    _init_diskflush_dll()
+    if _DISKFLUSH_DLL:
+        try:
+            return _DISKFLUSH_DLL.NativeFlushAllVolumes()
+        except Exception:
+            pass
+
+    # Fallback: Flush via kernel32 if available
+    count = 0
+    try:
+        import string
+        for letter in string.ascii_uppercase:
+            vol_path = f"\\\\.\\{letter}:"
+            h_vol = ctypes.windll.kernel32.CreateFileW(
+                vol_path,
+                0xC0000000, # GENERIC_READ | GENERIC_WRITE
+                3,          # FILE_SHARE_READ | FILE_SHARE_WRITE
+                None,
+                3,          # OPEN_EXISTING
+                0x80,       # FILE_ATTRIBUTE_NORMAL
+                None
+            )
+            if h_vol != -1 and h_vol != 0:
+                if ctypes.windll.kernel32.FlushFileBuffers(h_vol):
+                    count += 1
+                ctypes.windll.kernel32.CloseHandle(h_vol)
+    except Exception:
+        pass
+    return count
+
+
+# ==============================================================================
+# 7. AudioDimmerNative.dll: Core Audio Smooth Volume Fade & Mute
+# ==============================================================================
+
+_AUDIODIMMER_DLL: Optional[ctypes.CDLL] = None
+_IS_AUDIODIMMER_LOADED: bool = False
+
+def _init_audiodimmer_dll():
+    global _AUDIODIMMER_DLL, _IS_AUDIODIMMER_LOADED
+    if _IS_AUDIODIMMER_LOADED:
+        return
+    path = _find_dll_in_candidates("AudioDimmerNative.dll")
+    if path:
+        try:
+            dll = ctypes.CDLL(path)
+            dll.NativeGetMasterVolume.argtypes = []
+            dll.NativeGetMasterVolume.restype = ctypes.c_float
+            dll.NativeSetMasterVolume.argtypes = [ctypes.c_float]
+            dll.NativeSetMasterVolume.restype = ctypes.c_int
+            dll.NativeSetMasterMute.argtypes = [ctypes.c_int]
+            dll.NativeSetMasterMute.restype = ctypes.c_int
+            dll.NativeFadeMasterVolume.argtypes = [ctypes.c_float, ctypes.c_int]
+            dll.NativeFadeMasterVolume.restype = ctypes.c_int
+            _AUDIODIMMER_DLL = dll
+            _IS_AUDIODIMMER_LOADED = True
+        except Exception:
+            _AUDIODIMMER_DLL = None
+
+
+def fade_master_volume_sync(target_scalar: float = 0.0, fade_ms: int = 3000) -> bool:
+    """오디오 출력 음량을 target_scalar(0.0~1.0)까지 fade_ms 동안 부드럽게 페이드다운합니다."""
+    _init_audiodimmer_dll()
+    if _AUDIODIMMER_DLL:
+        try:
+            return bool(_AUDIODIMMER_DLL.NativeFadeMasterVolume(ctypes.c_float(target_scalar), ctypes.c_int(fade_ms)))
+        except Exception:
+            pass
+    return False
+
+
+# ==============================================================================
+# 8. DisplayDdcNative.dll: Hardware VESA DDC/CI Backlight Brightness Control
+# ==============================================================================
+
+_DISPLAYDDC_DLL: Optional[ctypes.CDLL] = None
+_IS_DISPLAYDDC_LOADED: bool = False
+
+def _init_displayddc_dll():
+    global _DISPLAYDDC_DLL, _IS_DISPLAYDDC_LOADED
+    if _IS_DISPLAYDDC_LOADED:
+        return
+    path = _find_dll_in_candidates("DisplayDdcNative.dll")
+    if path:
+        try:
+            dll = ctypes.CDLL(path)
+            dll.NativeSetHardwareBrightness.argtypes = [ctypes.c_int]
+            dll.NativeSetHardwareBrightness.restype = ctypes.c_int
+            _DISPLAYDDC_DLL = dll
+            _IS_DISPLAYDDC_LOADED = True
+        except Exception:
+            _DISPLAYDDC_DLL = None
+
+
+def set_hardware_brightness_sync(brightness_percent: int) -> int:
+    """연결된 물리 모니터의 하드웨어 백라이트 밝기(0~100)를 변경합니다."""
+    _init_displayddc_dll()
+    if _DISPLAYDDC_DLL:
+        try:
+            return _DISPLAYDDC_DLL.NativeSetHardwareBrightness(ctypes.c_int(brightness_percent))
+        except Exception:
+            pass
+    return 0
+
+
+# ==============================================================================
+# 9. LowLevelInputIdleNative.dll: Low-Level User Input Inactivity Telemetry
+# ==============================================================================
+
+_INPUTIDLE_DLL: Optional[ctypes.CDLL] = None
+_IS_INPUTIDLE_LOADED: bool = False
+
+def _init_inputidle_dll():
+    global _INPUTIDLE_DLL, _IS_INPUTIDLE_LOADED
+    if _IS_INPUTIDLE_LOADED:
+        return
+    path = _find_dll_in_candidates("LowLevelInputIdleNative.dll")
+    if path:
+        try:
+            dll = ctypes.CDLL(path)
+            dll.NativeGetSystemIdleMilliseconds.argtypes = []
+            dll.NativeGetSystemIdleMilliseconds.restype = ctypes.c_ulong
+            dll.NativeGetSystemIdleSeconds.argtypes = []
+            dll.NativeGetSystemIdleSeconds.restype = ctypes.c_double
+            dll.NativeIsSystemIdleFor.argtypes = [ctypes.c_double]
+            dll.NativeIsSystemIdleFor.restype = ctypes.c_int
+            _INPUTIDLE_DLL = dll
+            _IS_INPUTIDLE_LOADED = True
+        except Exception:
+            _INPUTIDLE_DLL = None
+
+
+def get_system_idle_seconds() -> float:
+    """마지막 사용자 입력 이후 경과된 유휴 시간(초)을 반환합니다."""
+    _init_inputidle_dll()
+    if _INPUTIDLE_DLL:
+        try:
+            return float(_INPUTIDLE_DLL.NativeGetSystemIdleSeconds())
+        except Exception:
+            pass
+
+    # Fallback: GetLastInputInfo via ctypes.windll
+    try:
+        class LASTINPUTINFO(ctypes.Structure):
+            _fields_ = [("cbSize", ctypes.c_uint), ("dwTime", ctypes.c_uint)]
+        
+        lii = LASTINPUTINFO()
+        lii.cbSize = ctypes.sizeof(LASTINPUTINFO)
+        if ctypes.windll.user32.GetLastInputInfo(ctypes.byref(lii)):
+            millis = ctypes.windll.kernel32.GetTickCount() - lii.dwTime
+            return max(0.0, millis / 1000.0)
+    except Exception:
+        pass
+    return 0.0
+
+
+# ==============================================================================
+# 10. Commander Native Modules: Fast TCP Dispatcher, ICMP/ARP Scanner, WoL
+# ==============================================================================
+
+_COMMANDER_DISPATCHER_DLL: Optional[ctypes.CDLL] = None
+_COMMANDER_SCANNER_DLL: Optional[ctypes.CDLL] = None
+
+def send_rule_to_target_pc(target_ip: str, port: int, payload_bytes: bytes) -> bool:
+    """커맨더 전용: 단일 대상 PC(TCP 9988)로 암호화된 예약 스케줄 봉투를 초고속 전송합니다."""
+    global _COMMANDER_DISPATCHER_DLL
+    if _COMMANDER_DISPATCHER_DLL is None:
+        path = _find_dll_in_candidates("CommanderTcpDispatcherNative.dll")
+        if path:
+            try:
+                _COMMANDER_DISPATCHER_DLL = ctypes.CDLL(path)
+            except Exception:
+                _COMMANDER_DISPATCHER_DLL = None
+
+    if _COMMANDER_DISPATCHER_DLL:
+        try:
+            return bool(_COMMANDER_DISPATCHER_DLL.NativeSendSingleRuleCommand(
+                target_ip.encode('utf-8'), ctypes.c_int(port), payload_bytes, ctypes.c_int(len(payload_bytes))
+            ))
+        except Exception:
+            pass
+
+    # Fallback: socket in Python
+    try:
+        import socket
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(1.5)
+            s.connect((target_ip, port if port > 0 else 9988))
+            s.sendall(payload_bytes)
+            return True
+    except Exception:
+        return False
+
+
+def ping_single_target_pc(target_ip: str, timeout_ms: int = 500) -> bool:
+    """커맨더 전용: 대상 PC가 LAN 상에서 켜져 있는지 C 레벨 원자적 ICMP Ping 스캔을 수행합니다."""
+    global _COMMANDER_SCANNER_DLL
+    if _COMMANDER_SCANNER_DLL is None:
+        path = _find_dll_in_candidates("CommanderPingScannerNative.dll")
+        if path:
+            try:
+                _COMMANDER_SCANNER_DLL = ctypes.CDLL(path)
+            except Exception:
+                _COMMANDER_SCANNER_DLL = None
+
+    if _COMMANDER_SCANNER_DLL:
+        try:
+            rtt = ctypes.c_ulong(0)
+            return bool(_COMMANDER_SCANNER_DLL.NativePingSingleTarget(
+                target_ip.encode('utf-8'), ctypes.c_ulong(timeout_ms), ctypes.byref(rtt)
+            ))
+        except Exception:
+            pass
+
+    # Fallback: ping via subprocess
+    try:
+        import subprocess
+        res = subprocess.run(["ping", "-n", "1", "-w", str(timeout_ms), target_ip], capture_output=True)
+        return res.returncode == 0
+    except Exception:
+        return False
+
+
+def send_wake_on_lan(mac_address: str, port: int = 9) -> bool:
+    """커맨더 전용: 꺼져 있는 대상 PC를 깨우기 위해 Wake-on-LAN Magic Packet을 송출합니다."""
+    global _COMMANDER_SCANNER_DLL
+    if _COMMANDER_SCANNER_DLL is None:
+        path = _find_dll_in_candidates("CommanderPingScannerNative.dll")
+        if path:
+            try:
+                _COMMANDER_SCANNER_DLL = ctypes.CDLL(path)
+            except Exception:
+                _COMMANDER_SCANNER_DLL = None
+
+    if _COMMANDER_SCANNER_DLL:
+        try:
+            return bool(_COMMANDER_SCANNER_DLL.NativeSendWakeOnLan(mac_address.encode('utf-8'), ctypes.c_int(port)))
+        except Exception:
+            pass
+
+    # Fallback: Python WoL magic packet
+    try:
+        import socket
+        clean_mac = mac_address.replace(":", "").replace("-", "")
+        if len(clean_mac) == 12:
+            data = bytes.fromhex("FF" * 6 + clean_mac * 16)
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+                s.sendto(data, ('255.255.255.255', port))
+                return True
+    except Exception:
+        pass
+    return False
+
+
+
+
+
 
 

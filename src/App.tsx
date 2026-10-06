@@ -39,9 +39,16 @@ import {
   Star,
   Network,
   Eye,
-  Type
+  Type,
+  Battery,
+  BatteryCharging,
+  BatteryFull,
+  BatteryMedium,
+  BatteryLow,
+  Zap
 } from 'lucide-react';
-import { PowerMode, TimerState, ThemeType, ExplorerFolder, APP_VERSION } from './types';
+import { PowerMode, TimerState, ThemeType, SoundTheme, ExplorerFolder, APP_VERSION } from './types';
+import { soundEngine, SOUND_THEMES } from './utils/soundEngine';
 import CommandCopier from './components/CommandCopier';
 import FavoritesManager from './components/FavoritesManager';
 import PowerSimulator from './components/PowerSimulator';
@@ -51,10 +58,12 @@ import CompactWidget, { CompactWidgetDesign } from './components/CompactWidget';
 import StartupTodayTasksModal from './components/StartupTodayTasksModal';
 import DesktopAppView from './components/DesktopAppView';
 import { GitHubUpdateBanner } from './components/GitHubUpdateBanner';
+import BatteryHistoryChart from './components/BatteryHistoryChart';
 
 interface DraftSettingsState {
   theme: ThemeType;
-  soundTheme: 'classic' | 'scifi' | 'cozy';
+  soundTheme: SoundTheme;
+  soundVolume: number;
   showCurrentTimeCompact: boolean;
   widgetOpacity: number;
   mainOpacity: number;
@@ -62,6 +71,8 @@ interface DraftSettingsState {
   graceSeconds: number;
   hourlyChime: boolean;
   startupTasksAlert: boolean;
+  lowBatteryAlert: boolean;
+  powerSavingMode: boolean;
   widgetDesign: CompactWidgetDesign;
   widgetWidth: number;
   clockFontSize: number;
@@ -105,14 +116,15 @@ export default function App() {
       return true;
     }
   });
-  const [soundTheme, setSoundTheme] = useState<'classic' | 'scifi' | 'cozy'>(() => {
+  const [soundTheme, setSoundTheme] = useState<SoundTheme>(() => {
     try {
       const saved = localStorage.getItem('power_sound_theme');
-      return (saved as 'classic' | 'scifi' | 'cozy') || 'classic';
+      return (saved as SoundTheme) || 'classic';
     } catch {
       return 'classic';
     }
   });
+  const [soundVolume, setSoundVolume] = useState<number>(() => soundEngine.getVolume());
 
   // Hourly Chime & Startup alert states
   const [hourlyChime, setHourlyChime] = useState<boolean>(() => {
@@ -132,6 +144,28 @@ export default function App() {
       return true;
     }
   });
+
+  const [lowBatteryAlert, setLowBatteryAlert] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('power_low_battery_alert');
+      return saved !== null ? saved === 'true' : true;
+    } catch {
+      return true;
+    }
+  });
+
+  const [powerSavingMode, setPowerSavingMode] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('power_saving_mode');
+      return saved !== null ? saved === 'true' : true;
+    } catch {
+      return true;
+    }
+  });
+
+  const [lowBatteryToast, setLowBatteryToast] = useState<{ level: number; charging: boolean } | null>(null);
+  const [lowBatteryDismissed, setLowBatteryDismissed] = useState<boolean>(false);
+  const lastWarnedLowBatteryLevelRef = useRef<number>(-1);
 
   // Compact Widget Customizer States
   const [widgetDesign, setWidgetDesign] = useState<CompactWidgetDesign>(() => {
@@ -181,15 +215,17 @@ export default function App() {
   const [isLicenseOpen, setIsLicenseOpen] = useState<boolean>(false);
   const [licenseModalLang, setLicenseModalLang] = useState<'ko' | 'en'>('ko');
 
-  const handleSoundThemeChange = (newTheme: 'classic' | 'scifi' | 'cozy') => {
+  const handleSoundThemeChange = (newTheme: SoundTheme) => {
     setSoundTheme(newTheme);
     try {
       localStorage.setItem('power_sound_theme', newTheme);
     } catch {}
+    const themeObj = SOUND_THEMES.find(t => t.id === newTheme);
+    const themeName = lang === 'en' ? (themeObj?.nameEn || newTheme) : (themeObj?.nameKo || newTheme);
     if (lang === 'en') {
-      addLog(`Sound alert theme updated to: ${newTheme === 'classic' ? 'Classic Beep' : newTheme === 'scifi' ? 'Sci-Fi Synth' : 'Cozy Chime'}`);
+      addLog(`Sound alert theme updated to: ${themeName}`);
     } else {
-      addLog(`경고음 알림 사운드 테마가 변경되었습니다: ${newTheme === 'classic' ? '클래식 비프' : newTheme === 'scifi' ? 'SF 신스' : '아늑한 멜로디'}`);
+      addLog(`경고음 알림 사운드 테마가 변경되었습니다: ${themeName}`);
     }
   };
   
@@ -309,21 +345,67 @@ export default function App() {
     memory: { total: number; free: number; used: number; pct: number };
     disk: { total: number; free: number; used: number; pct: number };
     network: { online: boolean; latency: number };
+    battery?: {
+      level: number;
+      charging: boolean;
+      statusText?: string;
+    };
     uptime: number;
     platform: string;
   } | null>(null);
 
   useEffect(() => {
+    let batteryManager: any = null;
+
+    const syncBatteryState = (bm: any) => {
+      const lvl = Math.round((bm.level ?? 1) * 100);
+      const chg = Boolean(bm.charging);
+      setSystemStatus(prev => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          battery: {
+            level: lvl,
+            charging: chg,
+            statusText: chg ? 'Charging' : 'Discharging'
+          }
+        };
+      });
+    };
+
+    // Client-side Battery API integration (Hardware-level accuracy in Chromium/Edge/Chrome/Electron)
+    if (typeof navigator !== 'undefined' && 'getBattery' in navigator) {
+      (navigator as any).getBattery().then((bm: any) => {
+        batteryManager = bm;
+        syncBatteryState(bm);
+        bm.addEventListener('levelchange', () => syncBatteryState(bm));
+        bm.addEventListener('chargingchange', () => syncBatteryState(bm));
+      }).catch(() => {});
+    }
+
     const fetchStatus = async () => {
       try {
         const res = await fetch('/api/system-status');
         if (res.ok) {
           const data = await res.json();
-          setSystemStatus(data);
+          setSystemStatus(prev => {
+            // Preserve real-time hardware battery if available on client
+            if (batteryManager) {
+              return {
+                ...data,
+                battery: {
+                  level: Math.round((batteryManager.level ?? 1) * 100),
+                  charging: Boolean(batteryManager.charging),
+                  statusText: batteryManager.charging ? 'Charging' : 'Discharging'
+                }
+              };
+            }
+            return data;
+          });
         }
       } catch (err) {
         // Fallback simulated metrics for non-hosted sandboxes
-        setSystemStatus({
+        setSystemStatus(prev => ({
           cpu: Math.floor(12 + Math.random() * 8),
           memory: {
             total: 16 * 1024 * 1024 * 1024,
@@ -341,15 +423,28 @@ export default function App() {
             online: navigator.onLine,
             latency: 15
           },
+          battery: prev?.battery || {
+            level: 88,
+            charging: true,
+            statusText: 'AC Connected'
+          },
           uptime: 7200,
           platform: 'win32'
-        });
+        }));
       }
     };
 
     fetchStatus();
     const intervalId = setInterval(fetchStatus, 3000);
-    return () => clearInterval(intervalId);
+    return () => {
+      clearInterval(intervalId);
+      if (batteryManager) {
+        try {
+          batteryManager.removeEventListener('levelchange', () => syncBatteryState(batteryManager));
+          batteryManager.removeEventListener('chargingchange', () => syncBatteryState(batteryManager));
+        } catch {}
+      }
+    };
   }, []);
 
   // Compact floating widget background opacity state (30 to 100)
@@ -694,6 +789,7 @@ export default function App() {
     setDraftSettings({
       theme,
       soundTheme,
+      soundVolume,
       showCurrentTimeCompact,
       widgetOpacity,
       mainOpacity,
@@ -701,6 +797,8 @@ export default function App() {
       graceSeconds,
       hourlyChime,
       startupTasksAlert,
+      lowBatteryAlert,
+      powerSavingMode,
       widgetDesign,
       widgetWidth,
       clockFontSize,
@@ -728,6 +826,10 @@ export default function App() {
     if (draftSettings.soundTheme !== soundTheme) {
       setSoundTheme(draftSettings.soundTheme);
       localStorage.setItem('power_sound_theme', draftSettings.soundTheme);
+    }
+    if (draftSettings.soundVolume !== soundVolume) {
+      setSoundVolume(draftSettings.soundVolume);
+      soundEngine.setVolume(draftSettings.soundVolume);
     }
     if (draftSettings.showCurrentTimeCompact !== showCurrentTimeCompact) {
       setShowCurrentTimeCompact(draftSettings.showCurrentTimeCompact);
@@ -757,6 +859,14 @@ export default function App() {
       setStartupTasksAlert(draftSettings.startupTasksAlert);
       localStorage.setItem('power_startup_tasks_alert', draftSettings.startupTasksAlert ? 'true' : 'false');
     }
+    if (draftSettings.lowBatteryAlert !== lowBatteryAlert) {
+      setLowBatteryAlert(draftSettings.lowBatteryAlert);
+      localStorage.setItem('power_low_battery_alert', draftSettings.lowBatteryAlert ? 'true' : 'false');
+    }
+    if (draftSettings.powerSavingMode !== powerSavingMode) {
+      setPowerSavingMode(draftSettings.powerSavingMode);
+      localStorage.setItem('power_saving_mode', draftSettings.powerSavingMode ? 'true' : 'false');
+    }
     if (draftSettings.widgetDesign !== widgetDesign) {
       setWidgetDesign(draftSettings.widgetDesign);
       localStorage.setItem('power_widget_design', draftSettings.widgetDesign);
@@ -782,6 +892,47 @@ export default function App() {
     triggerNotification(lang === 'en' ? 'Settings applied!' : '설정이 저장되었습니다!', 'success');
     setIsSettingsOpen(false);
   };
+
+  // Low battery monitor on active timer (persistent toast when battery <= 15%)
+  useEffect(() => {
+    if (!lowBatteryAlert) {
+      setLowBatteryToast(null);
+      return;
+    }
+
+    const isTimerActive = timerState === 'running';
+    const battery = systemStatus?.battery;
+
+    if (isTimerActive && battery && battery.level <= 15 && !battery.charging) {
+      if (!lowBatteryDismissed) {
+        setLowBatteryToast({ level: battery.level, charging: battery.charging });
+      }
+      if (lastWarnedLowBatteryLevelRef.current !== battery.level) {
+        lastWarnedLowBatteryLevelRef.current = battery.level;
+        if (soundEnabled) {
+          soundEngine.play(soundTheme, 'warningTick');
+        }
+        const warnMsg = lang === 'en'
+          ? `⚠️ [Battery Warning] Battery is critically low (${battery.level}%) during active timer! Connect AC power.`
+          : `⚠️ [배터리 경고] 타이머 실행 중 배터리가 15% 이하(${battery.level}%)입니다! 충전기를 연결해 주세요.`;
+        addLog(warnMsg);
+      }
+    } else {
+      // If charging or level > 15 or timer not running, clear toast and reset dismissed state
+      if (lowBatteryToast) {
+        if (battery?.charging) {
+          const resolvedMsg = lang === 'en'
+            ? `⚡ [AC Power Connected] Battery is now charging (${battery.level}%). Scheduled timer is safe.`
+            : `⚡ [전원 어댑터 연결됨] 배터리 충전이 시작되었습니다 (${battery.level}%). 전원 타이머가 안전하게 유지됩니다.`;
+          addLog(resolvedMsg);
+          triggerNotification(resolvedMsg, 'success');
+        }
+        setLowBatteryToast(null);
+      }
+      setLowBatteryDismissed(false);
+      lastWarnedLowBatteryLevelRef.current = -1;
+    }
+  }, [lowBatteryAlert, timerState, systemStatus?.battery, lowBatteryDismissed, soundEnabled, soundTheme, lang]);
 
   // Notification Auto-dismiss after 3.5 seconds
   useEffect(() => {
@@ -858,136 +1009,28 @@ export default function App() {
     setLogs(prev => [`[${timestamp}] ${msg}`, ...prev.slice(0, 49)]);
   };
 
-  const playTestSound = (theme: 'classic' | 'scifi' | 'cozy') => {
-    try {
-      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      osc.connect(gain);
-      gain.connect(audioCtx.destination);
-      
-      if (theme === 'classic') {
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5
-        osc.frequency.setValueAtTime(880, audioCtx.currentTime + 0.15); // A5
-        gain.gain.setValueAtTime(0.06, audioCtx.currentTime);
-        osc.start();
-        osc.stop(audioCtx.currentTime + 0.35);
-      } else if (theme === 'scifi') {
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(1000, audioCtx.currentTime); 
-        osc.frequency.exponentialRampToValueAtTime(2000, audioCtx.currentTime + 0.25);
-        gain.gain.setValueAtTime(0.04, audioCtx.currentTime);
-        osc.start();
-        osc.stop(audioCtx.currentTime + 0.3);
-      } else { // cozy
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(523.25, audioCtx.currentTime); // C5
-        osc.frequency.setValueAtTime(783.99, audioCtx.currentTime + 0.12); // G5
-        gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
-        osc.start();
-        osc.stop(audioCtx.currentTime + 0.35);
-      }
-    } catch (e) {}
+  const playTestSound = (theme: SoundTheme) => {
+    soundEngine.play(theme, 'preview');
   };
 
   const playWarningTick = () => {
-    try {
-      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      osc.connect(gain);
-      gain.connect(audioCtx.destination);
-      
-      if (soundTheme === 'classic') {
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(1000, audioCtx.currentTime); 
-        gain.gain.setValueAtTime(0.04, audioCtx.currentTime);
-      } else if (soundTheme === 'scifi') {
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(2000, audioCtx.currentTime); 
-        gain.gain.setValueAtTime(0.02, audioCtx.currentTime);
-      } else { // cozy
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(523.25, audioCtx.currentTime); // C5
-        gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
-      }
-      
-      osc.start();
-      osc.stop(audioCtx.currentTime + 0.08);
-    } catch (e) {}
+    soundEngine.play(soundTheme, 'warningTick');
   };
 
   const playAlertChime = () => {
-    try {
-      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      osc.connect(gain);
-      gain.connect(audioCtx.destination);
-      
-      if (soundTheme === 'classic') {
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5
-        osc.frequency.setValueAtTime(880, audioCtx.currentTime + 0.15); // A5
-        gain.gain.setValueAtTime(0.06, audioCtx.currentTime);
-        osc.start();
-        osc.stop(audioCtx.currentTime + 0.4);
-      } else if (soundTheme === 'scifi') {
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(1200, audioCtx.currentTime); 
-        osc.frequency.exponentialRampToValueAtTime(1800, audioCtx.currentTime + 0.35);
-        gain.gain.setValueAtTime(0.03, audioCtx.currentTime);
-        osc.start();
-        osc.stop(audioCtx.currentTime + 0.4);
-      } else { // cozy
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(698.46, audioCtx.currentTime); // F5
-        osc.frequency.setValueAtTime(932.33, audioCtx.currentTime + 0.15); // Bb5
-        gain.gain.setValueAtTime(0.06, audioCtx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.45);
-        osc.start();
-        osc.stop(audioCtx.currentTime + 0.5);
-      }
-    } catch (e) {}
+    soundEngine.play(soundTheme, 'preview');
   };
 
   const playChime = () => {
-    try {
-      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      osc.connect(gain);
-      gain.connect(audioCtx.destination);
-      
-      if (soundTheme === 'classic') {
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(523.25, audioCtx.currentTime); // C5
-        osc.frequency.setValueAtTime(659.25, audioCtx.currentTime + 0.15); // E5
-        osc.frequency.setValueAtTime(783.99, audioCtx.currentTime + 0.3); // G5
-        gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
-        osc.start();
-        osc.stop(audioCtx.currentTime + 0.6);
-      } else if (soundTheme === 'scifi') {
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(880, audioCtx.currentTime); 
-        osc.frequency.setValueAtTime(1760, audioCtx.currentTime + 0.15); 
-        osc.frequency.setValueAtTime(2200, audioCtx.currentTime + 0.3); 
-        gain.gain.setValueAtTime(0.04, audioCtx.currentTime);
-        osc.start();
-        osc.stop(audioCtx.currentTime + 0.5);
-      } else { // cozy
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(523.25, audioCtx.currentTime); // C5
-        osc.frequency.setValueAtTime(698.46, audioCtx.currentTime + 0.15); // F5
-        osc.frequency.setValueAtTime(880.00, audioCtx.currentTime + 0.3); // A5
-        osc.frequency.setValueAtTime(1046.50, audioCtx.currentTime + 0.45); // C6
-        gain.gain.setValueAtTime(0.07, audioCtx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.75);
-        osc.start();
-        osc.stop(audioCtx.currentTime + 0.8);
-      }
-    } catch (e) {}
+    soundEngine.play(soundTheme, 'hourlyChime');
+  };
+
+  const playActionSuccess = () => {
+    soundEngine.play(soundTheme, 'actionSuccess');
+  };
+
+  const playTimerAlarmSound = () => {
+    soundEngine.play(soundTheme, 'timerAlarm');
   };
 
   const getPowerModeKorean = (m: PowerMode) => {
@@ -1150,9 +1193,16 @@ export default function App() {
       case 'font-display': fontNameEn = 'Space Grotesk'; fontNameKo = 'Space Grotesk (디스플레이)'; break;
       case 'font-mono': fontNameEn = 'JetBrains Mono'; fontNameKo = 'JetBrains Mono (고정폭)'; break;
       case 'font-serif': fontNameEn = 'Myeongjo (Serif)'; fontNameKo = '나눔명조 (세리프)'; break;
-      case 'font-malgun': fontNameEn = 'Malgun Gothic'; fontNameKo = '맑은 고딕'; break;
-      case 'font-gulim': fontNameEn = 'Gulim'; fontNameKo = '굴림'; break;
-      case 'font-batang': fontNameEn = 'Batang'; fontNameKo = '바탕'; break;
+      case 'font-segoe': fontNameEn = 'Segoe UI (Windows)'; fontNameKo = 'Segoe UI (윈도우 기본)'; break;
+      case 'font-malgun': fontNameEn = 'Malgun Gothic (Windows)'; fontNameKo = '맑은 고딕 (윈도우 기본)'; break;
+      case 'font-dotum': fontNameEn = 'Dotum (Windows)'; fontNameKo = '돋움 (윈도우 기본)'; break;
+      case 'font-gulim': fontNameEn = 'Gulim (Windows)'; fontNameKo = '굴림 (윈도우 기본)'; break;
+      case 'font-batang': fontNameEn = 'Batang (Windows)'; fontNameKo = '바탕 (윈도우 기본)'; break;
+      case 'font-gungsuh': fontNameEn = 'Gungsuh (Windows)'; fontNameKo = '궁서 (윈도우 기본)'; break;
+      case 'font-consolas': fontNameEn = 'Consolas (Windows Mono)'; fontNameKo = 'Consolas (윈도우 코딩용)'; break;
+      case 'font-arial': fontNameEn = 'Arial'; fontNameKo = 'Arial (영문 표준)'; break;
+      case 'font-tahoma': fontNameEn = 'Tahoma'; fontNameKo = 'Tahoma (윈도우)'; break;
+      case 'font-calibri': fontNameEn = 'Calibri'; fontNameKo = 'Calibri (윈도우)'; break;
     }
     
     if (lang === 'en') {
@@ -1413,6 +1463,9 @@ export default function App() {
   // "타이머 동작 시 1분 남았을때 상단고정옵션이 체크되어 있으면 상단창 배경색을 변동시켜 사용자에게 주의를 줍니다."
   const isWarningActive = alwaysOnTop && timerState === 'running' && secondsRemaining <= 60 && secondsRemaining > 0;
 
+  // Power saving active state (when battery <= 20% and power saving toggle is enabled)
+  const isPowerSavingActive = powerSavingMode && (systemStatus?.battery ? systemStatus.battery.level <= 20 : false);
+
   // Option A: Windows Desktop Native App View (PowerController.exe / Tkinter Mirroring Mode)
   if (viewMode === 'desktop') {
     return (
@@ -1421,6 +1474,8 @@ export default function App() {
           onSwitchToWeb={() => setViewMode('web')}
           onOpenLicense={() => setIsLicenseOpen(true)}
           isWebAvailable={true}
+          battery={systemStatus?.battery}
+          isPowerSavingActive={isPowerSavingActive}
         />
 
         {/* License Modal Portal */}
@@ -1609,6 +1664,8 @@ Copyright (c) 2026 AhBiYout
           currentThemeConfig={currentThemeConfig}
           formatTimeStr={formatTimeStr}
           getPowerModeKorean={getPowerModeKorean}
+          isPowerSavingActive={isPowerSavingActive}
+          batteryLevel={systemStatus?.battery?.level}
         />
       ) : (
         /* ==================== TKINTER-STYLE DESKTOP APP LAYOUT ==================== */
@@ -1956,6 +2013,15 @@ Copyright (c) 2026 AhBiYout
                   </div>
                 </div>
 
+                {/* 60-Minute Battery Consumption & Prediction Chart (Recharts) */}
+                <BatteryHistoryChart
+                  currentBattery={systemStatus?.battery}
+                  timerState={timerState}
+                  secondsRemaining={secondsRemaining}
+                  lang={lang}
+                  theme={theme}
+                />
+
                 {/* Input Fields */}
                 <div className={`p-2.5 rounded border transition-colors duration-300 ${currentThemeConfig.inputContainerBg}`}>
                   <label className={`block text-[10.5px] font-bold mb-2 leading-tight ${currentThemeConfig.subtext}`}>
@@ -2291,6 +2357,42 @@ Copyright (c) 2026 AhBiYout
               </div>
             </div>
             <div className="flex items-center gap-1">
+              {/* Battery Status Indicator */}
+              {systemStatus?.battery && (
+                <div
+                  className="flex items-center gap-1.5 border-r border-gray-500/20 pr-4 select-none cursor-default"
+                  title={lang === 'en'
+                    ? `Battery: ${systemStatus.battery.level}% (${systemStatus.battery.charging ? 'Charging / AC Power' : 'On Battery'}${systemStatus.battery.statusText ? ` - ${systemStatus.battery.statusText}` : ''})`
+                    : `배터리 상태: ${systemStatus.battery.level}% (${systemStatus.battery.charging ? '충전 중 (전원 연결됨)' : '배터리 사용 중'}${systemStatus.battery.statusText ? ` - ${systemStatus.battery.statusText}` : ''})`
+                  }
+                >
+                  <div className="relative flex items-center">
+                    {systemStatus.battery.charging ? (
+                      <BatteryCharging className={`w-4 h-4 ${theme === 'beige' ? 'text-emerald-700' : 'text-emerald-400'} animate-pulse`} />
+                    ) : systemStatus.battery.level <= 20 ? (
+                      <BatteryLow className="w-4 h-4 text-rose-500 animate-bounce" />
+                    ) : systemStatus.battery.level <= 60 ? (
+                      <BatteryMedium className={`w-4 h-4 ${theme === 'beige' ? 'text-amber-700' : 'text-amber-400'}`} />
+                    ) : (
+                      <BatteryFull className={`w-4 h-4 ${theme === 'beige' ? 'text-emerald-700' : 'text-emerald-400'}`} />
+                    )}
+                  </div>
+                  <span className="font-mono font-bold text-xs flex items-center gap-1">
+                    <span>{systemStatus.battery.level}%</span>
+                    <span className={`text-[10px] px-1 py-0.2 rounded font-sans font-semibold ${
+                      systemStatus.battery.charging
+                        ? theme === 'beige' ? 'bg-emerald-200 text-emerald-800' : 'bg-emerald-500/20 text-emerald-300'
+                        : systemStatus.battery.level <= 20
+                        ? 'bg-rose-500/20 text-rose-400'
+                        : theme === 'beige' ? 'bg-amber-100 text-amber-800' : 'bg-black/30 text-gray-300'
+                    }`}>
+                      {systemStatus.battery.charging
+                        ? (lang === 'en' ? 'Charging' : '충전중')
+                        : (lang === 'en' ? 'Battery' : '배터리')}
+                    </span>
+                  </span>
+                </div>
+              )}
               <span className="border-r border-gray-500/20 pr-4">{lang === 'en' ? 'Selected Power: ' : '선택한 전원: '}<strong className={theme === 'beige' ? 'text-blue-800 font-extrabold' : 'text-blue-400 font-bold'}>{getPowerModeKorean(powerMode)}</strong></span>
               <span className="border-r border-gray-500/20 pr-4 hidden md:inline">{lang === 'en' ? 'Status: ' : '상태: '}<strong>{timerState === 'running' ? (lang === 'en' ? 'Monitoring' : '감시 작동 중') : (lang === 'en' ? 'Idle' : '대기')}</strong></span>
               <span className="hidden lg:inline pr-2">{currentTimeText}</span>
@@ -2341,6 +2443,65 @@ Copyright (c) 2026 AhBiYout
             >
               <X className="w-4 h-4" />
             </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Persistent Low Battery Warning Toast on Active Timer (<15%) */}
+      <AnimatePresence>
+        {lowBatteryToast && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.95 }}
+            className="fixed bottom-6 right-6 z-[10000] max-w-md w-full backdrop-blur-md bg-gradient-to-br from-rose-950/95 via-[#18181b]/95 to-amber-950/95 border-2 border-rose-500/80 rounded-2xl p-4 shadow-[0_10px_40px_rgba(244,63,94,0.4)] flex flex-col gap-2.5 text-white"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-rose-500/20 border border-rose-500/40 text-rose-400 animate-pulse shrink-0">
+                  <BatteryLow className="w-6 h-6" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-[13.5px] text-rose-200">
+                      {lang === 'en' ? 'Critical Low Battery Alert' : '배터리 부족 긴급 지속 경고'}
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full bg-rose-600 text-white font-mono font-bold text-xs animate-bounce shadow">
+                      {lowBatteryToast.level}%
+                    </span>
+                  </div>
+                  <span className="text-[11px] text-amber-300 font-semibold flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping inline-block"></span>
+                    {lang === 'en' ? 'Power Timer is currently running' : '전원 제어 카운트다운 타이머 가동 중'}
+                  </span>
+                </div>
+              </div>
+              <button
+                onClick={() => setLowBatteryDismissed(true)}
+                className="p-1 rounded-lg hover:bg-white/10 text-gray-300 hover:text-white transition-colors cursor-pointer"
+                title={lang === 'en' ? 'Dismiss' : '닫기'}
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-[12px] text-gray-200 leading-relaxed pl-1">
+              {lang === 'en'
+                ? `Battery level dropped below 15% (${lowBatteryToast.level}%). Please plug in AC power to prevent unexpected shutdown before your scheduled power timer completes.`
+                : `타이머가 가동 중인 상태에서 배터리가 15% 이하(${lowBatteryToast.level}%)로 떨어졌습니다. 예약된 전원 제어 작업이 중단 없이 안전하게 완료될 수 있도록 전원 어댑터(충전기)를 즉시 연결해 주세요.`}
+            </p>
+            <div className="flex items-center justify-between pt-1 border-t border-rose-500/20">
+              <span className="text-[10.5px] text-rose-300/80">
+                {lang === 'en' ? '⚡ Persistent warning until plugged in' : '⚡ 전원 연결 또는 닫기 시까지 유지됨'}
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setLowBatteryDismissed(true)}
+                  className="px-3 py-1 bg-white/10 hover:bg-white/20 border border-white/20 text-gray-200 text-xs font-bold rounded-lg transition-colors cursor-pointer"
+                >
+                  {lang === 'en' ? 'Dismiss' : '확인 (닫기)'}
+                </button>
+              </div>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -2552,43 +2713,140 @@ Copyright (c) 2026 AhBiYout
                   </div>
                 </div>
 
-                {/* 2. Sound & Hourly Chime */}
-                <div className="flex flex-col gap-2 p-3 bg-black/10 dark:bg-white/5 rounded-xl border border-gray-500/10">
-                  <span className="text-[13.5px] font-bold text-emerald-400 flex items-center gap-1">🎵 {lang === 'en' ? 'Sound & Alerts' : '사운드 및 알림'}</span>
-                  <div className="grid grid-cols-3 gap-1.5">
+                {/* 2. Sound & Hourly Chime (Pixabay Curated Alarm & Notification Sound Effects) */}
+                <div className="flex flex-col gap-2.5 p-3.5 bg-black/10 dark:bg-white/5 rounded-xl border border-gray-500/10">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[13.5px] font-bold text-emerald-400 flex items-center gap-1.5">
+                      🎵 {lang === 'en' ? 'Sound & Alerts (Pixabay Soundbank)' : '효과음 & 알림 사운드 뱅크 (Pixabay 선별)'}
+                    </span>
+                    <span className="text-[11px] font-mono font-bold text-emerald-300/80 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                      {draftSettings.soundVolume}% Vol
+                    </span>
+                  </div>
+
+                  {/* Volume Slider & Mute Toggle */}
+                  <div className="flex items-center gap-3 bg-black/20 p-2 rounded-lg border border-gray-500/10">
                     <button
                       onClick={() => {
-                        setDraftSettings({ ...draftSettings, soundTheme: 'classic' });
-                        playTestSound('classic');
+                        const newVol = draftSettings.soundVolume === 0 ? 80 : 0;
+                        setDraftSettings({ ...draftSettings, soundVolume: newVol });
+                        soundEngine.setVolume(newVol);
                       }}
-                      className={`py-1.5 rounded text-[13.5px] font-bold cursor-pointer text-center transition-all ${draftSettings.soundTheme === 'classic' ? 'bg-blue-600 text-white font-extrabold shadow' : 'bg-gray-800 hover:bg-gray-700 text-gray-300'}`}
+                      className="p-1 rounded hover:bg-white/10 text-gray-300 text-xs font-bold"
+                      title={lang === 'en' ? 'Mute / Unmute' : '음소거 / 해제'}
                     >
-                      {lang === 'en' ? 'Classic' : '클래식'}
+                      {draftSettings.soundVolume === 0 ? '🔇' : draftSettings.soundVolume < 50 ? '🔉' : '🔊'}
                     </button>
-                    <button
-                      onClick={() => {
-                        setDraftSettings({ ...draftSettings, soundTheme: 'scifi' });
-                        playTestSound('scifi');
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      step="5"
+                      value={draftSettings.soundVolume}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value, 10);
+                        setDraftSettings({ ...draftSettings, soundVolume: val });
+                        soundEngine.setVolume(val);
                       }}
-                      className={`py-1.5 rounded text-[13.5px] font-bold cursor-pointer text-center transition-all ${draftSettings.soundTheme === 'scifi' ? 'bg-blue-600 text-white font-extrabold shadow' : 'bg-gray-800 hover:bg-gray-700 text-gray-300'}`}
-                    >
-                      {lang === 'en' ? 'Sci-Fi' : 'SF 신스'}
-                    </button>
-                    <button
-                      onClick={() => {
-                        setDraftSettings({ ...draftSettings, soundTheme: 'cozy' });
-                        playTestSound('cozy');
-                      }}
-                      className={`py-1.5 rounded text-[13.5px] font-bold cursor-pointer text-center transition-all ${draftSettings.soundTheme === 'cozy' ? 'bg-blue-600 text-white font-extrabold shadow' : 'bg-gray-800 hover:bg-gray-700 text-gray-300'}`}
-                    >
-                      {lang === 'en' ? 'Cozy' : '아늑한'}
-                    </button>
+                      className="w-full accent-emerald-500 cursor-pointer h-1.5 bg-gray-700 rounded-lg"
+                    />
+                    <span className="text-[11px] font-mono text-gray-300 min-w-[32px] text-right">
+                      {draftSettings.soundVolume}%
+                    </span>
+                  </div>
+
+                  {/* 7 Curated Sound Themes Selection Grid */}
+                  <div className="space-y-1.5">
+                    <span className="text-[11px] text-gray-400 font-medium">
+                      {lang === 'en' ? 'Select Sound Theme Preset:' : '알림음 테마 선택 (클릭 시 즉시 청취):'}
+                    </span>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-56 overflow-y-auto pr-1">
+                      {SOUND_THEMES.map((th) => {
+                        const isSelected = draftSettings.soundTheme === th.id;
+                        return (
+                          <div
+                            key={th.id}
+                            onClick={() => {
+                              setDraftSettings({ ...draftSettings, soundTheme: th.id });
+                              soundEngine.play(th.id, 'preview');
+                            }}
+                            className={`p-2 rounded-lg border text-left cursor-pointer transition-all flex items-center justify-between ${
+                              isSelected
+                                ? 'bg-emerald-600/20 border-emerald-500 text-white shadow'
+                                : 'bg-gray-800/60 hover:bg-gray-700/60 border-gray-700 text-gray-300'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2 overflow-hidden">
+                              <span className="text-base">{th.icon}</span>
+                              <div className="flex flex-col truncate">
+                                <span className={`text-[12px] font-bold ${isSelected ? 'text-emerald-300' : 'text-gray-200'}`}>
+                                  {lang === 'en' ? th.nameEn : th.nameKo}
+                                </span>
+                                <span className="text-[10px] text-gray-400 truncate">
+                                  {lang === 'en' ? th.descEn : th.descKo}
+                                </span>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDraftSettings({ ...draftSettings, soundTheme: th.id });
+                                soundEngine.play(th.id, 'preview');
+                              }}
+                              className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${
+                                isSelected ? 'bg-emerald-500 text-white' : 'bg-gray-700 hover:bg-gray-600 text-gray-200'
+                              }`}
+                            >
+                              ▶ {lang === 'en' ? 'Play' : '듣기'}
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Sound Trigger Audition Test Hub */}
+                  <div className="bg-black/20 p-2.5 rounded-lg border border-gray-500/10 space-y-1.5">
+                    <span className="text-[11px] text-gray-300 font-bold flex items-center gap-1">
+                      🎯 {lang === 'en' ? 'Sound Trigger Preview Test:' : '상황별 알림음 동작 테스트:'}
+                    </span>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-1">
+                      <button
+                        type="button"
+                        onClick={() => soundEngine.play(draftSettings.soundTheme, 'hourlyChime')}
+                        className="p-1.5 bg-gray-800 hover:bg-gray-700 rounded text-[10.5px] text-gray-200 font-medium transition-colors text-center border border-gray-700/60"
+                      >
+                        🔔 {lang === 'en' ? 'Hourly Chime' : '정각 종소리'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => soundEngine.play(draftSettings.soundTheme, 'warningTick')}
+                        className="p-1.5 bg-gray-800 hover:bg-gray-700 rounded text-[10.5px] text-gray-200 font-medium transition-colors text-center border border-gray-700/60"
+                      >
+                        ⏱️ {lang === 'en' ? 'Countdown Tick' : '카운트다운 틱'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => soundEngine.play(draftSettings.soundTheme, 'timerAlarm')}
+                        className="p-1.5 bg-gray-800 hover:bg-gray-700 rounded text-[10.5px] text-gray-200 font-medium transition-colors text-center border border-gray-700/60"
+                      >
+                        🚨 {lang === 'en' ? 'Alarm / Finish' : '완료/알람음'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => soundEngine.play(draftSettings.soundTheme, 'actionSuccess')}
+                        className="p-1.5 bg-gray-800 hover:bg-gray-700 rounded text-[10.5px] text-gray-200 font-medium transition-colors text-center border border-gray-700/60"
+                      >
+                        ✨ {lang === 'en' ? 'Success Chime' : '작업 완료음'}
+                      </button>
+                    </div>
                   </div>
 
                   {/* Hourly Chime Toggle */}
                   <div className="flex items-center justify-between gap-4 pt-2 border-t border-gray-500/10 mt-1">
-                    <span className="text-[9.5px] text-gray-300 flex items-center gap-1">
-                      🔔 {lang === 'en' ? 'Hourly Chime Notification' : '매 정각 알림 기능 (시계 종소리)'}
+                    <span className="text-[10px] text-gray-300 flex items-center gap-1">
+                      🔔 {lang === 'en' ? 'Hourly Chime Notification (Every 00 Min)' : '매 정각 알림 기능 (시계 종소리)'}
                     </span>
                     <label className="flex items-center gap-1.5 cursor-pointer select-none">
                       <input
@@ -2603,7 +2861,7 @@ Copyright (c) 2026 AhBiYout
 
                   {/* Startup Tasks Alert Toggle */}
                   <div className="flex items-center justify-between gap-4 pt-2 border-t border-gray-500/10">
-                    <span className="text-[9.5px] text-gray-300 flex items-center gap-1">
+                    <span className="text-[10px] text-gray-300 flex items-center gap-1">
                       📅 {lang === 'en' ? 'Tray Briefing for Today Tasks on Startup' : '컴퓨터 부팅/시작 시 오늘 예약 작업 트레이 브리핑'}
                     </span>
                     <label className="flex items-center gap-1.5 cursor-pointer select-none">
@@ -2614,6 +2872,52 @@ Copyright (c) 2026 AhBiYout
                         className="sr-only peer"
                       />
                       <div className="relative w-7 h-4 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
+                    </label>
+                  </div>
+
+                  {/* Low Battery Warning (<15%) on Active Timer Toggle */}
+                  <div className="flex items-center justify-between gap-4 pt-2 border-t border-gray-500/10">
+                    <div className="flex flex-col">
+                      <span className="text-[10px] text-gray-300 flex items-center gap-1 font-medium">
+                        🔋 {lang === 'en' ? 'Low Battery Alert (<15%) on Active Timer' : '타이머 가동 중 배터리 15% 이하 시 지속적 알림(토스트)'}
+                      </span>
+                      <span className="text-[9px] text-gray-400 pl-4">
+                        {lang === 'en'
+                          ? 'Shows a persistent warning toast prompting AC power connection if battery drops below 15%.'
+                          : '타이머 또는 전원 예약 가동 중 배터리가 15% 이하로 떨어지면 충전기 연결을 유도하는 지속형 토스트를 표시합니다.'}
+                      </span>
+                    </div>
+                    <label className="flex items-center gap-1.5 cursor-pointer select-none shrink-0">
+                      <input
+                        type="checkbox"
+                        checked={draftSettings.lowBatteryAlert}
+                        onChange={(e) => setDraftSettings({ ...draftSettings, lowBatteryAlert: e.target.checked })}
+                        className="sr-only peer"
+                      />
+                      <div className="relative w-7 h-4 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-amber-600"></div>
+                    </label>
+                  </div>
+
+                  {/* Power Saving Mode Toggle (<20% battery auto dimming & opacity reduction) */}
+                  <div className="flex items-center justify-between gap-4 pt-2 border-t border-gray-500/10">
+                    <div className="flex flex-col">
+                      <span className="text-[10px] text-gray-300 flex items-center gap-1 font-medium">
+                        🍃 {lang === 'en' ? 'Smart Power Saving Mode (<20% Battery)' : '스마트 절전 모드 (배터리 20% 이하 시 자동 절전)'}
+                      </span>
+                      <span className="text-[9px] text-gray-400 pl-4">
+                        {lang === 'en'
+                          ? 'Automatically reduces widget opacity and dims background animations when battery drops below 20% to conserve power.'
+                          : '배터리 잔량이 20% 이하로 떨어지면 위젯 투명도를 자동으로 낮추고 배경 애니메이션을 어둡게 감쇠하여 배터리 소모를 억제합니다.'}
+                      </span>
+                    </div>
+                    <label className="flex items-center gap-1.5 cursor-pointer select-none shrink-0">
+                      <input
+                        type="checkbox"
+                        checked={draftSettings.powerSavingMode}
+                        onChange={(e) => setDraftSettings({ ...draftSettings, powerSavingMode: e.target.checked })}
+                        className="sr-only peer"
+                      />
+                      <div className="relative w-7 h-4 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-600"></div>
                     </label>
                   </div>
                 </div>
@@ -2757,12 +3061,19 @@ Copyright (c) 2026 AhBiYout
                       className="bg-gray-800 text-gray-300 text-[13.5px] rounded px-1.5 py-1 border border-gray-700 focus:outline-none focus:border-blue-500"
                     >
                       <option value="font-sans">Inter (Sans-Serif)</option>
+                      <option value="font-segoe">{lang === 'en' ? 'Segoe UI (Windows System)' : 'Segoe UI (윈도우 기본)'}</option>
+                      <option value="font-malgun">{lang === 'en' ? 'Malgun Gothic (Windows)' : '맑은 고딕 (윈도우 기본)'}</option>
+                      <option value="font-dotum">{lang === 'en' ? 'Dotum (Windows)' : '돋움 (윈도우 기본)'}</option>
+                      <option value="font-gulim">{lang === 'en' ? 'Gulim (Windows)' : '굴림 (윈도우 기본)'}</option>
+                      <option value="font-batang">{lang === 'en' ? 'Batang (Windows)' : '바탕 (윈도우 기본)'}</option>
+                      <option value="font-gungsuh">{lang === 'en' ? 'Gungsuh (Windows)' : '궁서 (윈도우 기본)'}</option>
+                      <option value="font-consolas">{lang === 'en' ? 'Consolas (Windows Mono)' : 'Consolas (윈도우 코딩용)'}</option>
                       <option value="font-display">Space Grotesk (Tech)</option>
                       <option value="font-mono">JetBrains Mono (Coding)</option>
                       <option value="font-serif">{lang === 'en' ? 'Myeongjo (Serif)' : '나눔명조 (세리프)'}</option>
-                      <option value="font-malgun">{lang === 'en' ? 'Malgun Gothic (Windows)' : '맑은 고딕 (윈도우 기본)'}</option>
-                      <option value="font-gulim">{lang === 'en' ? 'Gulim (Windows)' : '굴림 (윈도우 기본)'}</option>
-                      <option value="font-batang">{lang === 'en' ? 'Batang (Windows)' : '바탕 (윈도우 기본)'}</option>
+                      <option value="font-arial">Arial (Standard)</option>
+                      <option value="font-tahoma">Tahoma (Windows)</option>
+                      <option value="font-calibri">Calibri (Windows)</option>
                     </select>
                   </div>
                 </div>

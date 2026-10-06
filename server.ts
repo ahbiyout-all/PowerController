@@ -78,6 +78,22 @@ app.get('/api/system-status', async (req, res) => {
     online = false;
   }
 
+  // Battery status telemetry
+  let batteryLevel = 94;
+  let batteryCharging = true;
+  let batteryStatusText = 'AC Power Connected';
+  try {
+    if (process.platform === 'linux' && fs.existsSync('/sys/class/power_supply/BAT0/capacity')) {
+      const cap = fs.readFileSync('/sys/class/power_supply/BAT0/capacity', 'utf8').trim();
+      const status = fs.readFileSync('/sys/class/power_supply/BAT0/status', 'utf8').trim();
+      batteryLevel = parseInt(cap, 10) || 94;
+      batteryCharging = status.toLowerCase() === 'charging' || status.toLowerCase() === 'full';
+      batteryStatusText = status;
+    }
+  } catch {
+    // Graceful fallback
+  }
+
   res.json({
     cpu,
     memory: {
@@ -95,6 +111,11 @@ app.get('/api/system-status', async (req, res) => {
     network: {
       online,
       latency
+    },
+    battery: {
+      level: batteryLevel,
+      charging: batteryCharging,
+      statusText: batteryStatusText
     },
     uptime: os.uptime(),
     platform: os.platform()

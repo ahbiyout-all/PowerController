@@ -6,9 +6,16 @@
   --font-display: "Space Grotesk", sans-serif;
   --font-mono: "JetBrains Mono", monospace;
   --font-serif: "Nanum Myeongjo", "Playfair Display", serif;
+  --font-segoe: "Segoe UI", "Segoe UI Variable", -apple-system, sans-serif;
   --font-malgun: "Malgun Gothic", "맑은 고딕", sans-serif;
+  --font-dotum: "Dotum", "돋움", sans-serif;
   --font-gulim: "Gulim", "굴림", sans-serif;
   --font-batang: "Batang", "바탕", serif;
+  --font-gungsuh: "Gungsuh", "궁서", serif;
+  --font-consolas: "Consolas", "Courier New", monospace;
+  --font-arial: "Arial", sans-serif;
+  --font-tahoma: "Tahoma", sans-serif;
+  --font-calibri: "Calibri", sans-serif;
   
   --color-windows-blue: #0078d4;
   --color-windows-dark: #0f121a;
