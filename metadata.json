@@ -1,0 +1,8 @@
+{
+  "name": "PowerController v2.6.0",
+  "description": "An elegant and compact system shutdown and restart manager with Inno Setup 6 installer, scheduler, remote PC grouping, Wake-on-LAN (WOL) booting, immediate power controls, APPDATA persistent storage, and widget designs.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

@@ -1,0 +1,130 @@
+name: PowerController Official Release (Windows Installer Only)
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: 'Release version tag (e.g. v2.9.1)'
+        required: false
+        default: 'v2.9.1'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build Windows Setup Installer & Clean Release
+    runs-on: windows-latest
+    env:
+      PYTHONIOENCODING: utf-8
+      PYTHONUTF8: '1'
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Dependencies & Inno Setup
+        shell: bash
+        run: |
+          npm ci
+          pip install --upgrade pip
+          pip install pyinstaller pillow pystray
+          choco install innosetup --no-progress -y
+
+      - name: Build Web Application (Vite)
+        run: |
+          npm run build
+
+      - name: Compile Windows Setup Installer (.exe)
+        shell: cmd
+        run: |
+          python scripts/build_packages.py
+
+      - name: Gather Release Assets (Installer Only)
+        shell: bash
+        run: |
+          mkdir -p release_assets
+          # Collect ONLY the official setup installer .exe
+          cp -v build_output/pc/PowerController_Setup_*.exe release_assets/ 2>/dev/null || true
+          if [ ! "$(ls -A release_assets)" ]; then
+            cp -v dist/PowerController_Setup_*.exe release_assets/ 2>/dev/null || true
+          fi
+          echo "================================================================"
+          echo "Release Assets ready for upload (Installer ONLY):"
+          ls -lh release_assets/
+          echo "================================================================"
+
+      - name: Determine Version Tag
+        id: vars
+        shell: bash
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+          elif [[ -n "${{ github.event.inputs.release_version }}" ]]; then
+            TAG="${{ github.event.inputs.release_version }}"
+          else
+            TAG=$(node -p "try { 'v' + require('./package.json').version } catch(e) { 'v2.9.1' }")
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Using Tag: $TAG"
+
+      - name: Upload Artifacts to Actions Run
+        uses: actions/upload-artifact@v4
+        with:
+          name: PowerController-Setup-${{ steps.vars.outputs.tag }}
+          path: release_assets/*
+          retention-days: 30
+
+      - name: Create or Update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.vars.outputs.tag }}
+          name: PowerController ${{ steps.vars.outputs.tag }} Windows 공식 설치 프로그램
+          target_commitish: ${{ github.sha }}
+          body: |
+            ## 🚀 PowerController ${{ steps.vars.outputs.tag }} Windows 공식 설치 프로그램
+
+            ### 💿 Windows 공식 인스톨러 (Installer Asset)
+            - 📦 **설치 마법사 실행 파일**: `PowerController_Setup_${{ steps.vars.outputs.tag }}.exe`
+              * Inno Setup 6 기반 Windows 표준 설치 프로그램
+              * 시작 메뉴 및 바탕화면 바로가기 등록
+              * 제어판 프로그램 추가/제거 정식 등록
+              * Windows Defender 방화벽 예외 규칙 무음 자동 등록
+
+            ---
+            ### 📌 릴리스 정보
+            - **계정**: `ahbiyout-all`
+            - **저장소**: `PowerController`
+            - **버전**: `${{ steps.vars.outputs.tag }}`
+            - **상세 패치 내역**: `docs/patch_notes.md` 참고
+          files: release_assets/*
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Prune Non-Installer Assets from Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ steps.vars.outputs.tag }}
+        run: |
+          python scripts/clean_github_release_assets.py "$GH_TOKEN" "$TAG_NAME"

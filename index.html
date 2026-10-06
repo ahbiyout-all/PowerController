@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>PowerController v2.9.1</title>
+    <meta name="description" content="스마트 원격 전원 제어, 스케줄러 및 시스템 관리 대시보드 (Windows PC, Android APK, iOS IPA/PWA)" />
+    
+    <!-- OpenGraph / Social Cards -->
+    <meta property="og:title" content="PowerController v2.9.1" />
+    <meta property="og:description" content="스마트 원격 전원 제어, 스케줄러 및 시스템 관리 대시보드 (Windows PC, Android APK, iOS IPA/PWA)" />
+    <meta property="og:image" content="/PowerController.png" />
+    
+    <!-- Web App & PWA Manifest -->
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" type="image/png" href="/PowerController.png" />
+    <link rel="shortcut icon" href="/PowerController.ico" />
+    <meta name="theme-color" content="#1e293b" />
+    <meta name="mobile-web-app-capable" content="yes" />
+
+    <!-- Apple iOS Safari Web App Support -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="PowerControl" />
+    <link rel="apple-touch-icon" href="/PowerController.png" />
+  </head>
+  <body class="bg-slate-900 text-slate-100 select-none">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

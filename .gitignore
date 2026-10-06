@@ -1,0 +1,48 @@
+node_modules/
+build/
+dist/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example
+
+# Python cache & virtual environments
+__pycache__/
+*.py[cod]
+*$py.class
+*.spec
+.venv/
+env/
+venv/
+ENV/
+
+# Temporary / OS files
+Thumbs.db
+*.tmp
+*.bak
+*.swp
+*~
+korean_lines*.txt
+bun.lock
+
+# IDE / Editor
+.vscode/
+.idea/
+
+# Local User Settings & Runtime Data (Private machine configurations)
+power_*.json
+sidebar_theme_config.json
+power_master_key.txt
+*.log
+
+# Executable / Binary build outputs (Binaries belong to GitHub Releases Assets)
+*.exe
+*.apk
+*.ipa
+*.zip
+!PowerController.ico
+build_output/
+installer_output/
+release_assets/
+ios/Payload/
