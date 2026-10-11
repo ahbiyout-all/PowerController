@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 GitHub Release Non-Installer Assets Cleaner
-Deletes unwanted assets (.zip, .apk, .ipa, non-setup .exe) from GitHub Releases,
+Deletes unwanted assets (.zip, temporary files, non-setup binaries) from GitHub Releases,
 keeping ONLY the official installer: PowerController_Setup_v*.exe
 """
 
@@ -18,7 +18,7 @@ if hasattr(sys.stdout, "reconfigure"):
 if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
-REPO_OWNER = "ahbiyout-all"
+REPO_OWNER = "AhBiYout-all"
 REPO_NAME = "PowerController"
 
 def get_app_version():
@@ -36,7 +36,7 @@ def prune_release_assets(token=None, tag_name=None):
     print("=" * 64)
     print(f"  GitHub Release Asset Cleaner for {REPO_OWNER}/{REPO_NAME}")
     print(f"  Target Release Tag: {tag}")
-    print(f"  Policy: Keep ONLY 'PowerController_Setup_*.exe', Delete all others")
+    print(f"  Policy: Keep ONLY Windows Official Setup Installer (.exe)")
     print("=" * 64)
 
     headers = {
@@ -71,7 +71,7 @@ def prune_release_assets(token=None, tag_name=None):
     for a in assets:
         print(f"    - {a.get('name')} ({a.get('size', 0):,} bytes)")
 
-    # 2. Identify assets to delete
+    # 2. Identify assets to delete (Keep ONLY Windows Official Setup Installer .exe)
     to_delete = []
     to_keep = []
     for a in assets:

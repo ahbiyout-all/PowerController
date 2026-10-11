@@ -1,4 +1,4 @@
-name: PowerController Official Release (Windows Installer Only)
+name: PowerController Windows Release (Setup Installer Only)
 
 on:
   push:
@@ -19,7 +19,7 @@ permissions:
 
 jobs:
   build-and-release:
-    name: Build Windows Setup Installer & Clean Release
+    name: Build Windows Setup Installer & Release
     runs-on: windows-latest
     env:
       PYTHONIOENCODING: utf-8
@@ -30,7 +30,12 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Node.js
+      # -----------------------------------------------------------------
+      # Node.js 22 LTS Runtime Configuration (Deprecation Notice Compliant)
+      # Note: Node.js 20 is officially End-of-Life (April 2026 EOL).
+      # GitHub Actions runners require Node.js 22 LTS or Node.js 24.
+      # -----------------------------------------------------------------
+      - name: Setup Node.js (Node 22 LTS - Modern EOL Compliant)
         uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -41,7 +46,7 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install Dependencies & Inno Setup
+      - name: Install Toolchain & Inno Setup 6
         shell: bash
         run: |
           npm ci
@@ -49,30 +54,34 @@ jobs:
           pip install pyinstaller pillow pystray
           choco install innosetup --no-progress -y
 
-      - name: Build Web Application (Vite)
+      - name: Build Web Application
+        shell: bash
         run: |
           npm run build
 
-      - name: Compile Windows Setup Installer (.exe)
+      - name: Build Windows Official Installer (.exe via Inno Setup 6)
         shell: cmd
         run: |
           python scripts/build_packages.py
 
-      - name: Gather Release Assets (Installer Only)
+      - name: Gather Clean Release Assets (Installer ONLY)
         shell: bash
         run: |
           mkdir -p release_assets
-          # Collect ONLY the official setup installer .exe
+          # Collect ONLY official setup installer .exe
           cp -v build_output/pc/PowerController_Setup_*.exe release_assets/ 2>/dev/null || true
-          if [ ! "$(ls -A release_assets)" ]; then
+          
+          # Fallback check
+          if [ -d "dist" ]; then
             cp -v dist/PowerController_Setup_*.exe release_assets/ 2>/dev/null || true
           fi
+
           echo "================================================================"
-          echo "Release Assets ready for upload (Installer ONLY):"
+          echo "Release Assets ready for upload (Official Installer ONLY):"
           ls -lh release_assets/
           echo "================================================================"
 
-      - name: Determine Version Tag
+      - name: Determine Dynamic Version Tag
         id: vars
         shell: bash
         run: |
@@ -84,7 +93,7 @@ jobs:
             TAG=$(node -p "try { 'v' + require('./package.json').version } catch(e) { 'v2.9.1' }")
           fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "Using Tag: $TAG"
+          echo "Target Version Tag: $TAG"
 
       - name: Upload Artifacts to Actions Run
         uses: actions/upload-artifact@v4
@@ -100,21 +109,23 @@ jobs:
           name: PowerController ${{ steps.vars.outputs.tag }} Windows 공식 설치 프로그램
           target_commitish: ${{ github.sha }}
           body: |
-            ## 🚀 PowerController ${{ steps.vars.outputs.tag }} Windows 공식 설치 프로그램
+            ## 🚀 PowerController ${{ steps.vars.outputs.tag }} Windows 공식 릴리스
 
-            ### 💿 Windows 공식 인스톨러 (Installer Asset)
-            - 📦 **설치 마법사 실행 파일**: `PowerController_Setup_${{ steps.vars.outputs.tag }}.exe`
-              * Inno Setup 6 기반 Windows 표준 설치 프로그램
-              * 시작 메뉴 및 바탕화면 바로가기 등록
-              * 제어판 프로그램 추가/제거 정식 등록
-              * Windows Defender 방화벽 예외 규칙 무음 자동 등록
+            ### 💿 Windows 공식 설치 파일 (Installer Asset Only)
+            - 🖥️ **Windows PC 공식 설치 마법사**: `PowerController_Setup_${{ steps.vars.outputs.tag }}.exe`
+              * Inno Setup 6 기반 폴더 풀림(Unpacked Multi-File) 개별 파일 설치
+              * 기존 설치본 감지 시 삭제(클린 설치) 또는 덮어쓰기 선택 안내 다이얼로그
+              * 무인 설치(/SILENT, /VERYSILENT) 완벽 지원
+              * Windows Defender 방화벽 인바운드/아웃바운드 규칙 무음 자동 등록 (기본명 및 버전명)
+              * 불필요한 개발용 문서 및 포터블 파일 배포 제외
 
             ---
-            ### 📌 릴리스 정보
-            - **계정**: `ahbiyout-all`
-            - **저장소**: `PowerController`
-            - **버전**: `${{ steps.vars.outputs.tag }}`
-            - **상세 패치 내역**: `docs/patch_notes.md` 참고
+            ### 📌 제작자 및 공식 채널 안내
+            - **개발자**: `AhBiYout`
+            - **GitHub 계정**: `AhBiYout-all` (https://github.com/AhBiYout-all)
+            - **저장소**: `PowerController` (https://github.com/AhBiYout-all/PowerController)
+            - **공식 구글 블로그**: https://ahbiyoutvibe.blogspot.com/
+            - **소속사**: https://www.cisnet.co.kr
           files: release_assets/*
           draft: false
           prerelease: false

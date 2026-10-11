@@ -64,6 +64,7 @@ interface DraftSettingsState {
   theme: ThemeType;
   soundTheme: SoundTheme;
   soundVolume: number;
+  soundFeedbackEnabled: boolean;
   showCurrentTimeCompact: boolean;
   widgetOpacity: number;
   mainOpacity: number;
@@ -78,6 +79,8 @@ interface DraftSettingsState {
   clockFontSize: number;
   timerFontSize: number;
   forceCloseEnabled: boolean;
+  idleLockEnabled: boolean;
+  idleLockMinutes: number;
 }
 
 export default function App() {
@@ -97,6 +100,28 @@ export default function App() {
     localStorage.setItem('power_lang', newLang);
     addLog(newLang === 'en' ? 'Language changed to English.' : '언어가 한국어로 변경되었습니다.');
   };
+
+  // Idle Auto-Lock Desktop Settings & State
+  const [idleLockEnabled, setIdleLockEnabled] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('power_idle_lock_enabled');
+      return saved !== null ? saved === 'true' : false;
+    } catch {
+      return false;
+    }
+  });
+
+  const [idleLockMinutes, setIdleLockMinutes] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('power_idle_lock_minutes');
+      return saved ? parseInt(saved, 10) : 5;
+    } catch {
+      return 5;
+    }
+  });
+
+  const [isDesktopLocked, setIsDesktopLocked] = useState<boolean>(false);
+  const lastUserActivityRef = useRef<number>(Date.now());
 
   // Theme & Window properties
   const [theme, setTheme] = useState<ThemeType>('beige');
@@ -125,6 +150,61 @@ export default function App() {
     }
   });
   const [soundVolume, setSoundVolume] = useState<number>(() => soundEngine.getVolume());
+  const [prevVolume, setPrevVolume] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('power_sound_prev_volume');
+      return saved !== null ? Math.max(10, parseInt(saved, 10)) : (soundEngine.getVolume() > 0 ? soundEngine.getVolume() : 80);
+    } catch {
+      return 80;
+    }
+  });
+
+  const handleToggleMuteAll = () => {
+    if (soundVolume > 0) {
+      const currentVol = soundVolume;
+      setPrevVolume(currentVol);
+      try {
+        localStorage.setItem('power_sound_prev_volume', String(currentVol));
+      } catch {}
+      soundEngine.setVolume(0);
+      setSoundVolume(0);
+      triggerNotification(
+        lang === 'en'
+          ? '🔇 All sounds muted (Volume set to 0%)'
+          : '🔇 모든 효과음 및 알림이 음소거되었습니다 (볼륨 0%).',
+        'info'
+      );
+    } else {
+      const restoreVol = prevVolume > 0 ? prevVolume : 80;
+      soundEngine.setVolume(restoreVol);
+      setSoundVolume(restoreVol);
+      triggerNotification(
+        lang === 'en'
+          ? `🔊 Sound restored to ${restoreVol}%`
+          : `🔊 사운드 볼륨이 ${restoreVol}%로 원복되었습니다.`,
+        'success'
+      );
+    }
+  };
+  const [soundFeedbackEnabled, setSoundFeedbackEnabled] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('power_sound_feedback');
+      return saved !== null ? saved === 'true' : true;
+    } catch {
+      return true;
+    }
+  });
+  const [webSoundTestTrigger, setWebSoundTestTrigger] = useState<
+    'preview' | 'warningTick' | 'hourlyChime' | 'timerAlarm' | 'actionSuccess'
+  >('preview');
+
+  const playSoundEffect = (
+    trigger: 'buttonClick' | 'actionSuccess' | 'warningTick' | 'timerAlarm' | 'hourlyChime' | 'preview',
+    overrideTheme?: SoundTheme
+  ) => {
+    if (!soundFeedbackEnabled && trigger === 'buttonClick') return;
+    soundEngine.play(overrideTheme || soundTheme, trigger);
+  };
 
   // Hourly Chime & Startup alert states
   const [hourlyChime, setHourlyChime] = useState<boolean>(() => {
@@ -316,6 +396,14 @@ export default function App() {
 
   // Core Timer logic
   const [powerMode, setPowerMode] = useState<PowerMode>('shutdown');
+  const [powerModeDisplayMode, setPowerModeDisplayMode] = useState<'dropdown' | 'grid'>(() => {
+    try {
+      const saved = localStorage.getItem('web_power_mode_display');
+      return (saved as 'dropdown' | 'grid') || 'dropdown';
+    } catch {
+      return 'dropdown';
+    }
+  });
   const [runType, setRunType] = useState<'timer' | 'schedule'>('timer');
   const [timerState, setTimerState] = useState<TimerState>('idle');
   const [totalSeconds, setTotalSeconds] = useState<number>(1800); // Default 30 mins (1800s)
@@ -790,6 +878,7 @@ export default function App() {
       theme,
       soundTheme,
       soundVolume,
+      soundFeedbackEnabled,
       showCurrentTimeCompact,
       widgetOpacity,
       mainOpacity,
@@ -803,7 +892,9 @@ export default function App() {
       widgetWidth,
       clockFontSize,
       timerFontSize,
-      forceCloseEnabled
+      forceCloseEnabled,
+      idleLockEnabled,
+      idleLockMinutes
     });
     setIsSettingsOpen(true);
   };
@@ -830,6 +921,10 @@ export default function App() {
     if (draftSettings.soundVolume !== soundVolume) {
       setSoundVolume(draftSettings.soundVolume);
       soundEngine.setVolume(draftSettings.soundVolume);
+    }
+    if (draftSettings.soundFeedbackEnabled !== soundFeedbackEnabled) {
+      setSoundFeedbackEnabled(draftSettings.soundFeedbackEnabled);
+      localStorage.setItem('power_sound_feedback', draftSettings.soundFeedbackEnabled ? 'true' : 'false');
     }
     if (draftSettings.showCurrentTimeCompact !== showCurrentTimeCompact) {
       setShowCurrentTimeCompact(draftSettings.showCurrentTimeCompact);
@@ -887,6 +982,14 @@ export default function App() {
       setForceCloseEnabled(draftSettings.forceCloseEnabled);
       localStorage.setItem('power_force_close_enabled', draftSettings.forceCloseEnabled ? 'true' : 'false');
     }
+    if (draftSettings.idleLockEnabled !== idleLockEnabled) {
+      setIdleLockEnabled(draftSettings.idleLockEnabled);
+      localStorage.setItem('power_idle_lock_enabled', draftSettings.idleLockEnabled ? 'true' : 'false');
+    }
+    if (draftSettings.idleLockMinutes !== idleLockMinutes) {
+      setIdleLockMinutes(draftSettings.idleLockMinutes);
+      localStorage.setItem('power_idle_lock_minutes', draftSettings.idleLockMinutes.toString());
+    }
 
     addLog(lang === 'en' ? 'Settings preferences applied and saved successfully.' : '환경 설정이 성공적으로 저장 및 적용되었습니다.');
     triggerNotification(lang === 'en' ? 'Settings applied!' : '설정이 저장되었습니다!', 'success');
@@ -933,6 +1036,66 @@ export default function App() {
       lastWarnedLowBatteryLevelRef.current = -1;
     }
   }, [lowBatteryAlert, timerState, systemStatus?.battery, lowBatteryDismissed, soundEnabled, soundTheme, lang]);
+
+  // System Idle Detection & Auto-Lock Session while Timer is Running
+  useEffect(() => {
+    const handleUserActivity = () => {
+      lastUserActivityRef.current = Date.now();
+    };
+
+    window.addEventListener('mousemove', handleUserActivity);
+    window.addEventListener('mousedown', handleUserActivity);
+    window.addEventListener('keydown', handleUserActivity);
+    window.addEventListener('touchstart', handleUserActivity);
+    window.addEventListener('scroll', handleUserActivity);
+
+    const idleInterval = setInterval(() => {
+      if (!idleLockEnabled || timerState !== 'running' || isDesktopLocked) return;
+      const elapsed = Date.now() - lastUserActivityRef.current;
+      const threshold = idleLockMinutes * 60 * 1000;
+      if (elapsed >= threshold) {
+        setIsDesktopLocked(true);
+        if (soundEnabled) {
+          soundEngine.play(soundTheme, 'warningTick');
+        }
+        if (lang === 'en') {
+          addLog(`🔒 [Auto-Lock] Desktop session automatically locked due to system idle (${idleLockMinutes}m) while timer is running.`);
+        } else {
+          addLog(`🔒 [자동 화면 잠금] 타이머 가동 중 유휴 상태(${idleLockMinutes}분)가 감지되어 데스크톱 세션을 안전하게 잠갔습니다.`);
+        }
+      }
+    }, 1000);
+
+    return () => {
+      window.removeEventListener('mousemove', handleUserActivity);
+      window.removeEventListener('mousedown', handleUserActivity);
+      window.removeEventListener('keydown', handleUserActivity);
+      window.removeEventListener('touchstart', handleUserActivity);
+      window.removeEventListener('scroll', handleUserActivity);
+      clearInterval(idleInterval);
+    };
+  }, [idleLockEnabled, idleLockMinutes, timerState, isDesktopLocked, soundEnabled, soundTheme, lang]);
+
+  // Keydown listener for unlocking desktop screen
+  useEffect(() => {
+    if (!isDesktopLocked) return;
+    const handleUnlockKey = (e: KeyboardEvent) => {
+      if (e.key === 'Enter' || e.key === ' ' || e.key === 'Escape') {
+        setIsDesktopLocked(false);
+        lastUserActivityRef.current = Date.now();
+        if (soundEnabled) {
+          soundEngine.play(soundTheme, 'actionSuccess');
+        }
+        if (lang === 'en') {
+          addLog('🔓 [Session Unlocked] Desktop session unlocked via keyboard.');
+        } else {
+          addLog('🔓 [세션 잠금 해제] 키보드 입력으로 화면 잠금이 정상 해제되었습니다.');
+        }
+      }
+    };
+    window.addEventListener('keydown', handleUnlockKey);
+    return () => window.removeEventListener('keydown', handleUnlockKey);
+  }, [isDesktopLocked, soundEnabled, soundTheme, lang]);
 
   // Notification Auto-dismiss after 3.5 seconds
   useEffect(() => {
@@ -1476,6 +1639,14 @@ export default function App() {
           isWebAvailable={true}
           battery={systemStatus?.battery}
           isPowerSavingActive={isPowerSavingActive}
+          soundTheme={soundTheme}
+          onSoundThemeChange={setSoundTheme}
+          soundVolume={soundVolume}
+          onSoundVolumeChange={setSoundVolume}
+          hourlyChime={hourlyChime}
+          onHourlyChimeChange={setHourlyChime}
+          soundFeedbackEnabled={soundFeedbackEnabled}
+          onSoundFeedbackChange={setSoundFeedbackEnabled}
         />
 
         {/* License Modal Portal */}
@@ -1625,57 +1796,82 @@ Copyright (c) 2026 AhBiYout
       )}
 
       {/* Dynamic Display Layout: Always on top (Compact widget style) vs Full View */}
-      {alwaysOnTop ? (
-        <CompactWidget
-          lang={lang}
-          widgetDesign={widgetDesign}
-          setWidgetDesign={setWidgetDesign}
-          widgetWidth={widgetWidth}
-          setWidgetWidth={setWidgetWidth}
-          clockFontSize={clockFontSize}
-          setClockFontSize={setClockFontSize}
-          timerFontSize={timerFontSize}
-          setTimerFontSize={setTimerFontSize}
-          widgetOpacity={widgetOpacity}
-          handleWidgetOpacityChange={handleWidgetOpacityChange}
-          showCurrentTimeCompact={showCurrentTimeCompact}
-          handleShowCurrentTimeCompactChange={handleShowCurrentTimeCompactChange}
-          selectedFont={selectedFont}
-          handleFontChange={handleFontChange}
-          powerMode={powerMode}
-          handleModeChange={handleModeChange}
-          timerState={timerState}
-          secondsRemaining={secondsRemaining}
-          totalSeconds={totalSeconds}
-          inputH={inputH}
-          inputM={inputM}
-          inputS={inputS}
-          setInputH={setInputH}
-          setInputM={setInputM}
-          setInputS={setInputS}
-          handleStartTimer={handleStartTimer}
-          handlePauseTimer={handlePauseTimer}
-          handleResumeTimer={handleResumeTimer}
-          handleResetTimer={handleResetTimer}
-          handleTimerComplete={handleTimerComplete}
-          handleQuickPreset={handleQuickPreset}
-          toggleAlwaysOnTop={toggleAlwaysOnTop}
-          isWarningActive={isWarningActive}
-          currentThemeConfig={currentThemeConfig}
-          formatTimeStr={formatTimeStr}
-          getPowerModeKorean={getPowerModeKorean}
-          isPowerSavingActive={isPowerSavingActive}
-          batteryLevel={systemStatus?.battery?.level}
-        />
-      ) : (
-        /* ==================== TKINTER-STYLE DESKTOP APP LAYOUT ==================== */
-        <div
-          id="explorer-app-window"
-          className={`w-full max-w-[485px] rounded-xl overflow-hidden shadow-2xl flex flex-col border transition-all duration-300 ${currentThemeConfig.windowBg}`}
-          style={{ minHeight: '740px', opacity: mainOpacity / 100 }}
-        >
-          {/* GitHub Releases Real-time Live Update Notification */}
-          <GitHubUpdateBanner lang={lang} />
+      <AnimatePresence mode="wait" initial={false}>
+        {alwaysOnTop ? (
+          <motion.div
+            key="compact-widget-container"
+            initial={{ opacity: 0, scale: 0.88, filter: 'blur(6px)', y: -8 }}
+            animate={{ opacity: 1, scale: 1, filter: 'blur(0px)', y: 0 }}
+            exit={{ opacity: 0, scale: 0.88, filter: 'blur(6px)', y: -8 }}
+            transition={{ 
+              type: "spring",
+              stiffness: 280,
+              damping: 24,
+              mass: 0.85
+            }}
+            className="flex items-center justify-center w-full"
+          >
+            <CompactWidget
+              lang={lang}
+              widgetDesign={widgetDesign}
+              setWidgetDesign={setWidgetDesign}
+              widgetWidth={widgetWidth}
+              setWidgetWidth={setWidgetWidth}
+              clockFontSize={clockFontSize}
+              setClockFontSize={setClockFontSize}
+              timerFontSize={timerFontSize}
+              setTimerFontSize={setTimerFontSize}
+              widgetOpacity={widgetOpacity}
+              handleWidgetOpacityChange={handleWidgetOpacityChange}
+              showCurrentTimeCompact={showCurrentTimeCompact}
+              handleShowCurrentTimeCompactChange={handleShowCurrentTimeCompactChange}
+              selectedFont={selectedFont}
+              handleFontChange={handleFontChange}
+              powerMode={powerMode}
+              handleModeChange={handleModeChange}
+              timerState={timerState}
+              secondsRemaining={secondsRemaining}
+              totalSeconds={totalSeconds}
+              inputH={inputH}
+              inputM={inputM}
+              inputS={inputS}
+              setInputH={setInputH}
+              setInputM={setInputM}
+              setInputS={setInputS}
+              handleStartTimer={handleStartTimer}
+              handlePauseTimer={handlePauseTimer}
+              handleResumeTimer={handleResumeTimer}
+              handleResetTimer={handleResetTimer}
+              handleTimerComplete={handleTimerComplete}
+              handleQuickPreset={handleQuickPreset}
+              toggleAlwaysOnTop={toggleAlwaysOnTop}
+              isWarningActive={isWarningActive}
+              currentThemeConfig={currentThemeConfig}
+              formatTimeStr={formatTimeStr}
+              getPowerModeKorean={getPowerModeKorean}
+              isPowerSavingActive={isPowerSavingActive}
+              batteryLevel={systemStatus?.battery?.level}
+            />
+          </motion.div>
+        ) : (
+          /* ==================== TKINTER-STYLE DESKTOP APP LAYOUT ==================== */
+          <motion.div
+            key="desktop-explorer-window"
+            id="explorer-app-window"
+            initial={{ opacity: 0, scale: 0.93, filter: 'blur(6px)', y: 8 }}
+            animate={{ opacity: mainOpacity / 100, scale: 1, filter: 'blur(0px)', y: 0 }}
+            exit={{ opacity: 0, scale: 0.93, filter: 'blur(6px)', y: 8 }}
+            transition={{ 
+              type: "spring",
+              stiffness: 280,
+              damping: 24,
+              mass: 0.85
+            }}
+            className={`w-full max-w-[485px] rounded-xl overflow-hidden shadow-2xl flex flex-col border transition-colors duration-300 ${currentThemeConfig.windowBg}`}
+            style={{ minHeight: '740px' }}
+          >
+            {/* GitHub Releases Real-time Live Update Notification */}
+            <GitHubUpdateBanner lang={lang} />
 
           {/* 1. App Window Title Bar */}
           <div className={`p-2.5 px-4 flex items-center justify-between border-b select-none ${currentThemeConfig.titleBar}`}>
@@ -1694,15 +1890,47 @@ Copyright (c) 2026 AhBiYout
                 v{APP_VERSION}
               </span>
             </div>
-            {/* Windows System Control Buttons */}
-            <div className="flex items-center gap-1">
+            {/* Header Action Controls & Window System Buttons */}
+            <div className="flex items-center gap-2">
+              {/* Dedicated Mute All Toggle Button */}
               <button
-                onClick={() => toggleAlwaysOnTop()}
-                className="p-1 px-1.5 rounded hover:bg-blue-500 hover:text-white transition-colors text-gray-400"
-                title={lang === 'en' ? 'Switch to compact mini widget' : '컴팩트 미니 알람 위젯으로 전환'}
+                onClick={handleToggleMuteAll}
+                className={`px-2.5 py-1 rounded text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-sm border ${
+                  soundVolume === 0
+                    ? 'bg-rose-500/25 text-rose-300 border-rose-500/50 hover:bg-rose-500/35 animate-pulse'
+                    : 'bg-black/20 hover:bg-black/30 dark:bg-white/10 dark:hover:bg-white/20 text-gray-200 border-gray-500/30'
+                }`}
+                title={
+                  soundVolume === 0
+                    ? (lang === 'en' ? `Unmute All (Restore to ${prevVolume}%)` : `음소거 해제 (${prevVolume}% 복원)`)
+                    : (lang === 'en' ? 'Instantly Mute All Sounds (0%)' : '모든 사운드 즉시 음소거 (0%)')
+                }
               >
-                <Minimize2 className="w-3.5 h-3.5" />
+                {soundVolume === 0 ? (
+                  <>
+                    <VolumeX className="w-3.5 h-3.5 text-rose-400" />
+                    <span className="text-[11.5px] font-extrabold text-rose-300">
+                      {lang === 'en' ? 'Muted (0%)' : '음소거중 (0%)'}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <VolumeX className="w-3.5 h-3.5 text-amber-400" />
+                    <span className="text-[11.5px] font-semibold">
+                      {lang === 'en' ? 'Mute All' : '음소거'}
+                    </span>
+                  </>
+                )}
               </button>
+
+              <div className="flex items-center gap-1 border-l border-gray-500/20 pl-2">
+                <button
+                  onClick={() => toggleAlwaysOnTop()}
+                  className="p-1 px-1.5 rounded hover:bg-blue-500 hover:text-white transition-colors text-gray-400"
+                  title={lang === 'en' ? 'Switch to compact mini widget' : '컴팩트 미니 알람 위젯으로 전환'}
+                >
+                  <Minimize2 className="w-3.5 h-3.5" />
+                </button>
               <button
                 onClick={() => addLog(lang === 'en' ? 'Window maximize simulated.' : '창 최대화가 가상 가동되었습니다.')}
                 className="p-1 px-1.5 rounded hover:bg-gray-700 transition-colors text-gray-400"
@@ -1722,6 +1950,7 @@ Copyright (c) 2026 AhBiYout
               </button>
             </div>
           </div>
+        </div>
 
           {/* 2. Classic File Menu Bar (MenuBar) */}
           <div className={`flex items-center px-4 py-1 text-[13.5px] border-b border-gray-500/10 bg-black/10 dark:bg-white/5 gap-3 select-none ${theme === 'beige' ? 'text-[#2c2217] font-semibold' : 'text-gray-200'}`}>
@@ -1783,80 +2012,143 @@ Copyright (c) 2026 AhBiYout
           <div className={`flex-1 p-4 overflow-y-auto [scrollbar-width:thin] flex flex-col no-scrollbar transition-colors duration-300 ${currentThemeConfig.mainAreaBg} ${currentThemeConfig.text}`}>
             {(activeFolder === 'timer' || activeFolder === 'favorites' || activeFolder === 'packager' || activeFolder === 'command') && (
               <div className="space-y-4 flex flex-col flex-1">
-                {/* Mode Grid Row */}
-                <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5 select-none">
-                  {[
-                    {
-                      id: 'shutdown',
-                      label: lang === 'en' ? 'Shutdown' : '시스템종료',
-                      shortLabel: lang === 'en' ? 'Shut' : '종료',
-                      icon: Power,
-                      activeBg: 'bg-gradient-to-b from-rose-500 to-rose-700 text-white shadow-lg shadow-rose-900/40 ring-1 ring-rose-400/50',
-                      iconColor: 'text-rose-400 group-hover:text-rose-300',
-                    },
-                    {
-                      id: 'restart',
-                      label: lang === 'en' ? 'Restart' : '다시시작',
-                      shortLabel: lang === 'en' ? 'Re' : '재시작',
-                      icon: RotateCw,
-                      activeBg: 'bg-gradient-to-b from-blue-500 to-blue-700 text-white shadow-lg shadow-blue-900/40 ring-1 ring-blue-400/50',
-                      iconColor: 'text-blue-400 group-hover:text-blue-300',
-                    },
-                    {
-                      id: 'sleep',
-                      label: lang === 'en' ? 'Sleep' : '절전모드',
-                      shortLabel: lang === 'en' ? 'Sleep' : '절전',
-                      icon: Moon,
-                      activeBg: 'bg-gradient-to-b from-indigo-500 to-indigo-700 text-white shadow-lg shadow-indigo-900/40 ring-1 ring-indigo-400/50',
-                      iconColor: 'text-indigo-400 group-hover:text-indigo-300',
-                    },
-                    {
-                      id: 'screenoff',
-                      label: lang === 'en' ? 'Screen Off' : '화면끄기',
-                      shortLabel: lang === 'en' ? 'Scr' : '화면끔',
-                      icon: Monitor,
-                      activeBg: 'bg-gradient-to-b from-amber-500 to-amber-700 text-white shadow-lg shadow-amber-900/40 ring-1 ring-amber-400/50',
-                      iconColor: 'text-amber-400 group-hover:text-amber-300',
-                    },
-                    {
-                      id: 'logout',
-                      label: lang === 'en' ? 'Sign Out' : '로그아웃',
-                      shortLabel: lang === 'en' ? 'Log' : '로그아웃',
-                      icon: LogOut,
-                      activeBg: 'bg-gradient-to-b from-emerald-500 to-emerald-700 text-white shadow-lg shadow-emerald-900/40 ring-1 ring-emerald-400/50',
-                      iconColor: 'text-emerald-400 group-hover:text-emerald-300',
-                    },
-                    {
-                      id: 'alarm',
-                      label: lang === 'en' ? 'Alarm Only' : '알람알림',
-                      shortLabel: lang === 'en' ? 'Alarm' : '알람',
-                      icon: Volume2,
-                      activeBg: 'bg-gradient-to-b from-pink-500 to-pink-700 text-white shadow-lg shadow-pink-900/40 ring-1 ring-pink-400/50',
-                      iconColor: 'text-pink-400 group-hover:text-pink-300',
-                    },
-                  ].map((modeItem) => {
-                    const active = powerMode === modeItem.id;
-                    const ModeIcon = modeItem.icon;
-                    return (
-                      <button
-                        key={modeItem.id}
-                        onClick={() => handleModeChange(modeItem.id as PowerMode)}
-                        className={`group relative py-2.5 px-1 rounded-lg font-bold cursor-pointer transition-all duration-200 flex flex-col items-center justify-center gap-1.5 ${
-                          active
-                            ? `${modeItem.activeBg} scale-[1.02]`
-                            : `${currentThemeConfig.btnInactive} hover:scale-[1.02]`
+                {/* Mode Selector Row (Clean Pulldown vs Grid Toggle) */}
+                <div className="space-y-1.5 select-none">
+                  <div className="flex items-center justify-between text-xs font-bold px-0.5">
+                    <div className="flex items-center gap-1.5">
+                      <span className={currentThemeConfig.subtext}>
+                        ⚡ {lang === 'en' ? 'Power Action:' : '전원 동작 모드:'}
+                      </span>
+                      <span className="font-extrabold text-blue-500 dark:text-blue-400">
+                        {powerMode === 'shutdown' && (lang === 'en' ? '🛑 Shutdown' : '🛑 시스템 종료')}
+                        {powerMode === 'restart' && (lang === 'en' ? '🔄 Restart' : '🔄 다시 시작')}
+                        {powerMode === 'sleep' && (lang === 'en' ? '🌙 Sleep' : '🌙 절전 모드')}
+                        {powerMode === 'screenoff' && (lang === 'en' ? '📺 Screen Off' : '📺 화면 끄기')}
+                        {powerMode === 'logout' && (lang === 'en' ? '🚪 Sign Out' : '🚪 로그아웃')}
+                        {powerMode === 'alarm' && (lang === 'en' ? '🔔 Alarm Only' : '🔔 알람 알림')}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const next = powerModeDisplayMode === 'dropdown' ? 'grid' : 'dropdown';
+                        setPowerModeDisplayMode(next);
+                        try { localStorage.setItem('web_power_mode_display', next); } catch {}
+                        soundEngine.play(soundTheme, 'buttonClick');
+                      }}
+                      className="text-[11px] text-gray-400 hover:text-blue-500 underline cursor-pointer transition-colors"
+                      title={powerModeDisplayMode === 'dropdown' ? (lang === 'en' ? 'Expand all buttons' : '모든 버튼 그리드로 펼치기') : (lang === 'en' ? 'Collapse into clean dropdown' : '드롭다운으로 깔끔히 접기')}
+                    >
+                      {powerModeDisplayMode === 'dropdown'
+                        ? (lang === 'en' ? '🔲 Grid View' : '🔲 버튼 펼치기')
+                        : (lang === 'en' ? '📋 Dropdown View' : '📋 풀다운 깔끔 접기')}
+                    </button>
+                  </div>
+
+                  {powerModeDisplayMode === 'dropdown' ? (
+                    <div className="relative">
+                      <select
+                        value={powerMode}
+                        onChange={(e) => handleModeChange(e.target.value as PowerMode)}
+                        className={`w-full py-2.5 pl-9 pr-8 rounded-xl font-bold text-xs appearance-none cursor-pointer border shadow-inner transition-colors duration-200 ${
+                          theme === 'beige'
+                            ? 'bg-[#ebdcc9] border-[#c2aa8b] text-[#2c2217]'
+                            : 'bg-black/20 dark:bg-white/5 border-gray-500/20 text-gray-100 hover:border-blue-500/50'
                         }`}
-                        title={getPowerModeKorean(modeItem.id as PowerMode)}
                       >
-                        <div className={`p-1 rounded-md transition-colors ${active ? 'bg-white/20 text-white' : modeItem.iconColor}`}>
-                          <ModeIcon className="w-5 h-5 stroke-[2.2]" />
-                        </div>
-                        <span className="text-[11.5px] tracking-tight font-medium">
-                          {modeItem.shortLabel}
-                        </span>
-                      </button>
-                    );
-                  })}
+                        <option value="shutdown" className="bg-gray-900 text-gray-100">🛑 1. {lang === 'en' ? 'Shutdown - Fully close apps & power off PC' : '시스템 종료 (Shutdown) - 모든 앱을 닫고 PC 전원을 완전히 끕니다'}</option>
+                        <option value="restart" className="bg-gray-900 text-gray-100">🔄 2. {lang === 'en' ? 'Restart - Safely reboot system OS' : '다시 시작 (Restart) - 운영체제를 안전하게 재부팅합니다'}</option>
+                        <option value="sleep" className="bg-gray-900 text-gray-100">🌙 3. {lang === 'en' ? 'Sleep - Preserve memory into low-power standby' : '절전 모드 (Sleep) - 작업 상태를 RAM에 유지하고 저전력 대기로 전환'}</option>
+                        <option value="screenoff" className="bg-gray-900 text-gray-100">📺 4. {lang === 'en' ? 'Screen Off - Turn display off while keeping tasks' : '화면 끄기 (Screen Off) - 백그라운드 유지 상태에서 모니터만 절전'}</option>
+                        <option value="logout" className="bg-gray-900 text-gray-100">🚪 5. {lang === 'en' ? 'Sign Out - Close user session safely' : '로그아웃 (Sign Out) - 현재 계정 세션을 안전하게 종료합니다'}</option>
+                        <option value="alarm" className="bg-gray-900 text-gray-100">🔔 6. {lang === 'en' ? 'Alarm Only - Trigger alarm sound & alert without power off' : '알람 알림 (Alarm Only) - 전원 차단 없이 알림음과 팝업만 발생'}</option>
+                      </select>
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm pointer-events-none">
+                        {powerMode === 'shutdown' && '🛑'}
+                        {powerMode === 'restart' && '🔄'}
+                        {powerMode === 'sleep' && '🌙'}
+                        {powerMode === 'screenoff' && '📺'}
+                        {powerMode === 'logout' && '🚪'}
+                        {powerMode === 'alarm' && '🔔'}
+                      </span>
+                      <ChevronDown className="w-4 h-4 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5 select-none">
+                      {[
+                        {
+                          id: 'shutdown',
+                          label: lang === 'en' ? 'Shutdown' : '시스템종료',
+                          shortLabel: lang === 'en' ? 'Shut' : '종료',
+                          icon: Power,
+                          activeBg: 'bg-gradient-to-b from-rose-500 to-rose-700 text-white shadow-lg shadow-rose-900/40 ring-1 ring-rose-400/50',
+                          iconColor: 'text-rose-400 group-hover:text-rose-300',
+                        },
+                        {
+                          id: 'restart',
+                          label: lang === 'en' ? 'Restart' : '다시시작',
+                          shortLabel: lang === 'en' ? 'Re' : '재시작',
+                          icon: RotateCw,
+                          activeBg: 'bg-gradient-to-b from-blue-500 to-blue-700 text-white shadow-lg shadow-blue-900/40 ring-1 ring-blue-400/50',
+                          iconColor: 'text-blue-400 group-hover:text-blue-300',
+                        },
+                        {
+                          id: 'sleep',
+                          label: lang === 'en' ? 'Sleep' : '절전모드',
+                          shortLabel: lang === 'en' ? 'Sleep' : '절전',
+                          icon: Moon,
+                          activeBg: 'bg-gradient-to-b from-indigo-500 to-indigo-700 text-white shadow-lg shadow-indigo-900/40 ring-1 ring-indigo-400/50',
+                          iconColor: 'text-indigo-400 group-hover:text-indigo-300',
+                        },
+                        {
+                          id: 'screenoff',
+                          label: lang === 'en' ? 'Screen Off' : '화면끄기',
+                          shortLabel: lang === 'en' ? 'Scr' : '화면끔',
+                          icon: Monitor,
+                          activeBg: 'bg-gradient-to-b from-amber-500 to-amber-700 text-white shadow-lg shadow-amber-900/40 ring-1 ring-amber-400/50',
+                          iconColor: 'text-amber-400 group-hover:text-amber-300',
+                        },
+                        {
+                          id: 'logout',
+                          label: lang === 'en' ? 'Sign Out' : '로그아웃',
+                          shortLabel: lang === 'en' ? 'Log' : '로그아웃',
+                          icon: LogOut,
+                          activeBg: 'bg-gradient-to-b from-emerald-500 to-emerald-700 text-white shadow-lg shadow-emerald-900/40 ring-1 ring-emerald-400/50',
+                          iconColor: 'text-emerald-400 group-hover:text-emerald-300',
+                        },
+                        {
+                          id: 'alarm',
+                          label: lang === 'en' ? 'Alarm Only' : '알람알림',
+                          shortLabel: lang === 'en' ? 'Alarm' : '알람',
+                          icon: Volume2,
+                          activeBg: 'bg-gradient-to-b from-pink-500 to-pink-700 text-white shadow-lg shadow-pink-900/40 ring-1 ring-pink-400/50',
+                          iconColor: 'text-pink-400 group-hover:text-pink-300',
+                        },
+                      ].map((modeItem) => {
+                        const active = powerMode === modeItem.id;
+                        const ModeIcon = modeItem.icon;
+                        return (
+                          <button
+                            key={modeItem.id}
+                            onClick={() => handleModeChange(modeItem.id as PowerMode)}
+                            className={`group relative py-2.5 px-1 rounded-lg font-bold cursor-pointer transition-all duration-200 flex flex-col items-center justify-center gap-1.5 ${
+                              active
+                                ? `${modeItem.activeBg} scale-[1.02]`
+                                : `${currentThemeConfig.btnInactive} hover:scale-[1.02]`
+                            }`}
+                            title={getPowerModeKorean(modeItem.id as PowerMode)}
+                          >
+                            <div className={`p-1 rounded-md transition-colors ${active ? 'bg-white/20 text-white' : modeItem.iconColor}`}>
+                              <ModeIcon className="w-5 h-5 stroke-[2.2]" />
+                            </div>
+                            <span className="text-[11.5px] tracking-tight font-medium">
+                              {modeItem.shortLabel}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
 
                 {/* Run Type Toggle */}
@@ -2190,9 +2482,71 @@ Copyright (c) 2026 AhBiYout
                        </div>
 
                        <div className="space-y-1.5">
-                         <span className={`block text-[13.5px] uppercase font-bold pl-0.5 ${currentThemeConfig.subtext}`}>
-                           ⚡ {lang === 'en' ? 'Quick preset slots (One-click delay)' : '지연 설정 퀵 슬롯 (원클릭 즉시 가동)'}
-                         </span>
+                         <div className="flex items-center justify-between text-[13.5px] font-bold pl-0.5">
+                           <span className={currentThemeConfig.subtext}>
+                             ⚡ {lang === 'en' ? 'Quick Delay Presets (Pull-down & Fast Slots)' : '지연 시간 프리셋 (풀다운 / 빠른 슬롯)'}
+                           </span>
+                           <span className="text-[11px] text-blue-400 font-mono">
+                             {lang === 'en' ? 'One-click' : '단축 설정'}
+                           </span>
+                         </div>
+
+                         {/* Pull-down Presets Selector */}
+                         <div className="relative">
+                           <select
+                             defaultValue=""
+                             onChange={(e) => {
+                               const val = e.target.value;
+                               if (!val) return;
+                               if (val.startsWith('add:')) {
+                                 const mins = parseInt(val.split(':')[1], 10);
+                                 handleQuickPreset(mins);
+                               } else if (val.startsWith('set:')) {
+                                 const totalSec = parseInt(val.split(':')[1], 10);
+                                 const h = Math.floor(totalSec / 3600);
+                                 const m = Math.floor((totalSec % 3600) / 60);
+                                 setInputH(h);
+                                 setInputM(m);
+                                 setInputS(0);
+                                 setTotalSeconds(totalSec);
+                                 setSecondsRemaining(totalSec);
+                                 soundEngine.play(soundTheme, 'buttonClick');
+                                 triggerNotification(
+                                   lang === 'en'
+                                     ? `⚡ Preset set to ${h > 0 ? `${h}h ` : ''}${m}m`
+                                     : `⚡ ${h > 0 ? `${h}시간 ` : ''}${m}분 프리셋이 즉시 설정되었습니다.`,
+                                   'success'
+                                 );
+                               }
+                               e.target.value = '';
+                             }}
+                             className={`w-full py-2 px-3 rounded-lg text-xs font-semibold appearance-none cursor-pointer pr-8 border shadow-inner ${
+                               theme === 'beige'
+                                 ? 'bg-[#ebdcc9] border-[#c2aa8b] text-[#2c2217]'
+                                 : 'bg-black/20 dark:bg-white/5 border-gray-500/20 text-gray-200'
+                             }`}
+                           >
+                             <option value="">⏱️ {lang === 'en' ? 'Frequently used time presets (Pull-down)...' : '자주 쓰는 시간 프리셋 풀다운...'}</option>
+                             <optgroup label={lang === 'en' ? '➕ Add Delay Time' : '➕ 시간 추가 (현재 시간에 누적)'}>
+                               <option value="add:3">+3분 {lang === 'en' ? 'Delay' : '추가'}</option>
+                               <option value="add:5">+5분 {lang === 'en' ? 'Delay' : '추가'}</option>
+                               <option value="add:10">+10분 {lang === 'en' ? 'Delay' : '추가'}</option>
+                               <option value="add:15">+15분 {lang === 'en' ? 'Delay' : '추가'}</option>
+                               <option value="add:30">+30분 {lang === 'en' ? 'Delay' : '추가'}</option>
+                               <option value="add:45">+45분 {lang === 'en' ? 'Delay' : '추가'}</option>
+                               <option value="add:60">+1시간 {lang === 'en' ? 'Delay' : '추가'}</option>
+                               <option value="add:120">+2시간 {lang === 'en' ? 'Delay' : '추가'}</option>
+                               <option value="add:180">+3시간 {lang === 'en' ? 'Delay' : '추가'}</option>
+                             </optgroup>
+                             <optgroup label={lang === 'en' ? '⚡ Reset & Set Directly' : '⚡ 즉시 지정 (지정 시간으로 타이머 리셋)'}>
+                               <option value="set:900">⚡ 15분 {lang === 'en' ? 'Quick Preset' : '빠른 타이머 설정'}</option>
+                               <option value="set:1800">⚡ 30분 {lang === 'en' ? 'Quick Preset' : '빠른 타이머 설정'}</option>
+                               <option value="set:3600">⚡ 1시간 {lang === 'en' ? 'Quick Preset' : '빠른 타이머 설정'}</option>
+                               <option value="set:7200">⚡ 2시간 {lang === 'en' ? 'Quick Preset' : '빠른 타이머 설정'}</option>
+                             </optgroup>
+                           </select>
+                           <ChevronDown className="w-3.5 h-3.5 text-gray-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                         </div>
                          <div className="grid grid-cols-6 gap-1">
                            {[
                              { label: lang === 'en' ? '3m' : '3분', m: 3 },
@@ -2399,8 +2753,9 @@ Copyright (c) 2026 AhBiYout
             </div>
           </div>
 
-        </div>
-      )}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Startup Today Tasks Modal */}
       <StartupTodayTasksModal
@@ -2689,27 +3044,19 @@ Copyright (c) 2026 AhBiYout
               {/* Body */}
               <div className="flex flex-col gap-3 max-h-[460px] overflow-y-auto pr-1">
                 {/* 1. Theme Selection */}
-                <div className="flex flex-col gap-2 p-3 bg-black/10 dark:bg-white/5 rounded-xl border border-gray-500/10">
-                  <span className="text-[13.5px] font-bold text-blue-400 flex items-center gap-1">🎨 {lang === 'en' ? 'Theme' : '테마 선택'}</span>
-                  <div className="grid grid-cols-3 gap-1.5 mt-0.5">
-                    <button
-                      onClick={() => setDraftSettings({ ...draftSettings, theme: 'dark' })}
-                      className={`px-2 py-1.5 rounded text-[13.5px] font-bold cursor-pointer text-center transition-all ${draftSettings.theme === 'dark' ? 'bg-blue-600 text-white shadow font-extrabold' : 'bg-gray-800 hover:bg-gray-700 text-gray-300'}`}
+                <div className="flex flex-col gap-1.5 p-3 bg-black/10 dark:bg-white/5 rounded-xl border border-gray-500/10">
+                  <span className="text-[13.5px] font-bold text-blue-400 flex items-center gap-1">🎨 {lang === 'en' ? 'Theme Style (Pull-down)' : '테마 스타일 (풀다운)'}</span>
+                  <div className="relative mt-0.5">
+                    <select
+                      value={draftSettings.theme}
+                      onChange={(e) => setDraftSettings({ ...draftSettings, theme: e.target.value as ThemeType })}
+                      className="w-full bg-gray-800/90 border border-gray-700 hover:border-blue-500/70 rounded-lg px-3 py-2 text-xs font-bold text-gray-200 appearance-none focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer pr-8 shadow-inner"
                     >
-                      {lang === 'en' ? 'Fluent Dark' : '다크'}
-                    </button>
-                    <button
-                      onClick={() => setDraftSettings({ ...draftSettings, theme: 'gray' })}
-                      className={`px-2 py-1.5 rounded text-[13.5px] font-bold cursor-pointer text-center transition-all ${draftSettings.theme === 'gray' ? 'bg-blue-600 text-white shadow font-extrabold' : 'bg-gray-800 hover:bg-gray-700 text-gray-300'}`}
-                    >
-                      {lang === 'en' ? 'Simple Gray' : '그레이'}
-                    </button>
-                    <button
-                      onClick={() => setDraftSettings({ ...draftSettings, theme: 'beige' })}
-                      className={`px-2 py-1.5 rounded text-[13.5px] font-bold cursor-pointer text-center transition-all ${draftSettings.theme === 'beige' ? 'bg-blue-600 text-white shadow font-extrabold' : 'bg-gray-800 hover:bg-gray-700 text-gray-300'}`}
-                    >
-                      {lang === 'en' ? 'Cozy Beige' : '베이지'}
-                    </button>
+                      <option value="dark" className="bg-gray-900">🌑 {lang === 'en' ? 'Fluent Dark (Default Modern Dark)' : '다크 (Fluent Dark - 기본 현대적 어두운 테마)'}</option>
+                      <option value="gray" className="bg-gray-900">🌫️ {lang === 'en' ? 'Simple Gray (Balanced Neutral Slate)' : '그레이 (Simple Gray - 차분한 뉴트럴 슬레이트)'}</option>
+                      <option value="beige" className="bg-gray-900">☕ {lang === 'en' ? 'Cozy Beige (Warm & Soft Amber)' : '베이지 (Cozy Beige - 눈이 편안한 부드러운 웜톤)'}</option>
+                    </select>
+                    <ChevronDown className="w-3.5 h-3.5 text-gray-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                   </div>
                 </div>
 
@@ -2755,92 +3102,106 @@ Copyright (c) 2026 AhBiYout
                     </span>
                   </div>
 
-                  {/* 7 Curated Sound Themes Selection Grid */}
+                  {/* Sound Theme Selection Pull-down */}
                   <div className="space-y-1.5">
-                    <span className="text-[11px] text-gray-400 font-medium">
-                      {lang === 'en' ? 'Select Sound Theme Preset:' : '알림음 테마 선택 (클릭 시 즉시 청취):'}
-                    </span>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-56 overflow-y-auto pr-1">
-                      {SOUND_THEMES.map((th) => {
-                        const isSelected = draftSettings.soundTheme === th.id;
-                        return (
-                          <div
-                            key={th.id}
-                            onClick={() => {
-                              setDraftSettings({ ...draftSettings, soundTheme: th.id });
-                              soundEngine.play(th.id, 'preview');
-                            }}
-                            className={`p-2 rounded-lg border text-left cursor-pointer transition-all flex items-center justify-between ${
-                              isSelected
-                                ? 'bg-emerald-600/20 border-emerald-500 text-white shadow'
-                                : 'bg-gray-800/60 hover:bg-gray-700/60 border-gray-700 text-gray-300'
-                            }`}
-                          >
-                            <div className="flex items-center gap-2 overflow-hidden">
-                              <span className="text-base">{th.icon}</span>
-                              <div className="flex flex-col truncate">
-                                <span className={`text-[12px] font-bold ${isSelected ? 'text-emerald-300' : 'text-gray-200'}`}>
-                                  {lang === 'en' ? th.nameEn : th.nameKo}
-                                </span>
-                                <span className="text-[10px] text-gray-400 truncate">
-                                  {lang === 'en' ? th.descEn : th.descKo}
-                                </span>
-                              </div>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setDraftSettings({ ...draftSettings, soundTheme: th.id });
-                                soundEngine.play(th.id, 'preview');
-                              }}
-                              className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${
-                                isSelected ? 'bg-emerald-500 text-white' : 'bg-gray-700 hover:bg-gray-600 text-gray-200'
-                              }`}
-                            >
-                              ▶ {lang === 'en' ? 'Play' : '듣기'}
-                            </button>
-                          </div>
-                        );
-                      })}
+                    <div className="flex items-center justify-between text-[11px] text-gray-300 font-semibold">
+                      <span>{lang === 'en' ? 'Sound Theme Preset (Pull-down):' : '알림음 테마 선택 (드롭다운 / 풀다운):'}</span>
+                      <span className="text-[10px] text-emerald-400 font-mono">
+                        ✓ {lang === 'en' ? SOUND_THEMES.find(t => t.id === draftSettings.soundTheme)?.nameEn : SOUND_THEMES.find(t => t.id === draftSettings.soundTheme)?.nameKo}
+                      </span>
                     </div>
-                  </div>
-
-                  {/* Sound Trigger Audition Test Hub */}
-                  <div className="bg-black/20 p-2.5 rounded-lg border border-gray-500/10 space-y-1.5">
-                    <span className="text-[11px] text-gray-300 font-bold flex items-center gap-1">
-                      🎯 {lang === 'en' ? 'Sound Trigger Preview Test:' : '상황별 알림음 동작 테스트:'}
-                    </span>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-1">
-                      <button
-                        type="button"
-                        onClick={() => soundEngine.play(draftSettings.soundTheme, 'hourlyChime')}
-                        className="p-1.5 bg-gray-800 hover:bg-gray-700 rounded text-[10.5px] text-gray-200 font-medium transition-colors text-center border border-gray-700/60"
-                      >
-                        🔔 {lang === 'en' ? 'Hourly Chime' : '정각 종소리'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => soundEngine.play(draftSettings.soundTheme, 'warningTick')}
-                        className="p-1.5 bg-gray-800 hover:bg-gray-700 rounded text-[10.5px] text-gray-200 font-medium transition-colors text-center border border-gray-700/60"
-                      >
-                        ⏱️ {lang === 'en' ? 'Countdown Tick' : '카운트다운 틱'}
-                      </button>
+                    <div className="flex items-center gap-2">
+                      <div className="relative flex-1">
+                        <select
+                          value={draftSettings.soundTheme}
+                          onChange={(e) => {
+                            const newTh = e.target.value as SoundTheme;
+                            setDraftSettings({ ...draftSettings, soundTheme: newTh });
+                            soundEngine.play(newTh, 'preview');
+                          }}
+                          className="w-full bg-gray-800/90 border border-gray-700 hover:border-emerald-500/70 rounded-lg px-3 py-2 text-xs font-bold text-gray-100 appearance-none focus:outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer pl-8 pr-8 shadow-inner"
+                        >
+                          {SOUND_THEMES.map((th) => (
+                            <option key={th.id} value={th.id} className="bg-gray-900 text-gray-100 py-1 font-medium">
+                              {th.icon} {lang === 'en' ? th.nameEn : th.nameKo} ({th.id}) - {lang === 'en' ? th.descEn : th.descKo}
+                            </option>
+                          ))}
+                        </select>
+                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-sm pointer-events-none">
+                          {SOUND_THEMES.find(t => t.id === draftSettings.soundTheme)?.icon || '🔔'}
+                        </span>
+                        <ChevronDown className="w-3.5 h-3.5 text-gray-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      </div>
                       <button
                         type="button"
                         onClick={() => soundEngine.play(draftSettings.soundTheme, 'timerAlarm')}
-                        className="p-1.5 bg-gray-800 hover:bg-gray-700 rounded text-[10.5px] text-gray-200 font-medium transition-colors text-center border border-gray-700/60"
+                        className="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap shadow shrink-0"
+                        title={lang === 'en' ? 'Play Test Selected Alarm Sound' : '선택된 알림음 즉시 테스트 재생'}
                       >
-                        🚨 {lang === 'en' ? 'Alarm / Finish' : '완료/알람음'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => soundEngine.play(draftSettings.soundTheme, 'actionSuccess')}
-                        className="p-1.5 bg-gray-800 hover:bg-gray-700 rounded text-[10.5px] text-gray-200 font-medium transition-colors text-center border border-gray-700/60"
-                      >
-                        ✨ {lang === 'en' ? 'Success Chime' : '작업 완료음'}
+                        <Play className="w-3.5 h-3.5 fill-white" />
+                        <span>{lang === 'en' ? 'Play Test' : 'Play Test (테스트 재생)'}</span>
                       </button>
                     </div>
+                    <div className="text-[10px] text-gray-400 pl-1">
+                      ℹ️ {lang === 'en' ? SOUND_THEMES.find(t => t.id === draftSettings.soundTheme)?.descEn : SOUND_THEMES.find(t => t.id === draftSettings.soundTheme)?.descKo}
+                    </div>
+                  </div>
+
+                  {/* Sound Trigger Audition Test Hub (Pull-down) */}
+                  <div className="bg-black/20 p-2.5 rounded-lg border border-gray-500/10 space-y-1.5">
+                    <span className="text-[11px] text-gray-300 font-bold flex items-center gap-1">
+                      🎯 {lang === 'en' ? 'Sound Trigger Preview Test (Pull-down):' : '상황별 알림음 동작 테스트 (풀다운):'}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <div className="relative flex-1">
+                        <select
+                          value={webSoundTestTrigger}
+                          onChange={(e) => setWebSoundTestTrigger(e.target.value as any)}
+                          className="w-full bg-gray-800/90 border border-gray-700 hover:border-blue-500/70 rounded-lg px-3 py-2 text-xs text-gray-200 appearance-none focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer pr-8 font-medium shadow-inner"
+                        >
+                          <option value="preview" className="bg-gray-900">🔔 1. {lang === 'en' ? 'Theme Signature Preview' : '테마 대표 시그니처 톤 (미리듣기)'}</option>
+                          <option value="warningTick" className="bg-gray-900">⏱️ 2. {lang === 'en' ? '10s Countdown Warning Tick' : '10초 카운트다운 틱 경고음 (Tick)'}</option>
+                          <option value="hourlyChime" className="bg-gray-900">🏛️ 3. {lang === 'en' ? 'Hourly Clock Chime (00 Min)' : '매시 정각 시계탑 차임벨 (00분 정각)'}</option>
+                          <option value="timerAlarm" className="bg-gray-900">🚨 4. {lang === 'en' ? 'Timer Alarm / Finish Alert' : '타이머 만료 알람 경보음 (Alarm)'}</option>
+                          <option value="actionSuccess" className="bg-gray-900">✨ 5. {lang === 'en' ? 'Operation Success Chime' : '전원 명령 실행 및 작업 완료음'}</option>
+                        </select>
+                        <ChevronDown className="w-3.5 h-3.5 text-gray-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => soundEngine.play(draftSettings.soundTheme, webSoundTestTrigger)}
+                        className="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap shadow shrink-0"
+                      >
+                        <Play className="w-3 h-3 fill-white" />
+                        <span>{lang === 'en' ? 'Test Play' : '테스트 재생'}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* UI Interaction Sound Feedback Toggle */}
+                  <div className="flex items-center justify-between gap-4 pt-2 border-t border-gray-500/10 mt-1">
+                    <div className="flex flex-col">
+                      <span className="text-[10px] text-gray-300 flex items-center gap-1 font-medium">
+                        🖱️ {lang === 'en' ? 'UI Sound Effects & Button Feedback' : 'UI 조작 및 버튼 클릭 효과음 (피드백)'}
+                      </span>
+                      <span className="text-[9px] text-gray-400 pl-4">
+                        {lang === 'en'
+                          ? 'Plays pleasant acoustic click sounds on button presses and actions.'
+                          : '버튼 클릭, 타이머 제어, 스케줄 작업 등록 시 상황별 효과음을 재생합니다.'}
+                      </span>
+                    </div>
+                    <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={draftSettings.soundFeedbackEnabled}
+                        onChange={(e) => {
+                          setDraftSettings({ ...draftSettings, soundFeedbackEnabled: e.target.checked });
+                          if (e.target.checked) soundEngine.play(draftSettings.soundTheme, 'buttonClick');
+                        }}
+                        className="sr-only peer"
+                      />
+                      <div className="relative w-7 h-4 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-600"></div>
+                    </label>
                   </div>
 
                   {/* Hourly Chime Toggle */}
@@ -2926,29 +3287,24 @@ Copyright (c) 2026 AhBiYout
                 <div className="flex flex-col gap-2.5 p-3 bg-black/10 dark:bg-white/5 rounded-xl border border-gray-500/10">
                   <span className="text-[13.5px] font-bold text-indigo-400 flex items-center gap-1">📌 {lang === 'en' ? 'Compact Widget Style & Size' : '상단고정창 디자인 및 크기 조절'}</span>
                   
-                  {/* Design Preset Selector */}
+                  {/* Design Preset Selector (Clean Pull-down) */}
                   <div className="flex flex-col gap-1">
-                    <span className="text-[13.5px] text-gray-400">{lang === 'en' ? 'Window Style' : '창 디자인 스타일'}</span>
-                    <div className="grid grid-cols-3 gap-1">
-                      {[
-                        { id: 'standard', label: lang === 'en' ? 'Neon Ring' : '네온 링' },
-                        { id: 'cyber', label: lang === 'en' ? 'Cyber HUD' : '사이버 HUD' },
-                        { id: 'slim', label: lang === 'en' ? 'Slim Bar' : '슬림 바' },
-                        { id: 'retro', label: lang === 'en' ? 'Retro LED' : '레트로 LED' },
-                        { id: 'minimal', label: lang === 'en' ? 'Clean Card' : '클린 카드' }
-                      ].map((des) => (
-                        <button
-                          key={des.id}
-                          onClick={() => setDraftSettings({ ...draftSettings, widgetDesign: des.id as CompactWidgetDesign })}
-                          className={`py-1 text-[9.5px] rounded font-semibold transition-all cursor-pointer ${
-                            draftSettings.widgetDesign === des.id
-                              ? 'bg-indigo-600 text-white shadow'
-                              : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
-                          }`}
-                        >
-                          {des.label}
-                        </button>
-                      ))}
+                    <span className="text-[13.5px] text-gray-400">
+                      {lang === 'en' ? 'Window Style (Pull-down)' : '창 디자인 스타일 (드롭다운 / 풀다운)'}
+                    </span>
+                    <div className="relative">
+                      <select
+                        value={draftSettings.widgetDesign}
+                        onChange={(e) => setDraftSettings({ ...draftSettings, widgetDesign: e.target.value as CompactWidgetDesign })}
+                        className="w-full bg-gray-800/90 border border-gray-700 hover:border-indigo-500/70 rounded-lg px-3 py-2 text-xs font-bold text-gray-200 appearance-none focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer pr-8 shadow-inner"
+                      >
+                        <option value="standard" className="bg-gray-900">💍 {lang === 'en' ? 'Neon Ring (Circular Indicator)' : '네온 링 (Neon Ring - 미려한 원형 인디케이터)'}</option>
+                        <option value="cyber" className="bg-gray-900">🤖 {lang === 'en' ? 'Cyber HUD (Futuristic Terminal)' : '사이버 HUD (Cyber HUD - 네온 사이버펑크 디스플레이)'}</option>
+                        <option value="slim" className="bg-gray-900">📏 {lang === 'en' ? 'Slim Bar (Ultra Compact)' : '슬림 바 (Slim Bar - 공간 절약형 미니멀 바)'}</option>
+                        <option value="retro" className="bg-gray-900">📟 {lang === 'en' ? 'Retro LED (Digital Clock)' : '레트로 LED (Retro LED - 클래식 디지털 세그먼트)'}</option>
+                        <option value="minimal" className="bg-gray-900">🃏 {lang === 'en' ? 'Clean Card (Flat Simple)' : '클린 카드 (Clean Card - 정돈된 미니멀 플랫 카드)'}</option>
+                      </select>
+                      <ChevronDown className="w-3.5 h-3.5 text-gray-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                     </div>
                   </div>
 
@@ -3119,6 +3475,44 @@ Copyright (c) 2026 AhBiYout
                     </span>
                   </label>
                 </div>
+
+                {/* 7. Auto-Lock Desktop Session on Idle while Timer Active */}
+                <div className="flex flex-col gap-2 p-3 bg-black/10 dark:bg-white/5 rounded-xl border border-gray-500/10">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[13.5px] font-bold text-blue-400 flex items-center gap-1">🔒 {lang === 'en' ? 'Auto-Lock Desktop on Idle (Timer Running)' : '타이머 가동 중 유휴 시 자동 화면 잠금'}</span>
+                    <label className="flex items-center gap-1.5 cursor-pointer select-none shrink-0">
+                      <input
+                        type="checkbox"
+                        checked={draftSettings.idleLockEnabled}
+                        onChange={(e) => setDraftSettings({ ...draftSettings, idleLockEnabled: e.target.checked })}
+                        className="sr-only peer"
+                      />
+                      <div className="relative w-7 h-4 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
+                    </label>
+                  </div>
+                  <p className="text-[12.5px] text-gray-400 leading-relaxed">
+                    {lang === 'en'
+                      ? 'Automatically locks the desktop session (Win + L) if no user input (mouse/keyboard) is detected for the specified timeout while a timer is active.'
+                      : '타이머 또는 전원 예약이 가동 중일 때 지정된 시간 동안 마우스/키보드 입력이 없으면(자리 비움) 윈도우 데스크톱 세션을 자동으로 안전하게 잠급니다.'}
+                  </p>
+                  <div className="flex items-center justify-between gap-4 mt-1 pt-1 border-t border-gray-500/10">
+                    <span className="text-[13.5px] text-gray-400">{lang === 'en' ? 'Idle Timeout' : '유휴 감지 시간'}</span>
+                    <select
+                      value={draftSettings.idleLockMinutes}
+                      onChange={(e) => setDraftSettings({ ...draftSettings, idleLockMinutes: parseInt(e.target.value, 10) })}
+                      disabled={!draftSettings.idleLockEnabled}
+                      className={`bg-gray-800 text-gray-300 text-[13.5px] rounded px-2 py-1 border border-gray-700 focus:outline-none focus:border-blue-500 cursor-pointer ${!draftSettings.idleLockEnabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                      <option value="1">1{lang === 'en' ? ' minute' : '분'}</option>
+                      <option value="2">2{lang === 'en' ? ' minutes' : '분'}</option>
+                      <option value="3">3{lang === 'en' ? ' minutes' : '분'}</option>
+                      <option value="5">5{lang === 'en' ? ' minutes' : '분 (기본)'}</option>
+                      <option value="10">10{lang === 'en' ? ' minutes' : '분'}</option>
+                      <option value="15">15{lang === 'en' ? ' minutes' : '분'}</option>
+                      <option value="30">30{lang === 'en' ? ' minutes' : '분'}</option>
+                    </select>
+                  </div>
+                </div>
               </div>
 
               {/* Confirm / Cancel Buttons */}
@@ -3138,6 +3532,72 @@ Copyright (c) 2026 AhBiYout
               </div>
             </motion.div>
           </div>
+        )}
+      </AnimatePresence>
+
+      {/* Full-screen Desktop Session Lock Overlay */}
+      <AnimatePresence>
+        {isDesktopLocked && (
+          <motion.div
+            initial={{ opacity: 0, backdropFilter: 'blur(0px)' }}
+            animate={{ opacity: 1, backdropFilter: 'blur(18px)' }}
+            exit={{ opacity: 0, backdropFilter: 'blur(0px)' }}
+            transition={{ duration: 0.35 }}
+            className="fixed inset-0 z-[99999] bg-slate-950/85 flex flex-col items-center justify-center p-6 text-white select-none overflow-hidden"
+          >
+            {/* Background subtle radial glow */}
+            <div className="absolute w-[520px] h-[520px] bg-blue-600/10 rounded-full blur-3xl pointer-events-none" />
+
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              transition={{ type: "spring", stiffness: 300, damping: 25 }}
+              className="relative z-10 flex flex-col items-center text-center max-w-md w-full p-8 rounded-3xl bg-slate-900/85 border border-slate-700/60 shadow-2xl backdrop-blur-md"
+            >
+              {/* Lock Icon */}
+              <div className="w-16 h-16 rounded-2xl bg-blue-600/20 border border-blue-500/40 flex items-center justify-center mb-4 text-blue-400 shadow-inner">
+                <ShieldAlert className="w-8 h-8 animate-pulse" />
+              </div>
+
+              {/* Time display */}
+              <div className="text-4xl font-bold font-mono tracking-tight text-slate-100 mb-1">
+                {currentTimeText || new Date().toLocaleTimeString()}
+              </div>
+              <div className="text-xs font-semibold text-slate-400 mb-5">
+                {new Date().toLocaleDateString(lang === 'en' ? 'en-US' : 'ko-KR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+              </div>
+
+              {/* Status & message */}
+              <div className="px-3 py-1 bg-amber-500/20 border border-amber-500/40 rounded-full text-amber-300 text-xs font-bold mb-3 flex items-center gap-1.5">
+                <span>🔒 {lang === 'en' ? 'Desktop Session Locked' : '데스크톱 세션 잠김'}</span>
+              </div>
+              <p className="text-xs text-slate-300 mb-6 leading-relaxed">
+                {lang === 'en'
+                  ? `System was idle for ${idleLockMinutes} min while timer is running. Session protected.`
+                  : `타이머 가동 중 ${idleLockMinutes}분 동안 활동이 없어 화면이 안전하게 보호되었습니다.`}
+              </p>
+
+              {/* Unlock Button */}
+              <button
+                onClick={() => {
+                  setIsDesktopLocked(false);
+                  lastUserActivityRef.current = Date.now();
+                  if (soundEnabled) {
+                    soundEngine.play(soundTheme, 'actionSuccess');
+                  }
+                  if (lang === 'en') {
+                    addLog('🔓 [Session Unlocked] Desktop session unlocked.');
+                  } else {
+                    addLog('🔓 [세션 잠금 해제] 데스크톱 세션 잠금이 정상 해제되었습니다.');
+                  }
+                }}
+                className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold rounded-xl shadow-lg transition-all transform active:scale-95 cursor-pointer flex items-center justify-center gap-2"
+              >
+                <span>🔓 {lang === 'en' ? 'Unlock Session (Click or Press Enter)' : '데스크톱 잠금 해제 (클릭 또는 Enter)'}</span>
+              </button>
+            </motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
 

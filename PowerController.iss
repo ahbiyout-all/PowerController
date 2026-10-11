@@ -89,7 +89,8 @@ Source: "dist\PowerNetworkScheduler.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "dist\ApplySharedSchedules.exe"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 
 ; -------------------------------------------------------------------------------
-; 3. Companion Tools, Native DLLs, Configuration Scripts, Assets & Documentation Multi-Files
+; 3. Companion Tools, Native DLLs, Configuration Scripts, Assets & License Files
+; (불필요한 개발용 문서 및 포터블 파일 제외, 순수 필수 파일만 배포)
 ; -------------------------------------------------------------------------------
 Source: "PowerCoreNative.dll"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "NetBeaconEngine.dll"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
@@ -101,7 +102,8 @@ Source: "schedule_share_builder.py"; DestDir: "{app}"; Flags: ignoreversion skip
 Source: "Register_Firewall_Rules.bat"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "PowerController.ico"; DestDir: "{app}"; Flags: ignoreversion
 Source: "PowerController.png"; DestDir: "{app}"; Flags: ignoreversion
-Source: "docs\*"; DestDir: "{app}\docs"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
+Source: "docs\LICENSE_ko.txt"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "docs\LICENSE_en.txt"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\PowerController.ico"

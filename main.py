@@ -15,6 +15,9 @@ import socket
 import math
 import subprocess
 import time
+import wave
+import struct
+import io
 
 try:
     import native_bridge
@@ -656,6 +659,15 @@ class PowerTimerApp:
         self.grace_seconds_setting = tk.IntVar(value=10)
         self.grace_seconds_label = tk.StringVar(value="10초 (10 seconds)")
         self.force_close_enabled = tk.BooleanVar(value=True)
+        self.idle_lock_enabled = tk.BooleanVar(value=False)
+        self.idle_lock_minutes = tk.IntVar(value=5)
+        self.idle_lock_label = tk.StringVar(value="5분 (5 minutes)")
+        self.has_idle_locked_session = False
+        self.sound_theme = "classic"
+        self.sound_volume = 80
+        self.sound_feedback_enabled = tk.BooleanVar(value=True)
+        self.power_mode_display = "dropdown"
+        self.selected_sound_test_trigger = "preview"
         self.load_settings()
         
         try:
@@ -835,9 +847,13 @@ class PowerTimerApp:
         
         # Translate Sound Theme label and buttons
         sound_themes_labels = {
-            "classic": {"ko": "클래식 비프", "en": "Classic Beep"},
-            "scifi": {"ko": "SF 신스", "en": "Sci-Fi Synth"},
-            "cozy": {"ko": "아늑한 멜로디", "en": "Cozy Chime"}
+            "classic": {"ko": "클래식 벨", "en": "Classic Bell"},
+            "marimba": {"ko": "마림바 멜로디", "en": "Melodic Marimba"},
+            "crystal": {"ko": "크리스탈 글래스", "en": "Crystal Glass"},
+            "scifi": {"ko": "사이버 테크", "en": "Cyber Tech"},
+            "westminster": {"ko": "웨스트민스터", "en": "Westminster Chime"},
+            "urgent": {"ko": "긴급 경보 알람", "en": "Urgent Siren"},
+            "bubble": {"ko": "소프트 버블 팝", "en": "Soft Bubble Pop"}
         }
         if hasattr(self, "lbl_sound_theme") and self.lbl_sound_theme.winfo_exists():
             self.lbl_sound_theme.config(text="🎵 사운드 테마:" if self.lang == "ko" else "🎵 Sound Theme:")
@@ -859,6 +875,66 @@ class PowerTimerApp:
             self.mode_buttons["screenoff"].config(text="화면끔" if self.lang == "ko" else "Screen Off")
             self.mode_buttons["logout"].config(text="로그아웃" if self.lang == "ko" else "Log out")
             self.mode_buttons["alarm"].config(text="알람" if self.lang == "ko" else "Alarm")
+            
+        # Update Power Mode Dropdown & Toggle
+        if hasattr(self, 'lbl_mode_title'):
+            self.lbl_mode_title.config(text="⚡ 전원 동작 모드 (Power Action Mode):" if self.lang == "ko" else "⚡ Power Action Mode:")
+        if hasattr(self, 'btn_toggle_power_view'):
+            if getattr(self, "power_mode_view_style", "dropdown") == "dropdown":
+                self.btn_toggle_power_view.config(text="⊞ 그리드 보기" if self.lang == "ko" else "⊞ Grid View")
+            else:
+                self.btn_toggle_power_view.config(text="▾ 풀다운 보기" if self.lang == "ko" else "▾ Dropdown View")
+        if hasattr(self, 'om_power_mode') and hasattr(self, 'var_power_mode_display'):
+            self.mode_opt_map = {
+                "shutdown": ("⚡ 종료 (Shut down) - 시스템 전원 차단" if self.lang == "ko" else "⚡ Shut down - Complete Power Off", ACCENT_RED),
+                "restart": ("🔄 재시작 (Restart) - 안전한 시스템 재부팅" if self.lang == "ko" else "🔄 Restart - Safe System Reboot", ACCENT_BLUE),
+                "sleep": ("🌙 절전 (Sleep) - 저전력 대기 모드" if self.lang == "ko" else "🌙 Sleep - Low-power Standby", ACCENT_BLUE),
+                "screenoff": ("🖥️ 화면끔 (Screen Off) - 모니터 디스플레이 절전" if self.lang == "ko" else "🖥️ Screen Off - Turn Off Display", ACCENT_BLUE),
+                "logout": ("🚪 로그아웃 (Log out) - 현재 계정 세션 종료" if self.lang == "ko" else "🚪 Log out - Exit Current User Session", ACCENT_BLUE),
+                "alarm": ("🚨 알람 (Alarm) - 알림음 및 팝업 경고" if self.lang == "ko" else "🚨 Alarm - Audio & Popup Alert", ACCENT_YELLOW)
+            }
+            self.mode_opt_rev_map = {v[0]: k for k, v in self.mode_opt_map.items()}
+            cur_mode = getattr(self, "mode", "shutdown")
+            self.var_power_mode_display.set(self.mode_opt_map.get(cur_mode, self.mode_opt_map["shutdown"])[0])
+            menu = self.om_power_mode["menu"]
+            menu.delete(0, "end")
+            for m_key, (m_txt, m_color) in self.mode_opt_map.items():
+                def make_m_cmd(k=m_key):
+                    return lambda: self.set_mode(k)
+                menu.add_command(label=m_txt, command=make_m_cmd(m_key))
+            self.set_mode(cur_mode)
+
+        # Update Quick Delay Preset Dropdown
+        if hasattr(self, 'om_quick_preset') and hasattr(self, 'var_quick_preset'):
+            q_ph = "⏱️ 빠른 지연시간 프리셋 선택..." if self.lang == "ko" else "⏱️ Select Quick Delay Preset..."
+            self.var_quick_preset.set(q_ph)
+            self.quick_preset_map = {
+                ("⏱️ +3분 즉시 설정 (3 Minutes)" if self.lang == "ko" else "⏱️ +3m Instant Delay"): (0, 3, 0),
+                ("⏱️ +5분 즉시 설정 (5 Minutes)" if self.lang == "ko" else "⏱️ +5m Instant Delay"): (0, 5, 0),
+                ("⏱️ +10분 즉시 설정 (10 Minutes)" if self.lang == "ko" else "⏱️ +10m Instant Delay"): (0, 10, 0),
+                ("⏱️ +15분 즉시 설정 (15 Minutes)" if self.lang == "ko" else "⏱️ +15m Instant Delay"): (0, 15, 0),
+                ("⏱️ +30분 즉시 설정 (30 Minutes)" if self.lang == "ko" else "⏱️ +30m Instant Delay"): (0, 30, 0),
+                ("⏱️ +45분 즉시 설정 (45 Minutes)" if self.lang == "ko" else "⏱️ +45m Instant Delay"): (0, 45, 0),
+                ("⏱️ +1시간 즉시 설정 (1 Hour)" if self.lang == "ko" else "⏱️ +1h Instant Delay"): (1, 0, 0),
+                ("⏱️ +2시간 즉시 설정 (2 Hours)" if self.lang == "ko" else "⏱️ +2h Instant Delay"): (2, 0, 0),
+                ("⏱️ +3시간 즉시 설정 (3 Hours)" if self.lang == "ko" else "⏱️ +3h Instant Delay"): (3, 0, 0)
+            }
+            q_menu = self.om_quick_preset["menu"]
+            q_menu.delete(0, "end")
+            for q_txt, (qh, qm, qs) in self.quick_preset_map.items():
+                def make_q_cmd(h=qh, m=qm, s=qs, placeholder=q_ph):
+                    def _apply():
+                        self.ent_h.delete(0, tk.END)
+                        self.ent_h.insert(0, str(h))
+                        self.ent_m.delete(0, tk.END)
+                        self.ent_m.insert(0, str(m))
+                        if hasattr(self, "ent_s") and self.ent_s.winfo_exists():
+                            self.ent_s.delete(0, tk.END)
+                            self.ent_s.insert(0, str(s))
+                        self.lbl_timer.configure(text=f"{h:02d}:{m:02d}:{s:02d}")
+                        self.var_quick_preset.set(placeholder)
+                    return _apply
+                q_menu.add_command(label=q_txt, command=make_q_cmd(qh, qm, qs, q_ph))
             
         # Run type toggle buttons
         self.btn_type_timer.config(text="⏳ 시간 타이머 (후)" if self.lang == "ko" else "⏳ Timer delay (after)")
@@ -1890,10 +1966,121 @@ if __name__ == "__main__":
     # TAB 1: 일반 간역 제어 UI 설계구조
     # --------------------------------------------------------------------
     def build_control_tab_ui(self):
-        # 모드 선택 탭 (5가지 전원 옵션)
-        mode_frame = tk.Frame(self.control_frame, bg=DARK_BG, pady=5)
-        mode_frame.pack(fill="x")
+        # --------------------------------------------------------------------
+        # 1. 전원 동작 모드 선택 (풀다운/드롭다운 기본 및 그리드 토글)
+        # --------------------------------------------------------------------
+        self.power_mode_view_style = getattr(self, "power_mode_view_style", "dropdown")
         
+        self.mode_parent_frame = tk.Frame(self.control_frame, bg=DARK_BG, pady=4)
+        self.mode_parent_frame.pack(fill="x")
+        
+        # 헤더: 타이틀 및 뷰 전환 버튼
+        self.frm_mode_hdr = tk.Frame(self.mode_parent_frame, bg=DARK_BG)
+        self.frm_mode_hdr.pack(fill="x", pady=(0, 4))
+        
+        self.lbl_mode_title = tk.Label(
+            self.frm_mode_hdr,
+            text="⚡ 전원 동작 모드 (Power Action Mode):" if self.lang == "ko" else "⚡ Power Action Mode:",
+            font=("Arial", 10, "bold"),
+            fg=ACCENT_BLUE,
+            bg=DARK_BG
+        )
+        self.lbl_mode_title.pack(side="left")
+        
+        def toggle_power_view_mode():
+            if self.power_mode_view_style == "dropdown":
+                self.power_mode_view_style = "grid"
+            else:
+                self.power_mode_view_style = "dropdown"
+            self.render_power_mode_view()
+        
+        self.btn_toggle_power_view = tk.Button(
+            self.frm_mode_hdr,
+            text="⊞ 그리드 보기" if self.power_mode_view_style == "dropdown" else "▾ 풀다운 보기",
+            font=("Arial", 9),
+            bg=DARK_CARD,
+            fg=getattr(self, "current_subtext", "#9ca3af"),
+            activebackground="#2563eb",
+            activeforeground="white",
+            relief="flat",
+            padx=6,
+            pady=1,
+            cursor="hand2",
+            command=toggle_power_view_mode
+        )
+        self.btn_toggle_power_view.pack(side="right")
+        
+        # 1-A. 풀다운(드롭다운) 뷰 컨테이너
+        self.frm_mode_dropdown = tk.Frame(self.mode_parent_frame, bg=DARK_BG)
+        
+        self.mode_opt_map = {
+            "shutdown": ("⚡ 종료 (Shut down) - 시스템 전원 차단" if self.lang == "ko" else "⚡ Shut down - Complete Power Off", ACCENT_RED),
+            "restart": ("🔄 재시작 (Restart) - 안전한 시스템 재부팅" if self.lang == "ko" else "🔄 Restart - Safe System Reboot", ACCENT_BLUE),
+            "sleep": ("🌙 절전 (Sleep) - 저전력 대기 모드" if self.lang == "ko" else "🌙 Sleep - Low-power Standby", ACCENT_BLUE),
+            "screenoff": ("🖥️ 화면끔 (Screen Off) - 모니터 디스플레이 절전" if self.lang == "ko" else "🖥️ Screen Off - Turn Off Display", ACCENT_BLUE),
+            "logout": ("🚪 로그아웃 (Log out) - 현재 계정 세션 종료" if self.lang == "ko" else "🚪 Log out - Exit Current User Session", ACCENT_BLUE),
+            "alarm": ("🚨 알람 (Alarm) - 알림음 및 팝업 경고" if self.lang == "ko" else "🚨 Alarm - Audio & Popup Alert", ACCENT_YELLOW)
+        }
+        
+        self.mode_opt_rev_map = {v[0]: k for k, v in self.mode_opt_map.items()}
+        current_display_txt = self.mode_opt_map.get(getattr(self, "mode", "shutdown"), self.mode_opt_map["shutdown"])[0]
+        self.var_power_mode_display = tk.StringVar(value=current_display_txt)
+        
+        def on_power_dropdown_select(val):
+            m_id = self.mode_opt_rev_map.get(val, "shutdown")
+            self.set_mode(m_id)
+            
+        dropdown_values = [v[0] for v in self.mode_opt_map.values()]
+        self.om_power_mode = tk.OptionMenu(
+            self.frm_mode_dropdown,
+            self.var_power_mode_display,
+            *dropdown_values,
+            command=on_power_dropdown_select
+        )
+        self.om_power_mode.config(
+            font=("Arial", 10, "bold"),
+            bg=DARK_CARD,
+            fg="white",
+            activebackground="#2563eb",
+            activeforeground="white",
+            highlightthickness=1,
+            highlightbackground="#3b82f6",
+            relief="flat",
+            padx=8,
+            pady=5,
+            cursor="hand2"
+        )
+        if "menu" in self.om_power_mode.keys():
+            self.om_power_mode["menu"].config(font=("Arial", 10), bg=DARK_CARD, fg=TEXT_COLOR, activebackground="#2563eb", activeforeground="white")
+        self.om_power_mode.pack(fill="x", pady=2)
+        
+        # 활성 모드 설명 칩 (Active Mode Preview Chip)
+        self.frm_mode_preview = tk.Frame(self.frm_mode_dropdown, bg=DARK_CARD, bd=1, relief="solid", padx=8, pady=4)
+        self.frm_mode_preview.pack(fill="x", pady=(2, 4))
+        
+        self.lbl_mode_preview_badge = tk.Label(
+            self.frm_mode_preview,
+            text="[선택됨] ⚡ 종료" if self.lang == "ko" else "[Active] ⚡ Shut down",
+            font=("Arial", 9, "bold"),
+            bg=ACCENT_RED,
+            fg="white",
+            padx=6,
+            pady=1
+        )
+        self.lbl_mode_preview_badge.pack(side="left")
+        
+        self.lbl_mode_preview_desc = tk.Label(
+            self.frm_mode_preview,
+            text="타이머 완료 시 컴퓨터 전원을 안전하게 완전히 끕니다." if self.lang == "ko" else "Safely powers down PC when timer completes.",
+            font=("Arial", 9),
+            fg=getattr(self, "current_subtext", "#9ca3af"),
+            bg=DARK_CARD,
+            padx=6
+        )
+        self.lbl_mode_preview_desc.pack(side="left", fill="x", expand=True)
+
+        # 1-B. 그리드 뷰 컨테이너 (사용자가 그리드 뷰를 원할 때 토글)
+        self.frm_mode_grid = tk.Frame(self.mode_parent_frame, bg=DARK_BG)
         self.mode_buttons = {}
         modes = [
             ("shutdown", "종료" if self.lang == "ko" else "Shut down"),
@@ -1904,14 +2091,13 @@ if __name__ == "__main__":
             ("alarm", "알람" if self.lang == "ko" else "Alarm")
         ]
         
-        # Configure grid for mode_frame (2 rows, 3 cols)
-        mode_frame.columnconfigure(0, weight=1)
-        mode_frame.columnconfigure(1, weight=1)
-        mode_frame.columnconfigure(2, weight=1)
+        self.frm_mode_grid.columnconfigure(0, weight=1)
+        self.frm_mode_grid.columnconfigure(1, weight=1)
+        self.frm_mode_grid.columnconfigure(2, weight=1)
         
         for i, (m_id, label) in enumerate(modes):
             btn = tk.Button(
-                mode_frame,
+                self.frm_mode_grid,
                 text=label,
                 font=("Arial", 10, "bold"),
                 bg=ACCENT_RED if m_id == "shutdown" else DARK_CARD,
@@ -1924,6 +2110,19 @@ if __name__ == "__main__":
             col = i % 3
             btn.grid(row=row, column=col, sticky="nsew", padx=2, pady=2)
             self.mode_buttons[m_id] = btn
+
+        # 뷰 렌더링 함수 등록 및 초기 표시
+        def render_power_mode_view():
+            if self.power_mode_view_style == "dropdown":
+                self.frm_mode_grid.pack_forget()
+                self.frm_mode_dropdown.pack(fill="x")
+                self.btn_toggle_power_view.config(text="⊞ 그리드 보기" if self.lang == "ko" else "⊞ Grid View")
+            else:
+                self.frm_mode_dropdown.pack_forget()
+                self.frm_mode_grid.pack(fill="x")
+                self.btn_toggle_power_view.config(text="▾ 풀다운 보기" if self.lang == "ko" else "▾ Dropdown View")
+        self.render_power_mode_view = render_power_mode_view
+        self.render_power_mode_view()
         
         # 스케줄링 유형 토글 탭 (경과 시간 vs 특정 시각)
         type_frame = tk.Frame(self.control_frame, bg=DARK_BG, pady=5)
@@ -2008,6 +2207,64 @@ if __name__ == "__main__":
         self.bind_spin_interactions(self.ent_h, "h")
         self.bind_spin_interactions(self.ent_m, "m")
         self.bind_spin_interactions(self.ent_s, "s")
+        
+        # --------------------------------------------------------------------
+        # 2. 지연시간 퀵 슬롯 풀다운 (Quick Delay Preset Pulldown)
+        # --------------------------------------------------------------------
+        self.frm_quick_preset = tk.Frame(self.control_frame, bg=DARK_BG, pady=2)
+        self.frm_quick_preset.pack(fill="x", pady=(2, 4))
+        
+        quick_ph = "⏱️ 빠른 지연시간 프리셋 선택..." if self.lang == "ko" else "⏱️ Select Quick Delay Preset..."
+        self.var_quick_preset = tk.StringVar(value=quick_ph)
+        
+        self.quick_preset_map = {
+            ("⏱️ +3분 즉시 설정 (3 Minutes)" if self.lang == "ko" else "⏱️ +3m Instant Delay"): (0, 3, 0),
+            ("⏱️ +5분 즉시 설정 (5 Minutes)" if self.lang == "ko" else "⏱️ +5m Instant Delay"): (0, 5, 0),
+            ("⏱️ +10분 즉시 설정 (10 Minutes)" if self.lang == "ko" else "⏱️ +10m Instant Delay"): (0, 10, 0),
+            ("⏱️ +15분 즉시 설정 (15 Minutes)" if self.lang == "ko" else "⏱️ +15m Instant Delay"): (0, 15, 0),
+            ("⏱️ +30분 즉시 설정 (30 Minutes)" if self.lang == "ko" else "⏱️ +30m Instant Delay"): (0, 30, 0),
+            ("⏱️ +45분 즉시 설정 (45 Minutes)" if self.lang == "ko" else "⏱️ +45m Instant Delay"): (0, 45, 0),
+            ("⏱️ +1시간 즉시 설정 (1 Hour)" if self.lang == "ko" else "⏱️ +1h Instant Delay"): (1, 0, 0),
+            ("⏱️ +2시간 즉시 설정 (2 Hours)" if self.lang == "ko" else "⏱️ +2h Instant Delay"): (2, 0, 0),
+            ("⏱️ +3시간 즉시 설정 (3 Hours)" if self.lang == "ko" else "⏱️ +3h Instant Delay"): (3, 0, 0)
+        }
+        
+        def on_quick_preset_selected(val):
+            if val in self.quick_preset_map:
+                h, m, s = self.quick_preset_map[val]
+                self.ent_h.delete(0, tk.END)
+                self.ent_h.insert(0, str(h))
+                self.ent_m.delete(0, tk.END)
+                self.ent_m.insert(0, str(m))
+                if hasattr(self, "ent_s") and self.ent_s.winfo_exists():
+                    self.ent_s.delete(0, tk.END)
+                    self.ent_s.insert(0, str(s))
+                self.lbl_timer.configure(text=f"{h:02d}:{m:02d}:{s:02d}")
+                ph = "⏱️ 빠른 지연시간 프리셋 선택..." if self.lang == "ko" else "⏱️ Select Quick Delay Preset..."
+                self.var_quick_preset.set(ph)
+                
+        self.om_quick_preset = tk.OptionMenu(
+            self.frm_quick_preset,
+            self.var_quick_preset,
+            quick_ph,
+            *self.quick_preset_map.keys(),
+            command=on_quick_preset_selected
+        )
+        self.om_quick_preset.config(
+            font=("Arial", 9),
+            bg=DARK_CARD,
+            fg="#93c5fd",
+            activebackground="#2563eb",
+            activeforeground="white",
+            highlightthickness=0,
+            relief="flat",
+            padx=6,
+            pady=3,
+            cursor="hand2"
+        )
+        if "menu" in self.om_quick_preset.keys():
+            self.om_quick_preset["menu"].config(font=("Arial", 9), bg=DARK_CARD, fg=TEXT_COLOR, activebackground="#2563eb", activeforeground="white")
+        self.om_quick_preset.pack(fill="x")
         
         # 실행 컨트롤러 버튼들 (원클릭 가동)
         ctrl_frame = tk.Frame(self.control_frame, bg=DARK_BG, pady=10)
@@ -2115,67 +2372,89 @@ if __name__ == "__main__":
         self.ent_rule_name.pack(fill="x", padx=10, pady=2, ipady=3)
         self.ent_rule_name.bind("<KeyRelease>", lambda event: self.clear_form_validation_errors())
 
-        # B. 전원 행동 라디오 행
-        self.lbl_rule_action = tk.Label(self.frm_add_rule, text="트리거 대기 전원 행동:" if self.lang == "ko" else "Action Mode to Trigger:", font=("Arial", 10, "bold"), fg=TEXT_COLOR, bg=DARK_CARD)
+        # B. 전원 행동 풀다운/드롭다운 행
+        self.lbl_rule_action = tk.Label(self.frm_add_rule, text="트리거 대기 전원 행동 (Action Mode):" if self.lang == "ko" else "Action Mode to Trigger:", font=("Arial", 10, "bold"), fg=TEXT_COLOR, bg=DARK_CARD)
         self.lbl_rule_action.pack(anchor="w", padx=10, pady=(5, 1))
 
-        self.rule_action_buttons_frame = tk.Frame(self.frm_add_rule, bg=DARK_CARD)
-        self.rule_action_buttons_frame.pack(fill="x", padx=10, pady=2)
+        self.rule_action_display_map = {
+            "shutdown": "⚡ 종료 (Shut down)" if self.lang == "ko" else "⚡ Shut down",
+            "restart": "🔄 재시동 (Restart)" if self.lang == "ko" else "🔄 Restart",
+            "sleep": "🌙 절전 (Sleep)" if self.lang == "ko" else "🌙 Sleep",
+            "screenoff": "🖥️ 화면끔 (Screen off)" if self.lang == "ko" else "🖥️ Screen off",
+            "logout": "🚪 로그아웃 (Log out)" if self.lang == "ko" else "🚪 Log out",
+            "alarm": "🚨 알람 (Alarm)" if self.lang == "ko" else "🚨 Alarm"
+        }
+        self.rule_action_rev_map = {v: k for k, v in self.rule_action_display_map.items()}
+        self.var_rule_action_display = tk.StringVar(value=self.rule_action_display_map["shutdown"])
+
+        def on_rule_action_dropdown(val):
+            act_id = self.rule_action_rev_map.get(val, "shutdown")
+            self.select_rule_form_action(act_id)
+
+        self.om_rule_action = tk.OptionMenu(
+            self.frm_add_rule,
+            self.var_rule_action_display,
+            *self.rule_action_display_map.values(),
+            command=on_rule_action_dropdown
+        )
+        self.om_rule_action.config(
+            font=("Arial", 9, "bold"),
+            bg=DARK_BG,
+            fg="white",
+            activebackground="#2563eb",
+            activeforeground="white",
+            highlightthickness=0,
+            relief="flat",
+            padx=6,
+            pady=2,
+            cursor="hand2"
+        )
+        if "menu" in self.om_rule_action.keys():
+            self.om_rule_action["menu"].config(font=("Arial", 9), bg=DARK_CARD, fg=TEXT_COLOR, activebackground="#2563eb", activeforeground="white")
+        self.om_rule_action.pack(fill="x", padx=10, pady=2)
         
         self.action_sel_btn = {}
-        action_options = [
-            ("shutdown", "종료" if self.lang == "ko" else "Shut down"),
-            ("restart", "재시동" if self.lang == "ko" else "Restart"),
-            ("sleep", "절전" if self.lang == "ko" else "Sleep"),
-            ("screenoff", "화면끔" if self.lang == "ko" else "Screen off"),
-            ("logout", "아웃" if self.lang == "ko" else "Log out"),
-            ("alarm", "알람" if self.lang == "ko" else "Alarm")
-        ]
-        
-        for act_id, act_nm in action_options:
-            btn = tk.Button(
-                self.rule_action_buttons_frame,
-                text=act_nm,
-                font=("Arial", 10, "bold"),
-                bg="#3b82f6" if act_id == "shutdown" else DARK_BG,
-                fg="white" if act_id == "shutdown" else TEXT_COLOR,
-                padx=5,
-                pady=3,
-                relief="flat",
-                command=lambda opt=act_id: self.select_rule_form_action(opt)
-            )
-            btn.pack(side="left", expand=True, fill="x", padx=1)
-            self.action_sel_btn[act_id] = btn
 
-        # C. 반복 주기 플랜 선택 단추 행
-        self.lbl_rule_type_title = tk.Label(self.frm_add_rule, text="반복 플랜 타입:" if self.lang == "ko" else "Interval Repeat Type:", font=("Arial", 10, "bold"), fg=TEXT_COLOR, bg=DARK_CARD)
+        # C. 반복 주기 플랜 선택 풀다운 행
+        self.lbl_rule_type_title = tk.Label(self.frm_add_rule, text="반복 플랜 타입 (Repeat Type):" if self.lang == "ko" else "Interval Repeat Type:", font=("Arial", 10, "bold"), fg=TEXT_COLOR, bg=DARK_CARD)
         self.lbl_rule_type_title.pack(anchor="w", padx=10, pady=(5, 1))
 
-        self.rule_type_buttons_frame = tk.Frame(self.frm_add_rule, bg=DARK_CARD)
-        self.rule_type_buttons_frame.pack(fill="x", padx=10, pady=2)
+        self.rule_type_display_map = {
+            "daily": "📅 매일 (Daily Plan)" if self.lang == "ko" else "📅 Daily Plan",
+            "once": "⚡ 일회성 (Once Plan)" if self.lang == "ko" else "⚡ Once Plan",
+            "weekly": "📆 요일 반복 (Weekly Plan)" if self.lang == "ko" else "📆 Weekly Plan",
+            "interval": "🔁 동작주기 (Interval Cycle)" if self.lang == "ko" else "🔁 Interval Cycle"
+        }
+        self.rule_type_rev_map = {v: k for k, v in self.rule_type_display_map.items()}
+        self.var_rule_type_display = tk.StringVar(value=self.rule_type_display_map["daily"])
+
+        def on_rule_type_dropdown(val):
+            typ_id = self.rule_type_rev_map.get(val, "daily")
+            self.select_rule_form_type(typ_id)
+
+        self.om_rule_type = tk.OptionMenu(
+            self.frm_add_rule,
+            self.var_rule_type_display,
+            *self.rule_type_display_map.values(),
+            command=on_rule_type_dropdown
+        )
+        self.om_rule_type.config(
+            font=("Arial", 9, "bold"),
+            bg=DARK_BG,
+            fg="white",
+            activebackground="#2563eb",
+            activeforeground="white",
+            highlightthickness=0,
+            relief="flat",
+            padx=6,
+            pady=2,
+            cursor="hand2"
+        )
+        if "menu" in self.om_rule_type.keys():
+            self.om_rule_type["menu"].config(font=("Arial", 9), bg=DARK_CARD, fg=TEXT_COLOR, activebackground="#2563eb", activeforeground="white")
+        self.om_rule_type.pack(fill="x", padx=10, pady=2)
 
         self.type_sel_btn = {}
-        type_options = [
-            ("once", "일회성 (Once)" if self.lang == "ko" else "Once Plan"),
-            ("daily", "매일 (Daily)" if self.lang == "ko" else "Daily Plan"),
-            ("weekly", "요일 반복 (Weekly)" if self.lang == "ko" else "Weekly Plan"),
-            ("interval", "동작주기 (Interval)" if self.lang == "ko" else "Interval Cycle")
-        ]
-
-        for typ_id, typ_nm in type_options:
-            btn = tk.Button(
-                self.rule_type_buttons_frame,
-                text=typ_nm,
-                font=("Arial", 10, "bold"),
-                bg="#3b82f6" if typ_id == "daily" else DARK_BG,
-                fg="white" if typ_id == "daily" else TEXT_COLOR,
-                padx=3,
-                pady=4,
-                relief="flat",
-                command=lambda opt=typ_id: self.select_rule_form_type(opt)
-            )
-            btn.pack(side="left", expand=True, fill="x", padx=1, pady=1)
-            self.type_sel_btn[typ_id] = btn
 
         # D. 가변 세부 주입부 프레임 (시간 선택 / 요일 / 또는 주기 값)
         self.frm_custom_args = tk.Frame(self.frm_add_rule, bg=DARK_CARD, pady=5)
@@ -2332,20 +2611,28 @@ if __name__ == "__main__":
     # --------------------------------------------------------------------
     def select_rule_form_action(self, action_id):
         self.var_rule_mode.set(action_id)
-        for act_id, btn in self.action_sel_btn.items():
-            if act_id == action_id:
-                btn.configure(bg="#3b82f6", fg="white")
-            else:
-                btn.configure(bg=DARK_BG, fg=TEXT_COLOR)
+        if hasattr(self, "rule_action_display_map") and hasattr(self, "var_rule_action_display"):
+            if action_id in self.rule_action_display_map:
+                self.var_rule_action_display.set(self.rule_action_display_map[action_id])
+        if hasattr(self, "action_sel_btn"):
+            for act_id, btn in self.action_sel_btn.items():
+                if act_id == action_id:
+                    btn.configure(bg="#3b82f6", fg="white")
+                else:
+                    btn.configure(bg=DARK_BG, fg=TEXT_COLOR)
         self.clear_form_validation_errors()
 
     def select_rule_form_type(self, type_id):
         self.var_rule_type.set(type_id)
-        for t_id, btn in self.type_sel_btn.items():
-            if t_id == type_id:
-                btn.configure(bg="#3b82f6", fg="white")
-            else:
-                btn.configure(bg=DARK_BG, fg=TEXT_COLOR)
+        if hasattr(self, "rule_type_display_map") and hasattr(self, "var_rule_type_display"):
+            if type_id in self.rule_type_display_map:
+                self.var_rule_type_display.set(self.rule_type_display_map[type_id])
+        if hasattr(self, "type_sel_btn"):
+            for t_id, btn in self.type_sel_btn.items():
+                if t_id == type_id:
+                    btn.configure(bg="#3b82f6", fg="white")
+                else:
+                    btn.configure(bg=DARK_BG, fg=TEXT_COLOR)
         self.clear_form_validation_errors()
 
         # 요일 선택, 시간 선택, 주기 설정 보이며 사라지게 토글링 배치
@@ -4656,12 +4943,40 @@ if __name__ == "__main__":
 
     def set_mode(self, mode):
         self.mode = mode
-        for m_id, btn in self.mode_buttons.items():
-            if m_id == mode:
-                color = ACCENT_RED if mode == "shutdown" else ACCENT_BLUE
-                btn.configure(bg=color, fg="white")
-            else:
-                btn.configure(bg=DARK_CARD, fg=TEXT_COLOR)
+        if hasattr(self, "mode_buttons"):
+            for m_id, btn in self.mode_buttons.items():
+                if m_id == mode:
+                    color = ACCENT_RED if mode == "shutdown" else ACCENT_BLUE
+                    btn.configure(bg=color, fg="white")
+                else:
+                    btn.configure(bg=DARK_CARD, fg=TEXT_COLOR)
+        
+        # Update dropdown selector value & preview chip
+        if hasattr(self, "mode_opt_map") and hasattr(self, "var_power_mode_display"):
+            if mode in self.mode_opt_map:
+                txt, color = self.mode_opt_map[mode]
+                self.var_power_mode_display.set(txt)
+                if hasattr(self, "lbl_mode_preview_badge") and self.lbl_mode_preview_badge.winfo_exists():
+                    badge_label = {
+                        "shutdown": "⚡ 종료" if self.lang == "ko" else "⚡ Shut down",
+                        "restart": "🔄 재시작" if self.lang == "ko" else "🔄 Restart",
+                        "sleep": "🌙 절전" if self.lang == "ko" else "🌙 Sleep",
+                        "screenoff": "🖥️ 화면끔" if self.lang == "ko" else "🖥️ Screen Off",
+                        "logout": "🚪 로그아웃" if self.lang == "ko" else "🚪 Log out",
+                        "alarm": "🚨 알람" if self.lang == "ko" else "🚨 Alarm"
+                    }.get(mode, mode)
+                    self.lbl_mode_preview_badge.configure(text=f"[선택됨] {badge_label}" if self.lang == "ko" else f"[Active] {badge_label}", bg=color)
+                
+                if hasattr(self, "lbl_mode_preview_desc") and self.lbl_mode_preview_desc.winfo_exists():
+                    desc_label = {
+                        "shutdown": "타이머 완료 시 컴퓨터 전원을 안전하게 완전히 끕니다." if self.lang == "ko" else "Safely powers down PC when timer completes.",
+                        "restart": "진행 중인 앱을 안전하게 종료하고 윈도우를 다시 시작합니다." if self.lang == "ko" else "Safely closes apps and restarts Windows.",
+                        "sleep": "작업 상태를 메모리에 보존하며 저전력 절전 상태로 전환합니다." if self.lang == "ko" else "Preserves session in RAM and enters low-power sleep.",
+                        "screenoff": "PC 본체는 켜둔 채 모니터 디스플레이 전원만 즉시 절전합니다." if self.lang == "ko" else "Turns off display monitors while keeping PC running.",
+                        "logout": "현재 로그인된 윈도우 계정을 안전하게 로그아웃합니다." if self.lang == "ko" else "Safely logs out current active Windows user session.",
+                        "alarm": "지정 시각 도달 시 고음질 알림음과 시각적 팝업을 울립니다." if self.lang == "ko" else "Plays notification chime and shows visual alert popup."
+                    }.get(mode, "")
+                    self.lbl_mode_preview_desc.configure(text=desc_label)
             
     def set_run_type(self, run_type):
         """시간 타이머 모드 vs 특정 시각 예약 모드 전환"""
@@ -5300,6 +5615,7 @@ if __name__ == "__main__":
         self.remaining_seconds = seconds
         self.timer_running = True
         self.timer_paused = False
+        self.has_idle_locked_session = False
         self.force_flag = self.force_close_enabled.get() if hasattr(self, "force_close_enabled") else True
         pause_txt = "⏸ 일시정지" if self.lang == "ko" else "⏸ Pause"
         self.btn_start.configure(text=pause_txt, bg=ACCENT_YELLOW)
@@ -5353,6 +5669,7 @@ if __name__ == "__main__":
     def reset_timer(self):
         self.timer_running = False
         self.timer_paused = False
+        self.has_idle_locked_session = False
 
         # 순수 창작 Native Engine 연동: 하드웨어 RTC 웨이크업 타이머 해제 및 절전 락 복원
         if native_bridge:
@@ -5390,6 +5707,21 @@ if __name__ == "__main__":
         if not self.timer_running or self.timer_paused:
             self.update_mini_window()
             return
+
+        # 유휴 시간 감지 시 데스크톱 세션 자동 잠금 (Idle Auto-Lock)
+        if hasattr(self, "idle_lock_enabled") and self.idle_lock_enabled.get() and not getattr(self, "has_idle_locked_session", False):
+            curr_idle = self.get_system_idle_seconds()
+            threshold_sec = max(60, self.idle_lock_minutes.get() * 60)
+            if curr_idle >= threshold_sec:
+                self.has_idle_locked_session = True
+                idle_m = int(curr_idle // 60)
+                lock_log = f"🔒 [자동 화면 잠금] 타이머 가동 중 유휴 상태({idle_m}분) 감지되어 윈도우 세션을 잠갔습니다." if self.lang == "ko" else f"🔒 [Auto Lock] Windows session locked due to system idle ({idle_m}m) during active timer."
+                self.log_event(lock_log, in_app_toast=True)
+                try:
+                    import ctypes
+                    ctypes.windll.user32.LockWorkStation()
+                except Exception:
+                    os.system("rundll32.exe user32.dll,LockWorkStation")
             
         if self.remaining_seconds > 0:
             h = self.remaining_seconds // 3600
@@ -6384,10 +6716,20 @@ if __name__ == "__main__":
                         self.network_auth_token.set(data.get("network_auth_token", ""))
                     if hasattr(self, "force_close_enabled"):
                         self.force_close_enabled.set(data.get("force_close_enabled", True))
+                    if hasattr(self, "idle_lock_enabled"):
+                        self.idle_lock_enabled.set(data.get("idle_lock_enabled", False))
+                    if hasattr(self, "idle_lock_minutes"):
+                        self.idle_lock_minutes.set(data.get("idle_lock_minutes", 5))
+                        mins = self.idle_lock_minutes.get()
+                        self.idle_lock_label.set(f"{mins}분 ({mins} minutes)")
                     self.grace_seconds_setting.set(data.get("grace_seconds", 10))
                     self.grace_seconds_label.set(self.get_grace_label_by_seconds(self.grace_seconds_setting.get()))
                     self.lang = data.get("lang", "ko")
                     self.sound_theme = data.get("sound_theme", "classic")
+                    self.sound_volume = data.get("sound_volume", 80)
+                    if hasattr(self, "sound_feedback_enabled"):
+                        self.sound_feedback_enabled.set(data.get("sound_feedback_enabled", True))
+                    self.power_mode_display = data.get("power_mode_display", "dropdown")
             except:
                 pass
                 
@@ -6415,9 +6757,14 @@ if __name__ == "__main__":
                 "network_receive_enabled": self.network_receive_enabled.get() if hasattr(self, "network_receive_enabled") else False,
                 "network_auth_token": self.network_auth_token.get() if hasattr(self, "network_auth_token") else "",
                 "force_close_enabled": self.force_close_enabled.get() if hasattr(self, "force_close_enabled") else True,
+                "idle_lock_enabled": self.idle_lock_enabled.get() if hasattr(self, "idle_lock_enabled") else False,
+                "idle_lock_minutes": self.idle_lock_minutes.get() if hasattr(self, "idle_lock_minutes") else 5,
                 "grace_seconds": self.grace_seconds_setting.get(),
                 "lang": self.lang,
-                "sound_theme": getattr(self, "sound_theme", "classic")
+                "sound_theme": getattr(self, "sound_theme", "classic"),
+                "sound_volume": getattr(self, "sound_volume", 80),
+                "sound_feedback_enabled": self.sound_feedback_enabled.get() if hasattr(self, "sound_feedback_enabled") else True,
+                "power_mode_display": getattr(self, "power_mode_display", "dropdown")
             }
             with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=4)
@@ -7439,110 +7786,193 @@ if __name__ == "__main__":
             pass
 
     def play_sound_theme(self, sound_type="alert"):
-        """ plays the selected sound theme (classic, scifi, cozy) """
+        """7대 고음질 사운드 테마 (classic, marimba, crystal, scifi, westminster, urgent, bubble) 및 상황별 효과음 재생"""
         try:
+            # Volume and Mute check
+            vol = getattr(self, "sound_volume", 80)
+            if vol <= 0:
+                return
+
+            # Button click feedback check
+            if sound_type == "buttonClick":
+                feedback_on = True
+                if hasattr(self, "sound_feedback_enabled"):
+                    if isinstance(self.sound_feedback_enabled, tk.BooleanVar):
+                        feedback_on = self.sound_feedback_enabled.get()
+                    else:
+                        feedback_on = bool(self.sound_feedback_enabled)
+                if not feedback_on:
+                    return
+
             import winsound
         except ImportError:
             winsound = None
 
         if winsound is not None:
             import threading
+            import time
             def play_audio():
                 try:
                     theme = getattr(self, "sound_theme", "classic")
-                    if sound_type == "tick":
-                        if theme == "scifi":
-                            winsound.Beep(2000, 50)
-                        elif theme == "marimba":
-                            winsound.Beep(880, 80)
-                        elif theme == "crystal":
-                            winsound.Beep(1568, 70)
-                        elif theme == "urgent":
-                            winsound.Beep(1760, 60)
-                        elif theme == "westminster":
-                            winsound.Beep(659, 100)
-                        elif theme == "bubble":
-                            winsound.Beep(980, 50)
-                        elif theme == "cozy":
-                            winsound.Beep(523, 120)
-                        else: # classic
-                            winsound.Beep(1000, 80)
-                    elif sound_type == "alert":
-                        if theme == "marimba":
-                            winsound.Beep(523, 100)
-                            winsound.Beep(659, 100)
-                            winsound.Beep(784, 120)
-                        elif theme == "crystal":
-                            winsound.Beep(1046, 120)
-                            winsound.Beep(1568, 180)
-                        elif theme == "westminster":
-                            winsound.Beep(659, 120)
-                            winsound.Beep(523, 120)
-                            winsound.Beep(587, 120)
-                            winsound.Beep(392, 220)
-                        elif theme == "urgent":
-                            winsound.Beep(1175, 100)
-                            winsound.Beep(1568, 100)
-                            winsound.Beep(1760, 160)
-                        elif theme == "scifi":
-                            winsound.Beep(1200, 80)
-                            winsound.Beep(1800, 120)
-                        elif theme == "cozy":
-                            winsound.Beep(698, 120)
-                            winsound.Beep(932, 200)
-                        else: # classic
-                            winsound.Beep(587, 120)
-                            winsound.Beep(880, 180)
-                    elif sound_type == "chime":
-                        if theme == "marimba":
-                            winsound.Beep(523, 100)
-                            winsound.Beep(659, 100)
-                            winsound.Beep(784, 100)
-                            winsound.Beep(1046, 180)
-                        elif theme == "crystal":
-                            winsound.Beep(1046, 120)
-                            winsound.Beep(1318, 120)
-                            winsound.Beep(1568, 140)
-                            winsound.Beep(2093, 220)
-                        elif theme == "westminster":
-                            winsound.Beep(659, 140)
-                            winsound.Beep(523, 140)
-                            winsound.Beep(587, 140)
-                            winsound.Beep(392, 280)
-                        elif theme == "urgent":
-                            winsound.Beep(880, 100)
-                            winsound.Beep(1175, 100)
-                            winsound.Beep(1568, 200)
-                        elif theme == "scifi":
-                            winsound.Beep(880, 80)
-                            winsound.Beep(1760, 80)
-                            winsound.Beep(2200, 120)
-                        elif theme == "cozy":
-                            winsound.Beep(523, 100)
-                            winsound.Beep(698, 100)
-                            winsound.Beep(880, 100)
-                            winsound.Beep(1046, 180)
-                        else: # classic
-                            winsound.Beep(523, 120)
-                            winsound.Beep(659, 120)
-                            winsound.Beep(783, 150)
-                    elif sound_type == "alarm":
-                        # Repeats 3 times, beautiful alarm melody
-                        import time
-                        for _ in range(3):
-                            if theme == "urgent":
-                                winsound.Beep(1175, 100)
-                                winsound.Beep(1568, 150)
-                            elif theme == "marimba":
-                                winsound.Beep(523, 90)
-                                winsound.Beep(659, 90)
-                                winsound.Beep(784, 90)
-                                winsound.Beep(1046, 140)
-                            else:
-                                winsound.Beep(880, 120)
-                                winsound.Beep(987, 120)
-                                winsound.Beep(1046, 200)
-                            time.sleep(0.08)
+                    st = sound_type.lower()
+
+                    # Define melodic notes for all 7 themes & sound types: list of (freq_hz, duration_ms)
+                    melody = []
+
+                    # 1. CLASSIC BELL (클래식 벨)
+                    if theme == "classic":
+                        if st in ("tick", "warningtick"):
+                            melody = [(1000, 50)]
+                        elif st in ("alert", "preview"):
+                            melody = [(880, 100), (1046, 160)]
+                        elif st in ("chime", "hourlychime"):
+                            melody = [(659, 140), (523, 140), (587, 140), (392, 280)]
+                        elif st in ("alarm", "timeralarm"):
+                            melody = [(880, 90), (988, 90), (1046, 160)] * 3
+                        elif st == "actionsuccess":
+                            melody = [(523, 70), (659, 70), (784, 90), (1046, 160)]
+                        elif st == "buttonclick":
+                            melody = [(1200, 25)]
+                        else:
+                            melody = [(880, 100), (1046, 160)]
+
+                    # 2. MARIMBA MELODY (마림바 멜로디)
+                    elif theme == "marimba":
+                        if st in ("tick", "warningtick"):
+                            melody = [(880, 45)]
+                        elif st in ("alert", "preview"):
+                            melody = [(523, 80), (659, 80), (784, 90), (1046, 140)]
+                        elif st in ("chime", "hourlychime"):
+                            melody = [(523, 100), (659, 100), (784, 100), (1046, 200)]
+                        elif st in ("alarm", "timeralarm"):
+                            melody = [(523, 75), (659, 75), (784, 75), (1046, 140)] * 3
+                        elif st == "actionsuccess":
+                            melody = [(587, 75), (784, 75), (1175, 150)]
+                        elif st == "buttonclick":
+                            melody = [(987, 25)]
+                        else:
+                            melody = [(523, 80), (659, 80), (784, 90), (1046, 140)]
+
+                    # 3. CRYSTAL CHIMES (크리스탈 차임)
+                    elif theme == "crystal":
+                        if st in ("tick", "warningtick"):
+                            melody = [(1568, 40)]
+                        elif st in ("alert", "preview"):
+                            melody = [(1046, 80), (1318, 80), (1568, 100), (2093, 160)]
+                        elif st in ("chime", "hourlychime"):
+                            melody = [(1046, 100), (1318, 100), (1568, 100), (2093, 220)]
+                        elif st in ("alarm", "timeralarm"):
+                            melody = [(1318, 80), (1568, 80), (2093, 160)] * 3
+                        elif st == "actionsuccess":
+                            melody = [(1046, 75), (1568, 75), (2093, 150)]
+                        elif st == "buttonclick":
+                            melody = [(1568, 25)]
+                        else:
+                            melody = [(1046, 80), (1318, 80), (1568, 100), (2093, 160)]
+
+                    # 4. CYBER PULSE (사이버 펄스)
+                    elif theme == "scifi":
+                        if st in ("tick", "warningtick"):
+                            melody = [(2000, 30)]
+                        elif st in ("alert", "preview"):
+                            melody = [(880, 55), (1320, 55), (1760, 70), (2200, 130)]
+                        elif st in ("chime", "hourlychime"):
+                            melody = [(880, 75), (1760, 75), (2200, 150)]
+                        elif st in ("alarm", "timeralarm"):
+                            melody = [(1760, 65), (2200, 65), (2640, 130)] * 3
+                        elif st == "actionsuccess":
+                            melody = [(880, 55), (1320, 55), (1760, 120)]
+                        elif st == "buttonclick":
+                            melody = [(1760, 20)]
+                        else:
+                            melody = [(880, 55), (1320, 55), (1760, 70), (2200, 130)]
+
+                    # 5. WESTMINSTER (웨스트민스터)
+                    elif theme == "westminster":
+                        if st in ("tick", "warningtick"):
+                            melody = [(659, 55)]
+                        elif st in ("alert", "preview"):
+                            melody = [(659, 120), (523, 120), (587, 120), (392, 240)]
+                        elif st in ("chime", "hourlychime"):
+                            melody = [(659, 140), (523, 140), (587, 140), (392, 280)]
+                        elif st in ("alarm", "timeralarm"):
+                            melody = [(659, 85), (523, 85), (587, 85), (392, 150)] * 3
+                        elif st == "actionsuccess":
+                            melody = [(523, 85), (659, 85), (784, 130)]
+                        elif st == "buttonclick":
+                            melody = [(659, 25)]
+                        else:
+                            melody = [(659, 120), (523, 120), (587, 120), (392, 240)]
+
+                    # 6. URGENT ALERT (긴급 경보)
+                    elif theme == "urgent":
+                        if st in ("tick", "warningtick"):
+                            melody = [(1760, 35)]
+                        elif st in ("alert", "preview"):
+                            melody = [(1175, 65), (1568, 65), (1760, 120)]
+                        elif st in ("chime", "hourlychime"):
+                            melody = [(880, 75), (1175, 75), (1568, 150)]
+                        elif st in ("alarm", "timeralarm"):
+                            melody = [(1175, 80), (1568, 85), (1760, 120)] * 3
+                        elif st == "actionsuccess":
+                            melody = [(988, 65), (1318, 65), (1760, 130)]
+                        elif st == "buttonclick":
+                            melody = [(1318, 25)]
+                        else:
+                            melody = [(1175, 65), (1568, 65), (1760, 120)]
+
+                    # 7. BUBBLE POP (버블 팝)
+                    elif theme == "bubble":
+                        if st in ("tick", "warningtick"):
+                            melody = [(980, 35)]
+                        elif st in ("alert", "preview"):
+                            melody = [(659, 45), (880, 45), (1175, 65), (1568, 110)]
+                        elif st in ("chime", "hourlychime"):
+                            melody = [(784, 65), (988, 65), (1318, 130)]
+                        elif st in ("alarm", "timeralarm"):
+                            melody = [(880, 60), (1175, 60), (1568, 130)] * 3
+                        elif st == "actionsuccess":
+                            melody = [(784, 45), (1046, 45), (1568, 110)]
+                        elif st == "buttonclick":
+                            melody = [(1046, 20)]
+                        else:
+                            melody = [(659, 45), (880, 45), (1175, 65), (1568, 110)]
+
+                    # Fallback default
+                    else:
+                        melody = [(880, 90), (1046, 140)]
+
+                    # Synthesize studio PCM WAV buffer with acoustic harmonics & envelope
+                    vol_factor = max(0.01, min(1.0, float(vol) / 100.0))
+                    sample_rate = 22050
+                    buf = io.BytesIO()
+                    with wave.open(buf, 'wb') as wf:
+                        wf.setnchannels(1)
+                        wf.setsampwidth(2)
+                        wf.setframerate(sample_rate)
+                        frames = bytearray()
+                        for freq, dur_ms in melody:
+                            n_samples = int(sample_rate * (max(15, dur_ms) / 1000.0))
+                            for i in range(n_samples):
+                                t = i / sample_rate
+                                decay = math.exp(-3.5 * (i / max(1, n_samples)))
+                                # Harmonic rich sine + subtle 2nd harmonic
+                                val_raw = math.sin(2.0 * math.pi * freq * t) + 0.25 * math.sin(4.0 * math.pi * freq * t)
+                                sample_val = int(val_raw * decay * vol_factor * 26000.0)
+                                sample_val = max(-32767, min(32767, sample_val))
+                                frames += struct.pack('<h', sample_val)
+                        wf.writeframes(frames)
+                    wav_bytes = buf.getvalue()
+
+                    # Play directly through user speakers/headphones via Windows Audio subsystem
+                    try:
+                        winsound.PlaySound(wav_bytes, winsound.SND_MEMORY | winsound.SND_ASYNC)
+                    except Exception:
+                        for freq, dur in melody:
+                            try:
+                                winsound.Beep(int(freq), max(10, int(dur)))
+                            except Exception:
+                                pass
                 except Exception:
                     try:
                         self.root.bell()
@@ -7560,13 +7990,13 @@ if __name__ == "__main__":
         self.save_settings()
         self.update_sound_theme_buttons_ui()
         if play_preview:
-            self.play_sound_theme("alert")
+            self.play_sound_theme("preview")
 
     def update_sound_theme_buttons_ui(self):
         theme = getattr(self, "sound_theme", "classic")
         for st_key, btn in getattr(self, "sound_theme_btns", {}).items():
             if st_key == theme:
-                btn.configure(bg="#8b5cf6", fg="white") # Violet highlight for active!
+                btn.configure(bg="#10b981", fg="white") # Emerald highlight for active
             else:
                 btn.configure(bg=DARK_CARD, fg=TEXT_COLOR)
 
@@ -8064,19 +8494,41 @@ if __name__ == "__main__":
         )
         frm_theme.pack(fill="x", padx=6, pady=4)
         
-        self.theme_btns = {}
-        for theme_key, theme_data in THEMES.items():
-            btn = tk.Button(
-                frm_theme,
-                text=theme_data["name_ko"] if self.lang == "ko" else theme_data["name_en"],
-                font=("Arial", 10, "bold"),
-                relief="flat",
-                pady=4,
-                cursor="hand2",
-                command=lambda tk_key=theme_key: self.apply_theme(tk_key)
-            )
-            btn.pack(side="left", padx=2, expand=True, fill="x")
-            self.theme_btns[theme_key] = btn
+        theme_names_display = {
+            "dark": "🌙 다크 테마 (Dark)" if self.lang == "ko" else "🌙 Dark Theme",
+            "light": "☀️ 라이트 테마 (Light)" if self.lang == "ko" else "☀️ Light Theme",
+            "cyber": "⚡ 사이버네틱 (Cyber)" if self.lang == "ko" else "⚡ Cybernetic Theme",
+            "amber": "🍯 엠버 골드 (Amber)" if self.lang == "ko" else "🍯 Amber Gold Theme"
+        }
+        theme_rev_map = {v: k for k, v in theme_names_display.items()}
+        cur_t_name = theme_names_display.get(getattr(self, "current_theme", "dark"), theme_names_display["dark"])
+        self.var_settings_theme = tk.StringVar(value=cur_t_name)
+        
+        def on_theme_dropdown_change(val):
+            t_key = theme_rev_map.get(val, "dark")
+            self.apply_theme(t_key)
+            
+        self.om_settings_theme = tk.OptionMenu(
+            frm_theme,
+            self.var_settings_theme,
+            *theme_names_display.values(),
+            command=on_theme_dropdown_change
+        )
+        self.om_settings_theme.config(
+            font=("Arial", 10, "bold"),
+            bg=DARK_CARD,
+            fg="white",
+            activebackground="#2563eb",
+            activeforeground="white",
+            highlightthickness=0,
+            relief="flat",
+            padx=8,
+            pady=4,
+            cursor="hand2"
+        )
+        if "menu" in self.om_settings_theme.keys():
+            self.om_settings_theme["menu"].config(font=("Arial", 10), bg=DARK_CARD, fg=TEXT_COLOR, activebackground="#2563eb", activeforeground="white")
+        self.om_settings_theme.pack(fill="x")
 
         # 2. Sound Theme Frame
         frm_sound = tk.LabelFrame(
@@ -8092,24 +8544,233 @@ if __name__ == "__main__":
         )
         frm_sound.pack(fill="x", padx=6, pady=4)
         
-        self.sound_theme_btns = {}
-        sound_themes_list = {
-            "classic": {"ko": "클래식 비프", "en": "Classic Beep"},
-            "scifi": {"ko": "SF 신스", "en": "Sci-Fi Synth"},
-            "cozy": {"ko": "아늑한 멜로디", "en": "Cozy Chime"}
+        sound_themes_display = {
+            "classic": "🔔 클래식 벨 (Classic Bell)" if self.lang == "ko" else "🔔 Classic Bell",
+            "marimba": "🪵 마림바 멜로디 (Melodic Marimba)" if self.lang == "ko" else "🪵 Melodic Marimba",
+            "crystal": "✨ 크리스탈 글래스 (Crystal Glass)" if self.lang == "ko" else "✨ Crystal Glass",
+            "scifi": "🚀 사이버 테크 (Cyber Tech)" if self.lang == "ko" else "🚀 Cyber Tech",
+            "westminster": "🏛️ 웨스트민스터 (Westminster Chime)" if self.lang == "ko" else "🏛️ Westminster Chime",
+            "urgent": "🚨 긴급 경보 알람 (Urgent Siren)" if self.lang == "ko" else "🚨 Urgent Siren",
+            "bubble": "🫧 소프트 버블 팝 (Soft Bubble Pop)" if self.lang == "ko" else "🫧 Soft Bubble Pop"
         }
-        for st_key, st_names in sound_themes_list.items():
-            btn = tk.Button(
-                frm_sound,
-                text=st_names["ko"] if self.lang == "ko" else st_names["en"],
-                font=("Arial", 10, "bold"),
-                relief="flat",
-                pady=4,
-                cursor="hand2",
-                command=lambda s_key=st_key: self.apply_sound_theme(s_key, play_preview=True)
-            )
-            btn.pack(side="left", padx=2, expand=True, fill="x")
-            self.sound_theme_btns[st_key] = btn
+        sound_rev_map = {v: k for k, v in sound_themes_display.items()}
+        cur_s_name = sound_themes_display.get(getattr(self, "sound_theme", "classic"), sound_themes_display["classic"])
+        self.var_settings_sound = tk.StringVar(value=cur_s_name)
+
+        # 1. Sound Theme Selector Row
+        lbl_theme_title = tk.Label(
+            frm_sound,
+            text="알림음 테마 선택 (드롭다운):" if self.lang == "ko" else "Select Sound Theme:",
+            font=("Arial", 9, "bold"),
+            fg="#9ca3af",
+            bg=DARK_BG
+        )
+        lbl_theme_title.pack(anchor="w", pady=(0, 2))
+
+        f_sound_row = tk.Frame(frm_sound, bg=DARK_BG)
+        f_sound_row.pack(fill="x", pady=(0, 6))
+
+        def on_sound_dropdown_change(val):
+            s_key = sound_rev_map.get(val, "classic")
+            self.apply_sound_theme(s_key, play_preview=False)
+
+        self.om_settings_sound = tk.OptionMenu(
+            f_sound_row,
+            self.var_settings_sound,
+            *sound_themes_display.values(),
+            command=on_sound_dropdown_change
+        )
+        self.om_settings_sound.config(
+            font=("Arial", 9, "bold"),
+            bg=DARK_CARD,
+            fg="white",
+            activebackground="#2563eb",
+            activeforeground="white",
+            highlightthickness=0,
+            relief="flat",
+            padx=8,
+            pady=4,
+            cursor="hand2"
+        )
+        if "menu" in self.om_settings_sound.keys():
+            self.om_settings_sound["menu"].config(font=("Arial", 9), bg=DARK_CARD, fg=TEXT_COLOR, activebackground="#2563eb", activeforeground="white")
+        self.om_settings_sound.pack(side="left", fill="x", expand=True, padx=(0, 4))
+
+        def play_sound_theme_test():
+            s_key = sound_rev_map.get(self.var_settings_sound.get(), "classic")
+            self.sound_theme = s_key
+            self.play_sound_theme("alarm")
+
+        btn_sound_test = tk.Button(
+            f_sound_row,
+            text="🔊 Play Test" if self.lang == "en" else "🔊 Play Test (테스트 재생)",
+            font=("Arial", 9, "bold"),
+            bg="#10b981",
+            fg="white",
+            activebackground="#059669",
+            activeforeground="white",
+            relief="flat",
+            padx=8,
+            pady=4,
+            cursor="hand2",
+            command=play_sound_theme_test
+        )
+        btn_sound_test.pack(side="right")
+
+        # 2. Master Sound Volume Control Row
+        f_vol_row = tk.Frame(frm_sound, bg=DARK_BG)
+        f_vol_row.pack(fill="x", pady=(0, 6))
+
+        lbl_vol_title = tk.Label(
+            f_vol_row,
+            text="🔊 마스터 음량 (Volume):" if self.lang == "ko" else "🔊 Master Volume:",
+            font=("Arial", 9, "bold"),
+            fg="#9ca3af",
+            bg=DARK_BG
+        )
+        lbl_vol_title.pack(side="left")
+
+        cur_vol = getattr(self, "sound_volume", 80)
+        lbl_vol_pct = tk.Label(
+            f_vol_row,
+            text=f"{cur_vol}%",
+            font=("Arial", 9, "bold"),
+            fg="#10b981",
+            bg=DARK_BG,
+            width=5
+        )
+        lbl_vol_pct.pack(side="right")
+
+        def on_volume_slider_change(val):
+            v_int = int(float(val))
+            self.sound_volume = v_int
+            lbl_vol_pct.config(text=f"{v_int}%")
+            self.save_settings()
+
+        scale_vol = tk.Scale(
+            f_vol_row,
+            from_=0,
+            to=100,
+            orient="horizontal",
+            showvalue=0,
+            bg=DARK_BG,
+            fg="#10b981",
+            troughcolor=DARK_CARD,
+            activebackground="#10b981",
+            highlightthickness=0,
+            bd=0,
+            command=on_volume_slider_change
+        )
+        scale_vol.set(cur_vol)
+        scale_vol.pack(side="left", fill="x", expand=True, padx=(8, 4))
+
+        # 3. Situational Sound Trigger Audition Test (Pull-down + Test Button)
+        f_trig_box = tk.Frame(frm_sound, bg="#161b26", bd=1, relief="solid", padx=6, pady=6)
+        f_trig_box.pack(fill="x", pady=(0, 6))
+
+        lbl_trig_title = tk.Label(
+            f_trig_box,
+            text="🎯 상황별 효과음 동작 테스트 (풀다운):" if self.lang == "ko" else "🎯 Situational Sound Effect Test:",
+            font=("Arial", 9, "bold"),
+            fg="#60a5fa",
+            bg="#161b26"
+        )
+        lbl_trig_title.pack(anchor="w", pady=(0, 3))
+
+        f_trig_row = tk.Frame(f_trig_box, bg="#161b26")
+        f_trig_row.pack(fill="x")
+
+        trig_display_map = {
+            "preview": "🔔 1. 테마 대표 시그니처 톤 (미리듣기)" if self.lang == "ko" else "🔔 1. Theme Signature Preview",
+            "tick": "⏱️ 2. 10초 카운트다운 틱 경고음 (Tick)" if self.lang == "ko" else "⏱️ 2. 10s Countdown Warning Tick",
+            "chime": "🏛️ 3. 매시 정각 시계탑 차임벨 (Chime)" if self.lang == "ko" else "🏛️ 3. Hourly Clock Chime",
+            "alarm": "🚨 4. 타이머 만료 알람 경보음 (Alarm)" if self.lang == "ko" else "🚨 4. Timer Expired Alarm",
+            "actionSuccess": "✨ 5. 전원 명령 완료 및 성공음 (Success)" if self.lang == "ko" else "✨ 5. Operation Success Chime"
+        }
+        trig_rev_map = {v: k for k, v in trig_display_map.items()}
+        var_trig_select = tk.StringVar(value=trig_display_map.get(getattr(self, "selected_sound_test_trigger", "preview"), trig_display_map["preview"]))
+
+        om_trig = tk.OptionMenu(
+            f_trig_row,
+            var_trig_select,
+            *trig_display_map.values()
+        )
+        om_trig.config(
+            font=("Arial", 9),
+            bg=DARK_CARD,
+            fg="white",
+            activebackground="#2563eb",
+            activeforeground="white",
+            highlightthickness=0,
+            relief="flat",
+            padx=6,
+            pady=3,
+            cursor="hand2"
+        )
+        if "menu" in om_trig.keys():
+            om_trig["menu"].config(font=("Arial", 9), bg=DARK_CARD, fg=TEXT_COLOR, activebackground="#2563eb", activeforeground="white")
+        om_trig.pack(side="left", fill="x", expand=True, padx=(0, 4))
+
+        def play_situational_test():
+            sel_key = trig_rev_map.get(var_trig_select.get(), "preview")
+            self.selected_sound_test_trigger = sel_key
+            s_key = sound_rev_map.get(self.var_settings_sound.get(), "classic")
+            self.sound_theme = s_key
+            self.play_sound_theme(sel_key)
+
+        btn_trig_test = tk.Button(
+            f_trig_row,
+            text="🎯 재생 (Test)" if self.lang == "ko" else "🎯 Play Test",
+            font=("Arial", 9, "bold"),
+            bg="#2563eb",
+            fg="white",
+            activebackground="#1d4ed8",
+            activeforeground="white",
+            relief="flat",
+            padx=8,
+            pady=3,
+            cursor="hand2",
+            command=play_situational_test
+        )
+        btn_trig_test.pack(side="right")
+
+        # 4. Checkboxes: Button Sound Effects & Hourly Chime
+        f_chk_box = tk.Frame(frm_sound, bg=DARK_BG)
+        f_chk_box.pack(fill="x", pady=(2, 0))
+
+        if not hasattr(self, "sound_feedback_enabled"):
+            self.sound_feedback_enabled = tk.BooleanVar(value=True)
+
+        chk_feedback = tk.Checkbutton(
+            f_chk_box,
+            text="🖱️ UI 버튼 클릭 및 조작 인터랙션 효과음 (Feedback)" if self.lang == "ko" else "🖱️ UI Sound Effects & Button Feedback",
+            variable=self.sound_feedback_enabled,
+            bg=DARK_BG,
+            fg=TEXT_COLOR,
+            selectcolor=DARK_CARD,
+            activebackground=DARK_BG,
+            activeforeground=TEXT_COLOR,
+            font=("Arial", 9),
+            command=lambda: (self.save_settings(), self.play_sound_theme("buttonClick") if self.sound_feedback_enabled.get() else None)
+        )
+        chk_feedback.pack(anchor="w")
+
+        if not hasattr(self, "hourly_chime_enabled"):
+            self.hourly_chime_enabled = tk.BooleanVar(value=True)
+
+        chk_chime = tk.Checkbutton(
+            f_chk_box,
+            text="🔔 매시 정각 시계탑 차임벨 알림 (00분 정각 알림음)" if self.lang == "ko" else "🔔 Hourly Clock Chime Notification (Every 00 min)",
+            variable=self.hourly_chime_enabled,
+            bg=DARK_BG,
+            fg=TEXT_COLOR,
+            selectcolor=DARK_CARD,
+            activebackground=DARK_BG,
+            activeforeground=TEXT_COLOR,
+            font=("Arial", 9),
+            command=self.save_settings
+        )
+        chk_chime.pack(anchor="w")
 
         # 3. Mini Widget Customization (Themes & Layout)
         frm_widget = tk.LabelFrame(
@@ -8127,51 +8788,51 @@ if __name__ == "__main__":
 
         lbl_w_design = tk.Label(
             frm_widget,
-            text="위젯 테마 스타일:" if self.lang == "ko" else "Widget Theme Style:",
+            text="위젯 테마 스타일 풀다운:" if self.lang == "ko" else "Widget Theme Style Pulldown:",
             font=("Arial", 10, "bold"),
             fg=getattr(self, "current_subtext", "#9ca3af"),
             bg=DARK_BG
         )
         lbl_w_design.pack(anchor="w", pady=(0, 4))
 
-        f_w_themes = tk.Frame(frm_widget, bg=DARK_BG)
-        f_w_themes.pack(fill="x", pady=(0, 6))
+        widget_styles_display = {
+            "standard": "💍 네온 링 (Neon Ring)" if self.lang == "ko" else "💍 Neon Ring",
+            "cyber_hud": "🖥️ 사이버 HUD (Cyber HUD)" if self.lang == "ko" else "🖥️ Cyber HUD",
+            "minimal_bar": "📏 초슬림 바 (Slim Bar)" if self.lang == "ko" else "📏 Slim Bar",
+            "retro_led": "📟 레트로 LED (Retro LED)" if self.lang == "ko" else "📟 Retro LED",
+            "clean_card": "🎴 클린 카드 (Clean Card)" if self.lang == "ko" else "🎴 Clean Card"
+        }
+        widget_rev_map = {v: k for k, v in widget_styles_display.items()}
+        cur_w_name = widget_styles_display.get(self.widget_design.get(), widget_styles_display["standard"])
+        self.var_settings_widget = tk.StringVar(value=cur_w_name)
 
-        widget_styles = [
-            ("standard", "네온 링", "Neon Ring"),
-            ("cyber_hud", "사이버 HUD", "Cyber HUD"),
-            ("minimal_bar", "초슬림 바", "Slim Bar"),
-            ("retro_led", "레트로 LED", "Retro LED"),
-            ("clean_card", "클린 카드", "Clean Card")
-        ]
-
-        self.widget_theme_btns = {}
-        def on_widget_design_select(d_key):
+        def on_widget_dropdown_change(val):
+            d_key = widget_rev_map.get(val, "standard")
             self.widget_design.set(d_key)
             self.save_settings()
             self.rebuild_mini_window()
-            for k, b in self.widget_theme_btns.items():
-                is_active = (k == d_key)
-                b.configure(
-                    bg=ACCENT_BLUE if is_active else DARK_CARD,
-                    fg="white" if is_active else TEXT_COLOR
-                )
 
-        for w_key, ko_name, en_name in widget_styles:
-            is_active = (self.widget_design.get() == w_key)
-            btn_w = tk.Button(
-                f_w_themes,
-                text=ko_name if self.lang == "ko" else en_name,
-                font=("Arial", 10, "bold"),
-                bg=ACCENT_BLUE if is_active else DARK_CARD,
-                fg="white" if is_active else TEXT_COLOR,
-                relief="flat",
-                pady=3,
-                cursor="hand2",
-                command=lambda k=w_key: on_widget_design_select(k)
-            )
-            btn_w.pack(side="left", padx=1, expand=True, fill="x")
-            self.widget_theme_btns[w_key] = btn_w
+        self.om_settings_widget = tk.OptionMenu(
+            frm_widget,
+            self.var_settings_widget,
+            *widget_styles_display.values(),
+            command=on_widget_dropdown_change
+        )
+        self.om_settings_widget.config(
+            font=("Arial", 10, "bold"),
+            bg=DARK_CARD,
+            fg="white",
+            activebackground="#2563eb",
+            activeforeground="white",
+            highlightthickness=0,
+            relief="flat",
+            padx=8,
+            pady=4,
+            cursor="hand2"
+        )
+        if "menu" in self.om_settings_widget.keys():
+            self.om_settings_widget["menu"].config(font=("Arial", 10), bg=DARK_CARD, fg=TEXT_COLOR, activebackground="#2563eb", activeforeground="white")
+        self.om_settings_widget.pack(fill="x", pady=(0, 6))
 
         # Widget Controls Row 1: Width (가로), Height (세로), Opacity (투명도)
         f_w_sliders1 = tk.Frame(frm_widget, bg=DARK_BG)
@@ -8703,7 +9364,93 @@ if __name__ == "__main__":
         )
         chk_pop_force.pack(anchor="w")
 
-        # 8. 네트워크 수신 보안 토큰 (Network Remote Auth Token)
+        # 8. 유휴 시간 감지 자동 화면 잠금 (Auto-Lock Desktop Session on Idle)
+        frm_idle_lock = tk.LabelFrame(
+            parent,
+            text="🔒 타이머 가동 중 자동 화면 잠금 (Auto-Lock Desktop)" if self.lang == "ko" else "🔒 Auto-Lock on Idle while Timer Running",
+            font=("Arial", 10, "bold"),
+            fg=ACCENT_BLUE,
+            bg=DARK_BG,
+            bd=1,
+            relief="solid",
+            padx=10,
+            pady=8
+        )
+        frm_idle_lock.pack(fill="x", padx=6, pady=4)
+
+        lbl_idle_desc = tk.Label(
+            frm_idle_lock,
+            text="타이머 또는 예약 실행 중 사용자가 키보드/마우스를 조작하지 않고 지정된 시간 동안 자리를 비우면(유휴) Windows 데스크톱 세션을 자동으로 잠급니다(Win + L)." if self.lang == "ko" else "Automatically locks the Windows desktop session (Win + L) if the system remains idle without keyboard/mouse input for the specified duration while a timer is active.",
+            font=("Arial", 10),
+            fg=getattr(self, "current_subtext", "#9ca3af"),
+            bg=DARK_BG,
+            justify="left",
+            wraplength=475
+        )
+        lbl_idle_desc.pack(anchor="w", pady=(0, 4))
+
+        f_idle_controls = tk.Frame(frm_idle_lock, bg=DARK_BG)
+        f_idle_controls.pack(fill="x", pady=(2, 2))
+
+        chk_idle_lock = tk.Checkbutton(
+            f_idle_controls,
+            text="🔒 유휴 상태 시 데스크톱 자동 잠금" if self.lang == "ko" else "🔒 Auto-Lock Desktop on Idle",
+            variable=self.idle_lock_enabled,
+            command=self.save_settings,
+            bg=DARK_BG,
+            fg=TEXT_COLOR,
+            selectcolor=DARK_CARD,
+            activebackground=DARK_BG,
+            activeforeground=TEXT_COLOR,
+            font=("Arial", 10, "bold")
+        )
+        chk_idle_lock.pack(side="left", padx=(0, 8))
+
+        lbl_idle_timeout = tk.Label(
+            f_idle_controls,
+            text="유휴 감지 시간:" if self.lang == "ko" else "Idle Timeout:",
+            font=("Arial", 10),
+            fg=getattr(self, "current_subtext", "#9ca3af"),
+            bg=DARK_BG
+        )
+        lbl_idle_timeout.pack(side="left", padx=(4, 2))
+
+        def on_idle_mins_selected(mins):
+            self.idle_lock_minutes.set(mins)
+            self.idle_lock_label.set(f"{mins}분 ({mins} minutes)" if self.lang == "ko" else f"{mins} min ({mins} minutes)")
+            self.save_settings()
+
+        self.om_idle_timeout = tk.OptionMenu(
+            f_idle_controls,
+            self.idle_lock_label,
+            f"{self.idle_lock_minutes.get()}분 ({self.idle_lock_minutes.get()} minutes)"
+        )
+        self.om_idle_timeout.config(
+            bg=DARK_CARD,
+            fg=TEXT_COLOR,
+            activebackground=DARK_CARD,
+            activeforeground=TEXT_COLOR,
+            highlightthickness=0,
+            relief="flat",
+            font=("Arial", 10),
+            pady=0,
+            padx=2
+        )
+        self.om_idle_timeout["menu"].config(
+            bg=DARK_CARD,
+            fg=TEXT_COLOR,
+            activebackground=ACCENT_BLUE,
+            activeforeground="white",
+            relief="flat",
+            font=("Arial", 10)
+        )
+        self.om_idle_timeout['menu'].delete(0, 'end')
+        for m_opt in [1, 2, 3, 5, 10, 15, 30]:
+            lbl_m = f"{m_opt}분 ({m_opt} minutes)" if self.lang == "ko" else f"{m_opt} min ({m_opt} minutes)"
+            self.om_idle_timeout['menu'].add_command(label=lbl_m, command=lambda m=m_opt: on_idle_mins_selected(m))
+        self.om_idle_timeout.pack(side="left", padx=2, expand=True, fill="x")
+
+        # 9. 네트워크 수신 보안 토큰 (Network Remote Auth Token)
         frm_net_sec = tk.LabelFrame(
             parent,
             text="🔐 네트워크 수신 보안 토큰 (Auth Token)" if self.lang == "ko" else "🔐 Remote Security Token",

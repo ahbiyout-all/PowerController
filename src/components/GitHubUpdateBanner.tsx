@@ -2,10 +2,13 @@ import React, { useState, useEffect } from 'react';
 import {
   APP_VERSION,
   APP_RELEASE_DATE,
+  DEVELOPER_NAME,
   GITHUB_REPO_OWNER,
   GITHUB_REPO_NAME,
   GITHUB_REPO_URL,
-  GITHUB_RELEASES_URL
+  GITHUB_RELEASES_URL,
+  OFFICIAL_BLOG_URL,
+  COMPANY_URL
 } from '../types';
 import {
   Download,
@@ -232,6 +235,34 @@ export const UpdateModal: React.FC<UpdateModalProps> = ({
                 (lang === 'en'
                   ? `• Official Windows Installer (Inno Setup 6) release.\n• High-precision hardware timer & background sleep guard.\n• Multi-level silent process force kill & file unlock pipeline.\n• Single Source of Truth versioning synchronization (v${APP_VERSION}).`
                   : `• Windows 공식 설치 마법사(Inno Setup 6) 릴리스.\n• 초정밀 하드웨어 타이머 및 백그라운드 절전 가드 탑재.\n• 원격 무인 설치 시 프로세스 무음 강제 종료 및 파일 락 자동 해제.\n• 3단계 SemVer 규약 및 버전 정보 일괄 동기화(v${APP_VERSION}).`)}
+            </div>
+          </div>
+
+          {/* 4. Official Channels & Developer Information Card */}
+          <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800/80 text-[11px] text-slate-400 space-y-1.5">
+            <div className="flex items-center justify-between text-slate-300 font-semibold text-xs">
+              <span>{lang === 'en' ? 'Developer & Official Channels' : '제작자 및 공식 채널 안내'}</span>
+              <span className="text-blue-400 font-bold">{DEVELOPER_NAME}</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-0.5">
+              <a
+                href={OFFICIAL_BLOG_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 text-blue-400 hover:text-blue-300 underline"
+              >
+                <span>🌐 {lang === 'en' ? 'Official Google Blog' : '공식 구글 블로그'}</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+              <a
+                href={COMPANY_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 text-indigo-400 hover:text-indigo-300 underline"
+              >
+                <span>🏢 {lang === 'en' ? 'Affiliation (cisnet.co.kr)' : '소속사 (cisnet.co.kr)'}</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
             </div>
           </div>
         </div>

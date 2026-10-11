@@ -147,6 +147,18 @@ class SoundEngine {
   }
 
   /**
+   * Unlock AudioContext on first user gesture
+   */
+  public unlock() {
+    try {
+      const ctx = this.getAudioContext();
+      if (ctx && ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      }
+    } catch {}
+  }
+
+  /**
    * Helper to create an ADSR envelope gain node
    */
   private createVoice(
@@ -180,9 +192,10 @@ class SoundEngine {
     osc.frequency.setValueAtTime(freq, startTime);
 
     // Fast attack (3ms), smooth exponential decay
+    const peakGain = Math.max(0.0001, baseGain * this.masterVolume);
     gain.gain.setValueAtTime(0.0001, startTime);
-    gain.gain.exponentialRampToValueAtTime(baseGain * this.masterVolume, startTime + 0.005);
-    gain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration * decayRate);
+    gain.gain.exponentialRampToValueAtTime(peakGain, startTime + 0.005);
+    gain.gain.exponentialRampToValueAtTime(0.00001, startTime + duration * decayRate);
 
     osc.connect(gain);
     gain.connect(ctx.destination);
@@ -199,21 +212,127 @@ class SoundEngine {
     const ctx = this.getAudioContext();
     if (!ctx) return;
 
+    if (ctx.state === 'suspended') {
+      ctx.resume().then(() => {
+        this.executeSound(ctx, theme, trigger);
+      }).catch(() => {
+        this.executeSound(ctx, theme, trigger);
+      });
+      return;
+    }
+
+    this.executeSound(ctx, theme, trigger);
+  }
+
+  private executeSound(ctx: AudioContext, theme: SoundTheme, trigger: SoundTriggerType) {
     try {
       const now = ctx.currentTime;
 
-      // 1. CLICK / BUTTON
+      // 1. CLICK / BUTTON INTERACTION
       if (trigger === 'buttonClick') {
-        this.playHarmonicTone(ctx, 1200, now, 0.04, 'sine', 0.08, 0.5);
+        switch (theme) {
+          case 'marimba':
+            this.playHarmonicTone(ctx, 987, now, 0.05, 'sine', 0.12, 0.4);
+            break;
+          case 'crystal':
+            this.playHarmonicTone(ctx, 1568, now, 0.06, 'triangle', 0.10, 0.5);
+            break;
+          case 'scifi':
+            this.playHarmonicTone(ctx, 1760, now, 0.04, 'sawtooth', 0.08, 0.3);
+            break;
+          case 'westminster':
+            this.playHarmonicTone(ctx, 659, now, 0.06, 'sine', 0.12, 0.5);
+            break;
+          case 'urgent':
+            this.playHarmonicTone(ctx, 1318, now, 0.05, 'square', 0.09, 0.4);
+            break;
+          case 'bubble': {
+            const bOsc = ctx.createOscillator();
+            const bGain = ctx.createGain();
+            bOsc.type = 'sine';
+            bOsc.frequency.setValueAtTime(600, now);
+            bOsc.frequency.exponentialRampToValueAtTime(1100, now + 0.04);
+            bGain.gain.setValueAtTime(0.12 * this.masterVolume, now);
+            bGain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+            bOsc.connect(bGain);
+            bGain.connect(ctx.destination);
+            bOsc.start(now);
+            bOsc.stop(now + 0.06);
+            break;
+          }
+          case 'classic':
+          default:
+            this.playHarmonicTone(ctx, 1200, now, 0.04, 'sine', 0.09, 0.5);
+            break;
+        }
         return;
       }
 
-      // 2. ACTION SUCCESS (Chime chord)
+      // 2. ACTION SUCCESS (Chime chord / Operation complete)
       if (trigger === 'actionSuccess') {
-        const chord = [523.25, 659.25, 783.99, 1046.50]; // C-E-G-C
-        chord.forEach((freq, idx) => {
-          this.playHarmonicTone(ctx, freq, now + idx * 0.08, 0.45, 'triangle', 0.12);
-        });
+        switch (theme) {
+          case 'marimba': {
+            const chord = [587.33, 783.99, 1174.66];
+            chord.forEach((freq, idx) => {
+              this.playHarmonicTone(ctx, freq, now + idx * 0.07, 0.35, 'sine', 0.16, 0.65);
+            });
+            break;
+          }
+          case 'crystal': {
+            const chord = [1046.50, 1567.98, 2093.00];
+            chord.forEach((freq, idx) => {
+              this.playHarmonicTone(ctx, freq, now + idx * 0.08, 0.5, 'triangle', 0.14, 0.85);
+            });
+            break;
+          }
+          case 'scifi': {
+            const chord = [880.00, 1320.00, 1760.00];
+            chord.forEach((freq, idx) => {
+              this.playHarmonicTone(ctx, freq, now + idx * 0.06, 0.3, 'sawtooth', 0.11, 0.6);
+            });
+            break;
+          }
+          case 'westminster': {
+            const chord = [523.25, 659.25, 783.99];
+            chord.forEach((freq, idx) => {
+              this.playHarmonicTone(ctx, freq, now + idx * 0.1, 0.6, 'sine', 0.16, 0.85);
+            });
+            break;
+          }
+          case 'urgent': {
+            const chord = [988, 1318, 1760];
+            chord.forEach((freq, idx) => {
+              this.playHarmonicTone(ctx, freq, now + idx * 0.07, 0.25, 'square', 0.10, 0.7);
+            });
+            break;
+          }
+          case 'bubble': {
+            const freqs = [784, 1046, 1568];
+            freqs.forEach((freq, idx) => {
+              const bOsc = ctx.createOscillator();
+              const bGain = ctx.createGain();
+              const t = now + idx * 0.07;
+              bOsc.type = 'sine';
+              bOsc.frequency.setValueAtTime(freq * 0.6, t);
+              bOsc.frequency.exponentialRampToValueAtTime(freq, t + 0.07);
+              bGain.gain.setValueAtTime(0.15 * this.masterVolume, t);
+              bGain.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
+              bOsc.connect(bGain);
+              bGain.connect(ctx.destination);
+              bOsc.start(t);
+              bOsc.stop(t + 0.1);
+            });
+            break;
+          }
+          case 'classic':
+          default: {
+            const chord = [523.25, 659.25, 783.99, 1046.50]; // C-E-G-C
+            chord.forEach((freq, idx) => {
+              this.playHarmonicTone(ctx, freq, now + idx * 0.08, 0.45, 'triangle', 0.14, 0.8);
+            });
+            break;
+          }
+        }
         return;
       }
 
@@ -226,7 +345,7 @@ class SoundEngine {
           case 'crystal':
             this.playHarmonicTone(ctx, 1567.98, now, 0.1, 'triangle', 0.12, 0.7);
             break;
-          case 'scifi':
+          case 'scifi': {
             const osc = ctx.createOscillator();
             const gain = ctx.createGain();
             osc.type = 'sawtooth';
@@ -239,13 +358,14 @@ class SoundEngine {
             osc.start(now);
             osc.stop(now + 0.08);
             break;
+          }
           case 'westminster':
             this.playHarmonicTone(ctx, 659.25, now, 0.12, 'sine', 0.14, 0.7);
             break;
           case 'urgent':
             this.playHarmonicTone(ctx, 1760, now, 0.08, 'square', 0.1, 0.8);
             break;
-          case 'bubble':
+          case 'bubble': {
             const bOsc = ctx.createOscillator();
             const bGain = ctx.createGain();
             bOsc.type = 'sine';
@@ -258,6 +378,7 @@ class SoundEngine {
             bOsc.start(now);
             bOsc.stop(now + 0.09);
             break;
+          }
           case 'classic':
           default:
             this.playHarmonicTone(ctx, 1000, now, 0.08, 'sine', 0.12, 0.7);
@@ -266,7 +387,7 @@ class SoundEngine {
         return;
       }
 
-      // 4. HOURLY CHIME (Westminster & Crystal clock chimes)
+      // 4. HOURLY CHIME (Westminster & Clock chimes)
       if (trigger === 'hourlyChime') {
         if (theme === 'westminster' || theme === 'classic') {
           // Authentic Westminster 4-note chime: E5, C5, D5, G4
@@ -278,13 +399,11 @@ class SoundEngine {
           ];
           let timeOffset = 0;
           notes.forEach(({ f, d }) => {
-            // Main bell tone + harmonic shimmer
             this.playHarmonicTone(ctx, f, now + timeOffset, d + 0.4, 'sine', 0.18, 0.9);
             this.playHarmonicTone(ctx, f * 2.76, now + timeOffset, d * 0.5, 'sine', 0.04, 0.4);
             timeOffset += d;
           });
         } else if (theme === 'crystal') {
-          // Lush crystal chime
           const notes = [1046.50, 1318.51, 1567.98, 2093.00];
           notes.forEach((f, idx) => {
             this.playHarmonicTone(ctx, f, now + idx * 0.15, 0.8, 'triangle', 0.15, 0.95);
@@ -294,8 +413,23 @@ class SoundEngine {
           notes.forEach((f, idx) => {
             this.playHarmonicTone(ctx, f, now + idx * 0.12, 0.4, 'sine', 0.16, 0.7);
           });
+        } else if (theme === 'bubble') {
+          const notes = [523.25, 659.25, 783.99, 1046.50];
+          notes.forEach((f, idx) => {
+            const bOsc = ctx.createOscillator();
+            const bGain = ctx.createGain();
+            const t = now + idx * 0.12;
+            bOsc.type = 'sine';
+            bOsc.frequency.setValueAtTime(f * 0.7, t);
+            bOsc.frequency.exponentialRampToValueAtTime(f, t + 0.09);
+            bGain.gain.setValueAtTime(0.18 * this.masterVolume, t);
+            bGain.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+            bOsc.connect(bGain);
+            bGain.connect(ctx.destination);
+            bOsc.start(t);
+            bOsc.stop(t + 0.14);
+          });
         } else {
-          // Standard chime
           const notes = [587.33, 880.00, 1174.66];
           notes.forEach((f, idx) => {
             this.playHarmonicTone(ctx, f, now + idx * 0.16, 0.6, 'sine', 0.15);
@@ -316,6 +450,35 @@ class SoundEngine {
           const melody = [523.25, 659.25, 783.99, 1046.50, 880.00, 1046.50, 1318.51];
           melody.forEach((f, idx) => {
             this.playHarmonicTone(ctx, f, now + idx * 0.1, 0.35, 'sine', 0.18, 0.7);
+          });
+        } else if (theme === 'crystal') {
+          for (let rep = 0; rep < 2; rep++) {
+            const baseT = now + rep * 0.45;
+            const melody = [1046.50, 1318.51, 1567.98, 2093.00];
+            melody.forEach((f, idx) => {
+              this.playHarmonicTone(ctx, f, baseT + idx * 0.09, 0.55, 'triangle', 0.16, 0.9);
+            });
+          }
+        } else if (theme === 'westminster') {
+          const notes = [659.25, 523.25, 587.33, 392.00, 523.25];
+          notes.forEach((f, idx) => {
+            this.playHarmonicTone(ctx, f, now + idx * 0.18, 0.65, 'sine', 0.18, 0.9);
+          });
+        } else if (theme === 'bubble') {
+          const notes = [659.25, 880.00, 1174.66, 1567.98];
+          notes.forEach((f, idx) => {
+            const bOsc = ctx.createOscillator();
+            const bGain = ctx.createGain();
+            const t = now + idx * 0.1;
+            bOsc.type = 'sine';
+            bOsc.frequency.setValueAtTime(f * 0.6, t);
+            bOsc.frequency.exponentialRampToValueAtTime(f, t + 0.08);
+            bGain.gain.setValueAtTime(0.2 * this.masterVolume, t);
+            bGain.gain.exponentialRampToValueAtTime(0.001, t + 0.11);
+            bOsc.connect(bGain);
+            bGain.connect(ctx.destination);
+            bOsc.start(t);
+            bOsc.stop(t + 0.13);
           });
         } else if (theme === 'scifi') {
           for (let i = 0; i < 3; i++) {
@@ -349,7 +512,6 @@ class SoundEngine {
           const notes = [523.25, 659.25, 783.99, 1046.50];
           notes.forEach((freq, idx) => {
             this.playHarmonicTone(ctx, freq, now + idx * 0.11, 0.45, 'sine', 0.22, 0.7);
-            // Wooden body overtone
             this.playHarmonicTone(ctx, freq * 3, now + idx * 0.11, 0.08, 'triangle', 0.05, 0.3);
           });
           break;
@@ -433,3 +595,13 @@ class SoundEngine {
 }
 
 export const soundEngine = new SoundEngine();
+
+// Auto-unlock AudioContext on first user interaction anywhere on the page
+if (typeof window !== 'undefined') {
+  const unlockAudio = () => {
+    soundEngine.unlock();
+  };
+  ['click', 'keydown', 'touchstart', 'pointerdown'].forEach((evt) => {
+    window.addEventListener(evt, unlockAudio, { once: true, passive: true });
+  });
+}

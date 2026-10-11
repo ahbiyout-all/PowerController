@@ -904,15 +904,15 @@ python -m PyInstaller --onefile --noconsole --name="${desktopName}" main.py`;
           </div>
         </div>
 
-        {/* Multi-Platform (PC, Android APK, iPhone iOS) Release Center */}
+        {/* Official Windows PC Release Center */}
         <div className="p-3.5 rounded-lg bg-blue-500/10 border border-blue-500/20 space-y-3">
           <div className="flex items-center justify-between">
             <h4 className="text-[12px] font-bold text-blue-600 dark:text-blue-400 flex items-center gap-1.5 font-sans">
               <span>🚀</span>
-              {lang === 'en' ? 'Multi-Platform Distribution (PC, Android APK, iPhone iOS)' : '멀티 플랫폼 설치 지원 센터 (PC, 모바일 Android APK, 아이폰 iOS)'}
+              {lang === 'en' ? 'Official Windows PC Deployment & Release Center' : '공식 Windows PC 배포 및 설치 지원 센터'}
             </h4>
             <a
-              href="https://github.com/AhBiYout/PowerController/releases"
+              href="https://github.com/AhBiYout-all/PowerController/releases"
               target="_blank"
               rel="noopener noreferrer"
               className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-600 text-white hover:bg-blue-500 transition-colors"
@@ -920,41 +920,29 @@ python -m PyInstaller --onefile --noconsole --name="${desktopName}" main.py`;
               GitHub Releases
             </a>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 text-[10.5px]">
-            {/* PC */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 text-[10.5px]">
+            {/* Windows Setup Installer */}
             <div className="p-2.5 rounded bg-gray-100 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 space-y-1">
               <div className="font-bold text-gray-900 dark:text-gray-100 flex items-center gap-1">
-                <span>💻</span> PC (Windows)
+                <span>💻</span> {lang === 'en' ? 'Windows Official Installer (.exe)' : 'Windows 공식 설치 마법사 (.exe)'}
               </div>
               <p className="text-gray-500 dark:text-gray-400 text-[10px]">
-                {lang === 'en' ? 'Inno Setup Installer (.exe) & Portable Edition' : '원클릭 설치 마법사(.exe) 및 무설치 포터블 에디션'}
+                {lang === 'en' ? 'Inno Setup 6 Unpacked Multi-File Installer with silent install & firewall rules' : 'Inno Setup 6 폴더 풀림 개별 파일 설치 및 방화벽 자동 등록'}
               </p>
               <div className="font-mono text-[9px] text-emerald-500 font-semibold">
-                build.bat (Inno Setup)
+                PowerController_Setup_v{APP_VERSION}.exe
               </div>
             </div>
-            {/* Android */}
+            {/* Remote Commander */}
             <div className="p-2.5 rounded bg-gray-100 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 space-y-1">
               <div className="font-bold text-gray-900 dark:text-gray-100 flex items-center gap-1">
-                <span>🤖</span> Android (APK)
+                <span>📡</span> {lang === 'en' ? 'Remote PC Network Commander' : '사내망 원격 PC 통합 제어 타워'}
               </div>
               <p className="text-gray-500 dark:text-gray-400 text-[10px]">
-                {lang === 'en' ? 'Native touch installer (.apk) for remote control' : '원격 전원 제어용 전용 터치 설치 패키지 (.apk)'}
+                {lang === 'en' ? 'Standalone network scheduler for PC LAN remote power management' : '사내 PC 원격 종료/리부팅 관제 콘솔'}
               </p>
               <div className="font-mono text-[9px] text-blue-500 font-semibold">
-                PowerController-v{APP_VERSION}.apk
-              </div>
-            </div>
-            {/* iPhone iOS */}
-            <div className="p-2.5 rounded bg-gray-100 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 space-y-1">
-              <div className="font-bold text-gray-900 dark:text-gray-100 flex items-center gap-1">
-                <span>🍏</span> iPhone (iOS)
-              </div>
-              <p className="text-gray-500 dark:text-gray-400 text-[10px]">
-                {lang === 'en' ? 'Sideload .ipa or Safari > [Share] > [Add to Home]' : '사이드로딩 .ipa 패키지 및 Safari 원터치 홈 화면 설치'}
-              </p>
-              <div className="font-mono text-[9px] text-purple-500 font-semibold">
-                PowerController-v{APP_VERSION}.ipa
+                PowerNetworkScheduler.exe
               </div>
             </div>
           </div>

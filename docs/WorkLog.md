@@ -354,6 +354,107 @@
 - 6대 신규 DLL 소스 개발: `disk_flush_native.c`, `audio_dimmer_native.cpp`, `display_ddc_native.cpp`, `low_level_input_idle_native.c`, `commander_tcp_dispatcher.cpp`, `commander_ping_scanner.c`.
 - `native_bridge.py` 바인딩 및 Fallback 완비, `docs/pure_custom_dll_architecture.md` 문서 등록.
 
+---
+
+### 📅 [2026-10-07] - 데스크탑용 앱(DesktopAppView) 전면 효과음 엔진 통합 및 인터랙션 피드백 완성
+
+#### 1. 문제 원인 정밀 진단
+- **결함 현상**: 사용자가 "데스크탑용 앱에 새로운 효과음이 적용되지 않은 것 같은데 확인" 요청.
+- **원인 분석**:
+  1. 데스크탑 뷰(`DesktopAppView.tsx`)의 환경설정 모달에서 알림 테마 목록이 단순한 미리듣기(`soundEngine.play(th.id, 'preview')`) 버튼으로만 존재하고, 실제로 앱의 활성 사운드 테마(`soundTheme`)로 선택되거나 `localStorage`에 저장되지 않음.
+  2. 볼륨 조절 슬라이더 및 음소거 제어가 데스크탑 뷰 설정 모달에 누락되어 사용자가 볼륨 수준을 확인하거나 변경할 수 없었음.
+  3. `DesktopAppView` 내부의 타이머 카운트다운 루프에서 10초 전 경고 틱(`warningTick`)이 미연동 상태였음.
+  4. 타이머 종료(`triggerActionDone`) 시 알람 완료음(`timerAlarm` / `actionSuccess`)이 호출되지 않았음.
+  5. 타이머 시작/정지/리셋/프리셋 추가(+10분, +30분, +1시간) 및 전원 모드 전환 시 UI 클릭음 미반영.
+  6. 커맨더(`PowerNetworkScheduler.exe`) 원격 제어 및 주입기(`ApplySharedSchedules.exe`) 스케줄 주입 시 성공음 미반영.
+  7. 데스크탑 뷰 환경에서 매시 정각 시계탑 차임벨(`hourlyChime`) 백그라운드 인터벌 미동작.
+
+#### 2. 구현 및 해결 내용
+1. **양방향 상태 동기화 및 프롭 전달 (`App.tsx` ↔ `DesktopAppView.tsx`)**:
+   - `soundTheme`, `soundVolume`, `hourlyChime` 및 상태 변경 핸들러를 `DesktopAppView`에 프롭으로 전달하고, 로컬스토리지(`power_sound_theme`, `power_sound_volume`, `power_hourly_chime`)와 상호 폴백 연동.
+2. **AudioContext Unlock 메커니즘 보강 (`soundEngine.ts`)**:
+   - 브라우저 자동 재생 정책에 대응하여 최초 마우스 클릭 또는 키 입력 시 `soundEngine.unlock()`을 호출하여 AudioContext 상태가 suspended인 경우 즉시 resume 처리.
+   - `playHarmonicTone` 내부의 게인 램프 최소 임계값을 양수 값(`0.00001`)으로 방어하여 볼륨 극소 구간의 Web Audio 런타임 오류 원천 방지.
+3. **데스크탑 전용 사운드 스튜디오 설정 센터 구축 (`DesktopAppView.tsx`)**:
+   - **마스터 볼륨 슬라이더 (0~100%)**: 실시간 볼륨 조절, 음소거/해제 토글, 빠른 프리셋(0%, 30%, 50%, 80%, 100%) 제공.
+   - **7대 테마 인터랙티브 카드 그리드**: 테마 카드 클릭 시 `✓ 사용 중` 배지와 에메랄드 테두리 활성화, 즉시 테마 적용 및 미리듣기 재생.
+   - **5대 상황별 오디션 테스트 허브**: 현재 선택된 테마 기준으로 🔔 미리듣기, ⚠️ 10초 틱, 🏛️ 정각 차임, ⏰ 만료 알람, ✨ 동작 완료음 즉석 테스트 지원.
+   - **오디오 부가 토글**: 매시 정각 시계탑 차임벨 및 버튼 클릭 조작 피드백 온/오프 스위치 제공.
+4. **타이머 & 전원 제어 사운드 완벽 연동**:
+   - 타이머 실행 중 마지막 10초(10초~1초) 매초 틱 사운드(`warningTick`) 및 30초/60초 사전 틱 재생.
+   - 타이머 만료 시 모드에 따라 알람 경보(`timerAlarm`) 또는 완료 차임(`actionSuccess`) 출력.
+   - 시작(`actionSuccess`), 일시정지/리셋/프리셋 추가/모드 선택 시 터치 피드백음 출력.
+5. **원격 커맨더 타워 및 주입기 사운드 완벽 연동**:
+   - 사내망 원격 PC 즉시 종료, 즉시 다시시작, 스케줄 동기화 일괄 송출 시 작업 성공음(`actionSuccess`) 출력.
+   - 오프라인 스케줄 원클릭 주입 시 작업 성공음(`actionSuccess`) 출력.
+6. **데스크탑 상단 툴바 오디오 인디케이터 탑재**:
+   - 상단 툴바에 현재 선택된 사운드 테마 명칭(예: `🔔 마림바 멜로디`)과 볼륨 백분율(`80%`)을 실시간 표기하고, 클릭 시 즉시 환경설정 창을 열 수 있도록 구현.
+7. **정각 시계탑 차임벨 데스크탑 지원**:
+   - 데스크탑 뷰 상주 상태에서도 매시 00분 00초 정각마다 선택된 테마의 시계탑 차임벨 사운드 자동 울림.
+
+### 📅 [2026-10-07] - 동일 유형 다중 컨트롤의 드롭다운(풀다운) 방식 전면 정돈 & 클린 UI/UX 고도화
+
+#### 1. 문제 원인 및 사용자 요구사항 분석
+- **사용자 피드백**: "같은 종류 여러개가 있으면 (드롭다운, 풀다운)방식으로 표시하는게 더 깔끔한 화면이 되지 않을까요?"
+- **문제점 진단**:
+  1. 전원 동작 6종(시스템 종료, 다시 시작, 절전 모드, 화면 끄기, 로그아웃, 알람)이 가로 3~6칸의 버튼 그리드로 고정 나열되어 화면 공간을 과도하게 차지하고 시각적 복잡도 가중.
+  2. 원격 커맨더 타워(`PowerNetworkScheduler`)에서 대상 PC 입력 및 원격 실행 명령(종료, 재부팅, 동기화)이 각각 분산된 큰 버튼으로 존재하여 관제 인터페이스의 정돈감 저하.
+  3. 지연 시간 프리셋 버튼들이 일렬로만 나열되어 다양한 시간 옵션을 제공하지 못하고 버튼이 늘어날수록 UI가 지저분해짐.
+  4. 환경설정 모달 내 상단고정창 위젯 스타일 5종이 다중 버튼 그리드로 구성되어 모달 수직 스크롤을 불필요하게 늘림.
+
+#### 2. 구현 및 해결 내용
+1. **전원 동작 선택 풀다운(드롭다운) & 토글 뷰 (`DesktopAppView.tsx` & `App.tsx`)**:
+   - 데스크탑 뷰 및 모던 웹 뷰 모두에 우아하고 직관적인 풀다운 셀렉터를 기본 제공 (`powerModeDisplayMode === 'dropdown'`).
+   - 각 동작별 아이콘(🛑, 🔄, 🌙, 📺, 🚪, 🔔), 명칭, 명확한 한 줄 설명이 포함된 드롭다운 옵션 구성.
+   - 우측 상단 토글 링크(`📋 풀다운 깔끔 접기` ↔ `🔲 버튼 그리드 펼치기`)를 통해 사용자 취향에 맞춰 원클릭 전환 가능하며, 로컬스토리지에 상태를 영구 저장.
+2. **원격 커맨더 타워(PowerNetworkScheduler) 대상 PC 및 원격 명령 풀다운화**:
+   - **대상 PC 빠른 선택 풀다운**: 실시간 탐지된 사내 PC(IP, 호스트명, 상태, 관리자 표시) 및 사내 전체 브로드캐스트(`192.168.1.255`), 부서별 PC 그룹을 풀다운에서 원클릭 선택 시 대상 IP 입력창에 자동 완결.
+   - **원격 명령 통합 풀다운**: 분산되어 있던 전원 종료/다시 시작/동기화 버튼들을 1개의 통합 풀다운 셀렉터(`즉시 종료`, `즉시 다시 시작`, `절전 모드`, `화면 끄기`, `스케줄 일괄 동기화`, `긴급 알람`)와 단일 `전송 실행` 버튼으로 압축하여 전문 관제 콘솔 스타일 완성.
+3. **지연 시간 프리셋 풀다운 탑재 (`App.tsx` & `DesktopAppView.tsx`)**:
+   - 웹 대시보드 및 데스크탑 뷰에 `➕ 시간 추가 (+3분, +5분, +10분, +15분, +30분, +45분, +1시간, +2시간, +3시간)` 및 `⚡ 즉시 지정 (15분, 30분, 1시간, 2시간)` 옵션이 망라된 통합 풀다운 탑재.
+4. **상단고정 플로팅 위젯 디자인 스타일 풀다운 (`App.tsx`)**:
+   - 환경설정 모달 내 복잡하게 나열되던 5대 위젯 디자인(`네온 링`, `사이버 HUD`, `슬림 바`, `레트로 LED`, `클린 카드`)을 단일 풀다운으로 개편하여 모달 수직 스크롤을 대폭 완화.
+5. **빌드 무결성 검증**:
+   - TypeScript 컴파일 및 린트 검증 완료, 번들 무결성 100% 확보.
+
+---
+
+### 📅 [2026-10-09] - GitHub 규칙, 실시간 자동 업데이트 팝업, CI/CD(Node 22 LTS) 및 Inno Setup 설치 표준화
+
+#### 1. 요구사항 및 주요 변동 사항
+- **제작자 및 공식 채널 표준화**:
+  - 개발자명: `AhBiYout` | GitHub: `AhBiYout-all` (`https://github.com/AhBiYout-all`)
+  - 저장소: `https://github.com/AhBiYout-all/PowerController` (앱 이름 기본 생성)
+  - 공식 구글 블로그: `https://ahbiyoutvibe.blogspot.com/` | 소속사: `https://www.cisnet.co.kr`
+- **GitHub Releases 기반 실시간 자동 업데이트 시스템**:
+  - 새 버전 감지 시 상단 배너 및 인터랙티브 업데이트 안내 팝업창(`UpdateModal`) 자동 실행.
+  - 팝업창: 인스톨러 다운로드 버튼, 깃허브 경로, 버전 비교 카드, 상세 패치 노트 및 제작자 채널 안내.
+- **개인정보 보호 & PII 유출 방지**:
+  - 깃허브 업로드 시 개인 이메일 및 개인 정보 커밋 절대 차단 (`AhBiYout-all@users.noreply.github.com`).
+  - `.gitignore` 하드닝으로 불필요한 파일/포터블/임시 파일 업로드 원천 방지.
+- **버전 하드코딩 금지 (Single Source of Truth, SSOT)**:
+  - 다단 동적 버전 추출 파이프라인 구축 (`package.json` -> `docs/PATCHNOTES.md` fallback).
+  - `push_to_github.bat`, `scripts/github_push.bat`, `scripts/sync_version.py` 동적 연동.
+- **GitHub Actions CI/CD 공식 발표 표준 준수 (Node.js 22 LTS / 24 전환)**:
+  - Node.js 20 공식 EOL 대응: `.github/workflows/release.yml`에 최신 `node-version: 22` 적용.
+  - Windows 공식 설치 프로그램(`PowerController_Setup_v2.9.1.exe`) 자동 빌드 및 릴리스 첨부.
+  - APK / iOS 비동작 환경 정밀 분석 및 관련 모바일 패키징 코드 완전 배제(Windows Native 전용 최적화).
+  - 릴리스 자산에는 오직 공식 인스톨러 파일만 첨부하고 불필요한 산출물 자동 소거.
+- **Inno Setup 6 인스톨러 표준화**:
+  - 폴더 풀림(Unpacked Multi-File) 개별 파일 설치 구조 구현 (불필요한 개발용 문서 및 포터블 파일 배포 제외).
+  - 기존 설치본 감지 시 삭제(클린 설치) 또는 덮어쓰기 선택 대화상자 지원.
+  - 무인 설치(`/SILENT`, `/VERYSILENT`, `/clean=1`) 지원.
+  - 방화벽 규칙 사전 무음 등록 (기본 이름 및 버전 명기 이름 동시 등록 및 언인스톨 시 자동 정리).
+
+#### 2. 작업 산출물
+- `push_to_github.bat`, `scripts/github_push.bat`: 동적 버전 추출 및 원클릭 배포 스크립트
+- `.github/workflows/release.yml`: Node 22 LTS 기반 Windows 공식 인스톨러 CI/CD 워크플로
+- `scripts/build_packages.py`: Inno Setup 6 기반 Windows 공식 인스톨러 생성기
+- `scripts/clean_github_release_assets.py`: 릴리스 자산 공식 인스톨러 전용 정제기
+- `scripts/sync_version.py`: SSOT 프로젝트 버전 전파 엔진
+- `PowerController.iss`: Inno Setup 6 폴더 풀림 개별 파일 설치 및 방화벽 듀얼 등록 스크립트
+- `docs/PATCHNOTES.md`, `README.md`: 최신 문서 및 공식 채널 일괄 갱신
+
 
 
 

@@ -1,26 +1,25 @@
 @echo off
 setlocal enabledelayedexpansion
-title PowerController Multi-Platform Builder
+title PowerController Official Windows Installer Builder
 color 0b
 
 :: -----------------------------------------------------------------------------
-:: Multi-Platform Universal Builder for PowerController
-:: Targets: PC (Windows Setup/Exe), Mobile (Android APK), iPhone (iOS IPA)
+:: Windows Official Setup Installer Builder for PowerController
+:: Target: PowerController_Setup_v%APP_VER%.exe (Inno Setup 6)
 :: -----------------------------------------------------------------------------
 
-set APP_VER=2.9.1
+set "APP_VER=2.9.1"
 if exist "package.json" (
     for /f "usebackq tokens=*" %%i in (`powershell -NoProfile -Command "(Get-Content package.json -Raw | ConvertFrom-Json).version" 2^>nul`) do (
-        set APP_VER=%%i
+        set "APP_VER=%%i"
     )
 )
 
 echo ================================================================
-echo   [PowerController Multi-Platform Package Builder]
-echo   - Version        : v%APP_VER%
-echo   - 1. PC Platform : Windows Installer ^& Portable Exe (.zip)
-echo   - 2. Mobile      : Android Package (.apk)
-echo   - 3. Apple iOS   : iPhone Native Package (.ipa)
+echo   [PowerController Windows Official Installer Builder]
+echo   - Target Version : v%APP_VER%
+echo   - Output Package : release_assets\PowerController_Setup_v%APP_VER%.exe
+echo   - Developer      : AhBiYout (GitHub: AhBiYout-all)
 echo ================================================================
 echo.
 
@@ -44,10 +43,8 @@ call npm run build
 :BUILD_DONE
 echo.
 echo ================================================================
-echo   [SUCCESS] Multi-platform packaging complete!
-echo   - PC Windows : build_output\pc\PowerController-v%APP_VER%-Windows.zip
-echo   - Android APK: build_output\mobile\PowerController-v%APP_VER%.apk
-echo   - iPhone IPA : build_output\ios\PowerController-v%APP_VER%.ipa
+echo   [SUCCESS] Official Windows installer packaging complete!
+echo   - Target : release_assets\PowerController_Setup_v%APP_VER%.exe
 echo ================================================================
 echo.
 pause

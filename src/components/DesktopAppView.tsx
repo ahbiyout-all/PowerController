@@ -35,7 +35,11 @@ import {
   ChevronUp,
   ChevronDown,
   Sparkles,
-  Download
+  Download,
+  Volume2,
+  VolumeX,
+  Volume1,
+  Check
 } from 'lucide-react';
 import { APP_VERSION, SoundTheme } from '../types';
 import { soundEngine, SOUND_THEMES } from '../utils/soundEngine';
@@ -54,6 +58,14 @@ interface DesktopAppViewProps {
     statusText?: string;
   };
   isPowerSavingActive?: boolean;
+  soundTheme?: SoundTheme;
+  onSoundThemeChange?: (theme: SoundTheme) => void;
+  soundVolume?: number;
+  onSoundVolumeChange?: (volume: number) => void;
+  hourlyChime?: boolean;
+  onHourlyChimeChange?: (enabled: boolean) => void;
+  soundFeedbackEnabled?: boolean;
+  onSoundFeedbackChange?: (enabled: boolean) => void;
 }
 
 interface ScheduleRuleItem {
@@ -71,7 +83,15 @@ export const DesktopAppView: React.FC<DesktopAppViewProps> = ({
   onOpenLicense,
   isWebAvailable = true,
   battery,
-  isPowerSavingActive = false
+  isPowerSavingActive = false,
+  soundTheme: propSoundTheme,
+  onSoundThemeChange,
+  soundVolume: propSoundVolume,
+  onSoundVolumeChange,
+  hourlyChime: propHourlyChime,
+  onHourlyChimeChange,
+  soundFeedbackEnabled: propSoundFeedbackEnabled,
+  onSoundFeedbackChange
 }) => {
   // Active desktop program
   const [activeApp, setActiveApp] = useState<DesktopWindowType>('main');
@@ -110,11 +130,251 @@ export const DesktopAppView: React.FC<DesktopAppViewProps> = ({
     }
   });
 
+  // Idle Auto-Lock Desktop state & refs
+  const [idleLockEnabled, setIdleLockEnabled] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('power_idle_lock_enabled');
+      return saved !== null ? saved === 'true' : false;
+    } catch {
+      return false;
+    }
+  });
+
+  const [idleLockMinutes, setIdleLockMinutes] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('power_idle_lock_minutes');
+      return saved ? parseInt(saved, 10) : 5;
+    } catch {
+      return 5;
+    }
+  });
+
+  const [isDesktopLocked, setIsDesktopLocked] = useState<boolean>(false);
+  const lastUserActivityRef = useRef<number>(Date.now());
+
   // Settings popup inside desktop
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showSchedulerPopup, setShowSchedulerPopup] = useState(false);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [showToast, setShowToast] = useState<string | null>(null);
+
+  // Sound Engine States & Integration
+  const [currentSoundTheme, setCurrentSoundTheme] = useState<SoundTheme>(() => {
+    if (propSoundTheme) return propSoundTheme;
+    try {
+      const saved = localStorage.getItem('power_sound_theme');
+      return (saved as SoundTheme) || 'classic';
+    } catch {
+      return 'classic';
+    }
+  });
+
+  const [currentSoundVolume, setCurrentSoundVolume] = useState<number>(() => {
+    if (propSoundVolume !== undefined) return propSoundVolume;
+    return soundEngine.getVolume();
+  });
+
+  const [currentHourlyChime, setCurrentHourlyChime] = useState<boolean>(() => {
+    if (propHourlyChime !== undefined) return propHourlyChime;
+    try {
+      const saved = localStorage.getItem('power_hourly_chime');
+      return saved !== null ? saved === 'true' : true;
+    } catch {
+      return true;
+    }
+  });
+
+  const [soundFeedbackEnabled, setSoundFeedbackEnabled] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('power_sound_feedback');
+      return saved !== null ? saved === 'true' : true;
+    } catch {
+      return true;
+    }
+  });
+
+  // Pull-down selection state for sound audition test
+  const [selectedSoundTestTrigger, setSelectedSoundTestTrigger] = useState<
+    'preview' | 'warningTick' | 'hourlyChime' | 'timerAlarm' | 'actionSuccess'
+  >('preview');
+
+  // Power Mode UI Display format: 'dropdown' (clean, compact) vs 'grid' (expanded buttons)
+  const [powerModeDisplayMode, setPowerModeDisplayMode] = useState<'dropdown' | 'grid'>(() => {
+    try {
+      const saved = localStorage.getItem('desktop_power_mode_display');
+      return (saved as 'dropdown' | 'grid') || 'dropdown';
+    } catch {
+      return 'dropdown';
+    }
+  });
+
+  // Window 2 Remote Action Pulldown selection
+  const [selectedRemoteAction, setSelectedRemoteAction] = useState<string>('shutdown');
+
+  // Sync with prop changes if passed from App.tsx
+  useEffect(() => {
+    if (propSoundTheme && propSoundTheme !== currentSoundTheme) {
+      setCurrentSoundTheme(propSoundTheme);
+    }
+  }, [propSoundTheme]);
+
+  useEffect(() => {
+    if (propSoundVolume !== undefined && propSoundVolume !== currentSoundVolume) {
+      setCurrentSoundVolume(propSoundVolume);
+      soundEngine.setVolume(propSoundVolume);
+    }
+  }, [propSoundVolume]);
+
+  useEffect(() => {
+    if (propHourlyChime !== undefined && propHourlyChime !== currentHourlyChime) {
+      setCurrentHourlyChime(propHourlyChime);
+    }
+  }, [propHourlyChime]);
+
+  useEffect(() => {
+    if (propSoundFeedbackEnabled !== undefined && propSoundFeedbackEnabled !== soundFeedbackEnabled) {
+      setSoundFeedbackEnabled(propSoundFeedbackEnabled);
+    }
+  }, [propSoundFeedbackEnabled]);
+
+  // AudioContext unlock on first user gesture (mouse click or key down)
+  useEffect(() => {
+    const handleGesture = () => {
+      soundEngine.unlock();
+    };
+    window.addEventListener('click', handleGesture, { once: true });
+    window.addEventListener('keydown', handleGesture, { once: true });
+    return () => {
+      window.removeEventListener('click', handleGesture);
+      window.removeEventListener('keydown', handleGesture);
+    };
+  }, []);
+
+  // Hourly Chime Effect in Desktop App
+  useEffect(() => {
+    if (!currentHourlyChime) return;
+    const interval = setInterval(() => {
+      const now = new Date();
+      if (now.getMinutes() === 0 && now.getSeconds() === 0) {
+        soundEngine.play(currentSoundTheme, 'hourlyChime');
+        showInAppToast(`🔔 정각 알림 (${now.getHours()}시 정각)`);
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [currentHourlyChime, currentSoundTheme]);
+
+  // System Idle Auto-Lock in Desktop App View
+  useEffect(() => {
+    const handleUserActivity = () => {
+      lastUserActivityRef.current = Date.now();
+    };
+
+    window.addEventListener('mousemove', handleUserActivity);
+    window.addEventListener('mousedown', handleUserActivity);
+    window.addEventListener('keydown', handleUserActivity);
+    window.addEventListener('touchstart', handleUserActivity);
+    window.addEventListener('scroll', handleUserActivity);
+
+    const idleInterval = setInterval(() => {
+      if (!idleLockEnabled || !isTimerRunning || isDesktopLocked) return;
+      const elapsed = Date.now() - lastUserActivityRef.current;
+      const threshold = idleLockMinutes * 60 * 1000;
+      if (elapsed >= threshold) {
+        setIsDesktopLocked(true);
+        soundEngine.play(currentSoundTheme, 'warningTick');
+        showInAppToast(`🔒 유휴 상태 감지(${idleLockMinutes}분): 데스크톱 세션을 안전하게 잠갔습니다.`);
+      }
+    }, 1000);
+
+    return () => {
+      window.removeEventListener('mousemove', handleUserActivity);
+      window.removeEventListener('mousedown', handleUserActivity);
+      window.removeEventListener('keydown', handleUserActivity);
+      window.removeEventListener('touchstart', handleUserActivity);
+      window.removeEventListener('scroll', handleUserActivity);
+      clearInterval(idleInterval);
+    };
+  }, [idleLockEnabled, idleLockMinutes, isTimerRunning, isDesktopLocked, currentSoundTheme]);
+
+  // Keydown unlock listener in Desktop App View
+  useEffect(() => {
+    if (!isDesktopLocked) return;
+    const handleUnlockKey = (e: KeyboardEvent) => {
+      if (e.key === 'Enter' || e.key === ' ' || e.key === 'Escape') {
+        setIsDesktopLocked(false);
+        lastUserActivityRef.current = Date.now();
+        soundEngine.play(currentSoundTheme, 'actionSuccess');
+        showInAppToast('🔓 데스크톱 세션 잠금이 정상 해제되었습니다.');
+      }
+    };
+    window.addEventListener('keydown', handleUnlockKey);
+    return () => window.removeEventListener('keydown', handleUnlockKey);
+  }, [isDesktopLocked, currentSoundTheme]);
+
+  const playSoundEffect = (
+    trigger: 'buttonClick' | 'actionSuccess' | 'warningTick' | 'timerAlarm' | 'hourlyChime' | 'preview',
+    overrideTheme?: SoundTheme
+  ) => {
+    if (!soundFeedbackEnabled && trigger === 'buttonClick') return;
+    soundEngine.play(overrideTheme || currentSoundTheme, trigger);
+  };
+
+  const handleSelectSoundTheme = (themeId: SoundTheme) => {
+    setCurrentSoundTheme(themeId);
+    onSoundThemeChange?.(themeId);
+    try {
+      localStorage.setItem('power_sound_theme', themeId);
+    } catch {}
+    soundEngine.play(themeId, 'preview');
+    const matched = SOUND_THEMES.find(t => t.id === themeId);
+    showInAppToast(`[${matched?.nameKo || themeId}] 알림음 테마가 적용되었습니다.`);
+  };
+
+  const handleVolumeChange = (vol: number) => {
+    const clamped = Math.min(100, Math.max(0, vol));
+    setCurrentSoundVolume(clamped);
+    soundEngine.setVolume(clamped);
+    onSoundVolumeChange?.(clamped);
+  };
+
+  const [prevSoundVolume, setPrevSoundVolume] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('power_sound_prev_volume');
+      return saved !== null ? Math.max(10, parseInt(saved, 10)) : (currentSoundVolume > 0 ? currentSoundVolume : 80);
+    } catch {
+      return 80;
+    }
+  });
+
+  const handleToggleMuteAllDesktop = () => {
+    if (currentSoundVolume > 0) {
+      const volToSave = currentSoundVolume;
+      setPrevSoundVolume(volToSave);
+      try {
+        localStorage.setItem('power_sound_prev_volume', String(volToSave));
+      } catch {}
+      handleVolumeChange(0);
+      showInAppToast('🔇 모든 효과음 및 알림이 음소거되었습니다 (볼륨 0%).');
+    } else {
+      const restoreVol = prevSoundVolume > 0 ? prevSoundVolume : 80;
+      handleVolumeChange(restoreVol);
+      showInAppToast(`🔊 사운드 볼륨이 ${restoreVol}%로 원복되었습니다.`);
+    }
+  };
+
+  const handleHourlyChimeToggle = (enabled: boolean) => {
+    setCurrentHourlyChime(enabled);
+    onHourlyChimeChange?.(enabled);
+    try {
+      localStorage.setItem('power_hourly_chime', enabled ? 'true' : 'false');
+    } catch {}
+    if (enabled) {
+      soundEngine.play(currentSoundTheme, 'hourlyChime');
+      showInAppToast('매시 정각 시계탑 차임벨이 활성화되었습니다.');
+    } else {
+      showInAppToast('정각 차임벨이 비활성화되었습니다.');
+    }
+  };
 
   // Schedule rules
   const [rules, setRules] = useState<ScheduleRuleItem[]>([
@@ -161,12 +421,17 @@ export const DesktopAppView: React.FC<DesktopAppViewProps> = ({
             triggerActionDone();
             return 0;
           }
-          return prev - 1;
+          const nextVal = prev - 1;
+          // Play warning tick on last 10 seconds or exactly 30s/60s
+          if ((nextVal <= 10 && nextVal > 0) || nextVal === 30 || nextVal === 60) {
+            playSoundEffect('warningTick');
+          }
+          return nextVal;
         });
       }, 1000);
     }
     return () => clearInterval(interval);
-  }, [isTimerRunning, remainingSeconds]);
+  }, [isTimerRunning, remainingSeconds, currentSoundTheme, soundFeedbackEnabled]);
 
   const triggerActionDone = () => {
     const timestamp = new Date().toLocaleTimeString('ko-KR');
@@ -174,6 +439,11 @@ export const DesktopAppView: React.FC<DesktopAppViewProps> = ({
       `[${timestamp}] ⚡ [타이머 실행] 모드 '${powerMode}' 명령이 성공적으로 실행되었습니다. (강제 닫기: ${forceClose ? '/f' : '없음'})`,
       ...prev
     ]);
+    if (powerMode === 'alarm') {
+      soundEngine.play(currentSoundTheme, 'timerAlarm');
+    } else {
+      soundEngine.play(currentSoundTheme, 'actionSuccess');
+    }
     showInAppToast(`⚡ [완료] ${powerMode} 동작이 실행되었습니다!`);
   };
 
@@ -194,11 +464,13 @@ export const DesktopAppView: React.FC<DesktopAppViewProps> = ({
       const total = inputH * 3600 + inputM * 60 + inputS;
       if (total <= 0) {
         showInAppToast('⚠️ 타이머 시간을 1초 이상 입력해 주세요.');
+        playSoundEffect('buttonClick');
         return;
       }
       setRemainingSeconds(total);
     }
     setIsTimerRunning(true);
+    playSoundEffect('actionSuccess');
     const timestamp = new Date().toLocaleTimeString('ko-KR');
     setLogs(prev => [
       `[${timestamp}] ▶ 타이머 시작: [모드: ${powerMode}] [남은시간: ${formatDigitalTime(remainingSeconds)}] [강제종료: ${forceClose ? '/f' : '미적용'}]`,
@@ -209,6 +481,7 @@ export const DesktopAppView: React.FC<DesktopAppViewProps> = ({
 
   const stopTimer = () => {
     setIsTimerRunning(false);
+    playSoundEffect('buttonClick');
     const timestamp = new Date().toLocaleTimeString('ko-KR');
     setLogs(prev => [
       `[${timestamp}] ⏹ 타이머 일시 정지/중지됨`,
@@ -219,18 +492,21 @@ export const DesktopAppView: React.FC<DesktopAppViewProps> = ({
 
   const resetTimer = () => {
     setIsTimerRunning(false);
+    playSoundEffect('buttonClick');
     const total = inputH * 3600 + inputM * 60 + inputS;
     setRemainingSeconds(total > 0 ? total : 30 * 60);
     showInAppToast('🔄 타이머가 초기화되었습니다.');
   };
 
   const addPresetTime = (sec: number) => {
+    playSoundEffect('buttonClick');
     setRemainingSeconds(prev => prev + sec);
     showInAppToast(`+${sec >= 3600 ? `${sec / 3600}시간` : `${sec / 60}분`} 추가되었습니다.`);
   };
 
   const addScheduleRule = () => {
     if (!newRuleName.trim()) return;
+    playSoundEffect('actionSuccess');
     const newRule: ScheduleRuleItem = {
       id: Date.now().toString(),
       name: newRuleName,
@@ -250,6 +526,7 @@ export const DesktopAppView: React.FC<DesktopAppViewProps> = ({
   };
 
   const deleteScheduleRule = (id: string) => {
+    playSoundEffect('buttonClick');
     setRules(prev => prev.filter(r => r.id !== id));
     showInAppToast('🗑️ 스케줄 규칙이 삭제되었습니다.');
   };
@@ -274,7 +551,10 @@ export const DesktopAppView: React.FC<DesktopAppViewProps> = ({
         {/* Program Switcher Tabs */}
         <div className="flex items-center gap-1.5 bg-slate-950 p-1 rounded-md border border-slate-800">
           <button
-            onClick={() => setActiveApp('main')}
+            onClick={() => {
+              setActiveApp('main');
+              playSoundEffect('buttonClick');
+            }}
             className={`px-3 py-1 rounded font-medium transition-colors flex items-center gap-1.5 ${
               activeApp === 'main'
                 ? 'bg-blue-600 text-white shadow-sm font-bold'
@@ -285,7 +565,10 @@ export const DesktopAppView: React.FC<DesktopAppViewProps> = ({
             <span>PowerController.exe</span>
           </button>
           <button
-            onClick={() => setActiveApp('network')}
+            onClick={() => {
+              setActiveApp('network');
+              playSoundEffect('buttonClick');
+            }}
             className={`px-3 py-1 rounded font-medium transition-colors flex items-center gap-1.5 ${
               activeApp === 'network'
                 ? 'bg-blue-600 text-white shadow-sm font-bold'
@@ -296,7 +579,10 @@ export const DesktopAppView: React.FC<DesktopAppViewProps> = ({
             <span>PowerNetworkScheduler.exe</span>
           </button>
           <button
-            onClick={() => setActiveApp('injector')}
+            onClick={() => {
+              setActiveApp('injector');
+              playSoundEffect('buttonClick');
+            }}
             className={`px-3 py-1 rounded font-medium transition-colors flex items-center gap-1.5 ${
               activeApp === 'injector'
                 ? 'bg-blue-600 text-white shadow-sm font-bold'
@@ -342,6 +628,49 @@ export const DesktopAppView: React.FC<DesktopAppViewProps> = ({
             )}
           </div>
         )}
+
+        {/* Sound Status & Quick Controller in Desktop Toolbar */}
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={() => {
+              playSoundEffect('buttonClick');
+              setShowSettingsModal(true);
+            }}
+            className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-950/80 hover:bg-slate-800 border border-slate-800 rounded text-slate-200 text-xs transition-colors cursor-pointer shadow-inner"
+            title={`알림 효과음 테마: ${SOUND_THEMES.find(t => t.id === currentSoundTheme)?.nameKo || '클래식 벨'} (볼륨 ${currentSoundVolume}%) - 클릭 시 환경설정 열기`}
+          >
+            {currentSoundVolume === 0 ? (
+              <VolumeX className="w-3.5 h-3.5 text-rose-400" />
+            ) : currentSoundVolume < 50 ? (
+              <Volume1 className="w-3.5 h-3.5 text-amber-400" />
+            ) : (
+              <Volume2 className="w-3.5 h-3.5 text-emerald-400" />
+            )}
+            <span className="font-semibold text-emerald-300 hidden sm:inline">
+              {SOUND_THEMES.find(t => t.id === currentSoundTheme)?.nameKo || '클래식 벨'}
+            </span>
+            <span className="font-mono text-[11px] text-slate-400 font-bold">
+              {currentSoundVolume}%
+            </span>
+          </button>
+
+          <button
+            onClick={handleToggleMuteAllDesktop}
+            className={`px-2 py-1 rounded text-xs font-bold transition-all cursor-pointer flex items-center gap-1 border shadow-sm ${
+              currentSoundVolume === 0
+                ? 'bg-rose-500/25 text-rose-300 border-rose-500/50 hover:bg-rose-500/35 animate-pulse'
+                : 'bg-slate-950/80 hover:bg-slate-800 text-slate-300 border-slate-800'
+            }`}
+            title={
+              currentSoundVolume === 0
+                ? `음소거 해제 (${prevSoundVolume}% 복원)`
+                : '모든 사운드 효과음 및 알림 즉시 음소거 (0%)'
+            }
+          >
+            <VolumeX className="w-3.5 h-3.5 text-rose-400" />
+            <span>{currentSoundVolume === 0 ? '음소거중 (0%)' : '음소거'}</span>
+          </button>
+        </div>
 
         {/* Web Switcher, Update Button & License Button */}
         <div className="flex items-center gap-2">
@@ -393,14 +722,33 @@ export const DesktopAppView: React.FC<DesktopAppViewProps> = ({
                 </div>
                 <span>PowerController v{APP_VERSION} - PC 자동 전원 관리</span>
               </div>
-              <div className="flex items-center gap-1 text-slate-400">
+              <div className="flex items-center gap-2 text-slate-400">
+                {/* Dedicated Mute All Button in Title Bar */}
                 <button
-                  onClick={() => setIsMinimized(!isMinimized)}
-                  className="w-7 h-5 flex items-center justify-center hover:bg-[#27272a] hover:text-white rounded"
-                  title="최소화"
+                  onClick={handleToggleMuteAllDesktop}
+                  className={`px-2 py-0.5 rounded text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1 border ${
+                    currentSoundVolume === 0
+                      ? 'bg-rose-500/20 text-rose-300 border-rose-500/50 hover:bg-rose-500/30 animate-pulse'
+                      : 'bg-[#27272a] text-slate-300 border-slate-700 hover:bg-slate-700'
+                  }`}
+                  title={
+                    currentSoundVolume === 0
+                      ? `음소거 해제 (${prevSoundVolume}% 복원)`
+                      : '모든 사운드 즉시 음소거 (0%)'
+                  }
                 >
-                  <span className="mb-2 font-bold text-xs">—</span>
+                  <VolumeX className="w-3 h-3 text-rose-400" />
+                  <span>{currentSoundVolume === 0 ? '음소거중' : '음소거'}</span>
                 </button>
+
+                <div className="flex items-center gap-1 border-l border-slate-700 pl-1.5">
+                  <button
+                    onClick={() => setIsMinimized(!isMinimized)}
+                    className="w-7 h-5 flex items-center justify-center hover:bg-[#27272a] hover:text-white rounded"
+                    title="최소화"
+                  >
+                    <span className="mb-2 font-bold text-xs">—</span>
+                  </button>
                 <button
                   onClick={() => setIsWindowMaximized(!isWindowMaximized)}
                   className="w-7 h-5 flex items-center justify-center hover:bg-[#27272a] hover:text-white rounded"
@@ -417,6 +765,7 @@ export const DesktopAppView: React.FC<DesktopAppViewProps> = ({
                 </button>
               </div>
             </div>
+          </div>
 
             {/* Native Creative DLL Status Bar Badge */}
             <div className="bg-[#121216] px-3 py-1.5 border-b border-[#27272a] flex items-center justify-between text-[11px] text-slate-400">
@@ -527,8 +876,11 @@ export const DesktopAppView: React.FC<DesktopAppViewProps> = ({
 
               {/* Settings Toggle Button */}
               <button
-                onClick={() => setShowSettingsModal(true)}
-                className="w-full py-2 bg-[#2b2b36] hover:bg-[#323240] text-slate-200 font-bold rounded border border-[#3f3f46] flex items-center justify-center gap-2 transition-colors"
+                onClick={() => {
+                  playSoundEffect('buttonClick');
+                  setShowSettingsModal(true);
+                }}
+                className="w-full py-2 bg-[#2b2b36] hover:bg-[#323240] text-slate-200 font-bold rounded border border-[#3f3f46] flex items-center justify-center gap-2 transition-colors cursor-pointer"
               >
                 <Settings className="w-4 h-4 text-blue-400" />
                 <span>⚙️ 설정 (Settings) ...</span>
@@ -537,8 +889,11 @@ export const DesktopAppView: React.FC<DesktopAppViewProps> = ({
               {/* 3 Tab Navigation Header Bar */}
               <div className="flex items-center gap-1 border-b border-[#3f3f46] pb-1">
                 <button
-                  onClick={() => setActiveTab('control')}
-                  className={`flex-1 py-1.5 rounded text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                  onClick={() => {
+                    setActiveTab('control');
+                    playSoundEffect('buttonClick');
+                  }}
+                  className={`flex-1 py-1.5 rounded text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                     activeTab === 'control'
                       ? 'bg-blue-600 text-white shadow'
                       : 'bg-[#2b2b36] text-slate-300 hover:bg-[#323240]'
@@ -548,8 +903,11 @@ export const DesktopAppView: React.FC<DesktopAppViewProps> = ({
                   <span>⏱ 간편 제어</span>
                 </button>
                 <button
-                  onClick={() => setActiveTab('scheduler')}
-                  className={`flex-1 py-1.5 rounded text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                  onClick={() => {
+                    setActiveTab('scheduler');
+                    playSoundEffect('buttonClick');
+                  }}
+                  className={`flex-1 py-1.5 rounded text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                     activeTab === 'scheduler'
                       ? 'bg-blue-600 text-white shadow'
                       : 'bg-[#2b2b36] text-slate-300 hover:bg-[#323240]'
@@ -559,8 +917,11 @@ export const DesktopAppView: React.FC<DesktopAppViewProps> = ({
                   <span>📅 스케줄러</span>
                 </button>
                 <button
-                  onClick={() => setActiveTab('history')}
-                  className={`flex-1 py-1.5 rounded text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                  onClick={() => {
+                    setActiveTab('history');
+                    playSoundEffect('buttonClick');
+                  }}
+                  className={`flex-1 py-1.5 rounded text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                     activeTab === 'history'
                       ? 'bg-blue-600 text-white shadow'
                       : 'bg-[#2b2b36] text-slate-300 hover:bg-[#323240]'
@@ -576,39 +937,112 @@ export const DesktopAppView: React.FC<DesktopAppViewProps> = ({
               {/* ============================================================= */}
               {activeTab === 'control' && (
                 <div className="space-y-3">
-                  {/* 6 Power Modes in 2 rows x 3 columns */}
-                  <div className="grid grid-cols-3 gap-1.5">
-                    {[
-                      { id: 'shutdown', label: '종료', icon: Power, color: 'bg-red-600 text-white' },
-                      { id: 'restart', label: '재시작', icon: RotateCw, color: 'bg-orange-600 text-white' },
-                      { id: 'sleep', label: '절전', icon: Moon, color: 'bg-indigo-600 text-white' },
-                      { id: 'screenoff', label: '화면끔', icon: Monitor, color: 'bg-purple-600 text-white' },
-                      { id: 'logout', label: '로그아웃', icon: LogOut, color: 'bg-slate-700 text-white' },
-                      { id: 'alarm', label: '알람', icon: Bell, color: 'bg-yellow-600 text-white' }
-                    ].map(mode => {
-                      const isSelected = powerMode === mode.id;
-                      return (
-                        <button
-                          key={mode.id}
-                          onClick={() => setPowerMode(mode.id as any)}
-                          className={`py-2 px-2 rounded font-bold text-xs flex items-center justify-center gap-1.5 border transition-all ${
-                            isSelected
-                              ? `${mode.color} border-transparent shadow`
-                              : 'bg-[#2b2b36] hover:bg-[#353544] text-slate-200 border-[#3f3f46]'
-                          }`}
+                  {/* Power Mode: Clean Dropdown/Pulldown Selector vs Grid Toggle */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between text-[11px] text-slate-300 font-semibold">
+                      <div className="flex items-center gap-1.5">
+                        <span>⚡ 전원 동작 선택:</span>
+                        <span className="font-bold text-blue-400">
+                          {powerMode === 'shutdown' && '🛑 시스템 종료'}
+                          {powerMode === 'restart' && '🔄 다시 시작'}
+                          {powerMode === 'sleep' && '🌙 절전 모드'}
+                          {powerMode === 'screenoff' && '📺 화면 끄기'}
+                          {powerMode === 'logout' && '🚪 로그아웃'}
+                          {powerMode === 'alarm' && '🔔 알람 알림'}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const next = powerModeDisplayMode === 'dropdown' ? 'grid' : 'dropdown';
+                          setPowerModeDisplayMode(next);
+                          try { localStorage.setItem('desktop_power_mode_display', next); } catch {}
+                          playSoundEffect('buttonClick');
+                        }}
+                        className="text-[10px] text-slate-400 hover:text-slate-200 underline cursor-pointer transition-colors"
+                        title={powerModeDisplayMode === 'dropdown' ? '모든 버튼 그리드로 펼치기' : '드롭다운으로 화면을 깔끔하게 접기'}
+                      >
+                        {powerModeDisplayMode === 'dropdown' ? '🔲 버튼 펼치기' : '📋 풀다운 깔끔 접기'}
+                      </button>
+                    </div>
+
+                    {powerModeDisplayMode === 'dropdown' ? (
+                      <div className="relative">
+                        <select
+                          value={powerMode}
+                          onChange={(e) => {
+                            setPowerMode(e.target.value as any);
+                            playSoundEffect('buttonClick');
+                            const labels: Record<string, string> = {
+                              shutdown: '시스템 종료',
+                              restart: '다시 시작',
+                              sleep: '절전 모드',
+                              screenoff: '화면 끄기',
+                              logout: '로그아웃',
+                              alarm: '알람 알림',
+                            };
+                            showInAppToast(`⚡ 전원 동작: [${labels[e.target.value] || e.target.value}] 설정 완료`);
+                          }}
+                          className="w-full bg-[#24242e] border border-[#3f3f46] hover:border-blue-500/70 rounded px-3 py-2 text-xs font-bold text-slate-100 appearance-none focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer pl-8 pr-8 shadow-inner"
                         >
-                          <mode.icon className="w-3.5 h-3.5" />
-                          <span>{mode.label}</span>
-                        </button>
-                      );
-                    })}
+                          <option value="shutdown">🛑 1. 시스템 종료 (Shutdown) - 모든 앱을 닫고 PC 전원을 완전히 끕니다</option>
+                          <option value="restart">🔄 2. 다시 시작 (Restart) - 운영체제를 안전하게 재부팅합니다</option>
+                          <option value="sleep">🌙 3. 절전 모드 (Sleep) - 작업 상태를 RAM에 유지하고 저전력 대기로 전환</option>
+                          <option value="screenoff">📺 4. 화면 끄기 (Screen Off) - 백그라운드 유지 상태에서 모니터만 절전</option>
+                          <option value="logout">🚪 5. 로그아웃 (Sign Out) - 현재 계정 세션을 안전하게 종료합니다</option>
+                          <option value="alarm">🔔 6. 알람 알림 (Alarm Only) - 전원 차단 없이 알림음과 팝업만 발생</option>
+                        </select>
+                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-sm pointer-events-none">
+                          {powerMode === 'shutdown' && '🛑'}
+                          {powerMode === 'restart' && '🔄'}
+                          {powerMode === 'sleep' && '🌙'}
+                          {powerMode === 'screenoff' && '📺'}
+                          {powerMode === 'logout' && '🚪'}
+                          {powerMode === 'alarm' && '🔔'}
+                        </span>
+                        <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-3 gap-1.5">
+                        {[
+                          { id: 'shutdown', label: '종료', icon: Power, color: 'bg-red-600 text-white' },
+                          { id: 'restart', label: '재시작', icon: RotateCw, color: 'bg-orange-600 text-white' },
+                          { id: 'sleep', label: '절전', icon: Moon, color: 'bg-indigo-600 text-white' },
+                          { id: 'screenoff', label: '화면끔', icon: Monitor, color: 'bg-purple-600 text-white' },
+                          { id: 'logout', label: '로그아웃', icon: LogOut, color: 'bg-slate-700 text-white' },
+                          { id: 'alarm', label: '알람', icon: Bell, color: 'bg-yellow-600 text-white' }
+                        ].map(mode => {
+                          const isSelected = powerMode === mode.id;
+                          return (
+                            <button
+                              key={mode.id}
+                              onClick={() => {
+                                setPowerMode(mode.id as any);
+                                playSoundEffect('buttonClick');
+                              }}
+                              className={`py-2 px-2 rounded font-bold text-xs flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
+                                isSelected
+                                  ? `${mode.color} border-transparent shadow`
+                                  : 'bg-[#2b2b36] hover:bg-[#353544] text-slate-200 border-[#3f3f46]'
+                              }`}
+                            >
+                              <mode.icon className="w-3.5 h-3.5" />
+                              <span>{mode.label}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
 
                   {/* Run Type: Timer vs Fixed Schedule */}
                   <div className="grid grid-cols-2 gap-2">
                     <button
-                      onClick={() => setRunType('timer')}
-                      className={`py-1.5 rounded font-bold text-xs transition-colors ${
+                      onClick={() => {
+                        setRunType('timer');
+                        playSoundEffect('buttonClick');
+                      }}
+                      className={`py-1.5 rounded font-bold text-xs transition-colors cursor-pointer ${
                         runType === 'timer'
                           ? 'bg-blue-600 text-white'
                           : 'bg-[#2b2b36] text-slate-300 hover:bg-[#323240]'
@@ -617,8 +1051,11 @@ export const DesktopAppView: React.FC<DesktopAppViewProps> = ({
                       ⏳ 시간 타이머 (후)
                     </button>
                     <button
-                      onClick={() => setRunType('schedule')}
-                      className={`py-1.5 rounded font-bold text-xs transition-colors ${
+                      onClick={() => {
+                        setRunType('schedule');
+                        playSoundEffect('buttonClick');
+                      }}
+                      className={`py-1.5 rounded font-bold text-xs transition-colors cursor-pointer ${
                         runType === 'schedule'
                           ? 'bg-blue-600 text-white'
                           : 'bg-[#2b2b36] text-slate-300 hover:bg-[#323240]'
@@ -751,38 +1188,75 @@ export const DesktopAppView: React.FC<DesktopAppViewProps> = ({
                       />
                     </div>
 
-                    {/* Quick +Preset Buttons */}
-                    <div className="flex items-center justify-center gap-2 mt-3 pt-2 border-t border-[#27272a]">
-                      <button
-                        onClick={() => addPresetTime(10 * 60)}
-                        className="px-2 py-1 bg-[#2b2b36] hover:bg-[#353544] rounded text-xs font-bold text-slate-200"
-                      >
-                        +10분
-                      </button>
-                      <button
-                        onClick={() => addPresetTime(30 * 60)}
-                        className="px-2 py-1 bg-[#2b2b36] hover:bg-[#353544] rounded text-xs font-bold text-slate-200"
-                      >
-                        +30분
-                      </button>
-                      <button
-                        onClick={() => addPresetTime(60 * 60)}
-                        className="px-2 py-1 bg-[#2b2b36] hover:bg-[#353544] rounded text-xs font-bold text-slate-200"
-                      >
-                        +1시간
-                      </button>
-                      <button
-                        onClick={() => {
-                          setInputH(1);
-                          setInputM(0);
-                          setInputS(0);
-                          setRemainingSeconds(3600);
-                          showInAppToast('1시간 프리셋이 적용되었습니다.');
-                        }}
-                        className="px-2 py-1 bg-indigo-600/30 border border-indigo-500/40 hover:bg-indigo-600/50 text-indigo-300 rounded text-xs font-bold"
-                      >
-                        ⚡ 1시간 빠른 종료
-                      </button>
+                    {/* Quick +Preset Pull-down & Fast Buttons */}
+                    <div className="mt-3 pt-2 border-t border-[#27272a] space-y-1.5">
+                      <div className="flex items-center justify-between text-[11px] text-slate-400 font-semibold">
+                        <span>⏱️ 시간 프리셋 (풀다운 / 빠른 선택):</span>
+                        <span className="text-[10px] text-blue-400 font-mono">단축 제어</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <div className="relative flex-1">
+                          <select
+                            defaultValue=""
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (!val) return;
+                              if (val.startsWith('add:')) {
+                                const sec = parseInt(val.split(':')[1], 10);
+                                addPresetTime(sec);
+                              } else if (val.startsWith('set:')) {
+                                const sec = parseInt(val.split(':')[1], 10);
+                                const h = Math.floor(sec / 3600);
+                                const m = Math.floor((sec % 3600) / 60);
+                                setInputH(h);
+                                setInputM(m);
+                                setInputS(0);
+                                setRemainingSeconds(sec);
+                                playSoundEffect('buttonClick');
+                                showInAppToast(`⚡ ${sec >= 3600 ? `${sec / 3600}시간` : `${sec / 60}분`} 프리셋이 즉시 설정되었습니다.`);
+                              }
+                              e.target.value = '';
+                            }}
+                            className="w-full bg-[#2b2b36] border border-[#3f3f46] hover:border-blue-500/70 rounded px-2.5 py-1 text-xs text-slate-200 appearance-none focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer pr-7 font-medium"
+                          >
+                            <option value="">⏱️ 자주 쓰는 시간 프리셋 풀다운...</option>
+                            <optgroup label="➕ 시간 추가 (현재 시간에 누적)">
+                              <option value="add:300">+5분 추가</option>
+                              <option value="add:600">+10분 추가</option>
+                              <option value="add:900">+15분 추가</option>
+                              <option value="add:1800">+30분 추가</option>
+                              <option value="add:2700">+45분 추가</option>
+                              <option value="add:3600">+1시간 추가</option>
+                              <option value="add:7200">+2시간 추가</option>
+                            </optgroup>
+                            <optgroup label="⚡ 즉시 지정 (지정 시간으로 타이머 리셋)">
+                              <option value="set:1800">⚡ 30분 빠른 타이머 설정</option>
+                              <option value="set:3600">⚡ 1시간 빠른 타이머 설정</option>
+                              <option value="set:7200">⚡ 2시간 빠른 타이머 설정</option>
+                              <option value="set:10800">⚡ 3시간 빠른 타이머 설정</option>
+                            </optgroup>
+                          </select>
+                          <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                        </div>
+                        <button
+                          onClick={() => addPresetTime(10 * 60)}
+                          className="px-2 py-1 bg-[#2b2b36] hover:bg-[#353544] rounded text-xs font-bold text-slate-200 cursor-pointer shrink-0"
+                        >
+                          +10분
+                        </button>
+                        <button
+                          onClick={() => addPresetTime(30 * 60)}
+                          className="px-2 py-1 bg-[#2b2b36] hover:bg-[#353544] rounded text-xs font-bold text-slate-200 cursor-pointer shrink-0"
+                        >
+                          +30분
+                        </button>
+                        <button
+                          onClick={() => addPresetTime(60 * 60)}
+                          className="px-2 py-1 bg-[#2b2b36] hover:bg-[#353544] rounded text-xs font-bold text-slate-200 cursor-pointer shrink-0"
+                        >
+                          +1시간
+                        </button>
+                      </div>
                     </div>
                   </div>
 
@@ -1070,42 +1544,93 @@ export const DesktopAppView: React.FC<DesktopAppViewProps> = ({
                 </select>
               </div>
 
-              {/* Section 4: Target IP & Immediate Action Buttons */}
+              {/* Section 4: Target IP & Unified Remote Action Pulldown */}
               <div className="bg-[#18181b] border border-[#27272a] p-3 rounded space-y-2.5">
                 <div className="flex items-center justify-between">
-                  <span className="font-bold text-slate-200">🎯 대상 PC IP 주소 (쉼표로 복수 지정)</span>
+                  <span className="font-bold text-slate-200">🎯 대상 PC 지정 (풀다운 빠른 선택 및 직접 입력)</span>
+                  <span className="text-[10px] text-blue-400 font-mono">단일 & 그룹 IP</span>
                 </div>
+
+                {/* Pulldown PC Selector */}
+                <div className="relative">
+                  <select
+                    defaultValue=""
+                    onChange={(e) => {
+                      if (!e.target.value) return;
+                      setNetworkTargetIps(e.target.value);
+                      playSoundEffect('buttonClick');
+                      showInAppToast(`🎯 대상 PC [${e.target.value}]가 즉시 지정되었습니다.`);
+                      e.target.value = '';
+                    }}
+                    className="w-full bg-[#24242e] border border-[#3f3f46] hover:border-blue-500/70 rounded px-2.5 py-1.5 text-xs text-slate-200 font-medium appearance-none focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer pr-8 shadow-inner"
+                  >
+                    <option value="">💻 감지된 사내 PC 풀다운 선택 (클릭 시 자동 입력)...</option>
+                    <optgroup label="📡 실시간 탐지된 활성 PC">
+                      {detectedPcs.map((pc, idx) => (
+                        <option key={idx} value={pc.ip}>
+                          {pc.ip} ({pc.host}) - {pc.status} {pc.isSelf ? '[👑 관리자 본인 PC]' : ''}
+                        </option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="📢 사내 그룹 및 브로드캐스트">
+                      <option value="192.168.1.255">📢 사내 전체 서브넷 브로드캐스트 (192.168.1.255)</option>
+                      <option value="192.168.1.101, 192.168.1.102, 192.168.1.103">🏢 개발팀 전체 PC (101, 102, 103)</option>
+                      <option value="192.168.1.104, 192.168.1.105">📊 기획/디자인팀 PC (104, 105)</option>
+                    </optgroup>
+                  </select>
+                  <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                </div>
+
                 <input
                   type="text"
                   value={networkTargetIps}
                   onChange={e => setNetworkTargetIps(e.target.value)}
+                  placeholder="대상 IP 직접 입력 (쉼표로 복수 지정 가능)"
                   className="w-full bg-[#2b2b36] border border-[#3f3f46] px-2.5 py-1.5 rounded text-white text-xs font-mono"
                 />
                 
-                {/* Immediate Control Action Grid */}
-                <div className="grid grid-cols-2 gap-2 pt-1">
-                  <button
-                    onClick={() => showInAppToast(`🛑 [원격 전송 완료] 대상 PC [${networkTargetIps}] 즉시 종료 명령을 송출했습니다.`)}
-                    className="py-2 bg-red-600 hover:bg-red-500 text-white font-bold rounded flex items-center justify-center gap-1.5 transition-colors shadow"
-                  >
-                    <Power className="w-3.5 h-3.5" />
-                    <span>🛑 대상 PC 즉시 종료</span>
-                  </button>
-                  <button
-                    onClick={() => showInAppToast(`🔄 [원격 전송 완료] 대상 PC [${networkTargetIps}] 즉시 다시 시작 명령을 송출했습니다.`)}
-                    className="py-2 bg-orange-600 hover:bg-orange-500 text-white font-bold rounded flex items-center justify-center gap-1.5 transition-colors shadow"
-                  >
-                    <RotateCw className="w-3.5 h-3.5" />
-                    <span>🔄 대상 PC 즉시 다시시작</span>
-                  </button>
+                {/* Unified Remote Command Pulldown & Execution */}
+                <div className="space-y-1.5 pt-1 border-t border-[#27272a]">
+                  <div className="flex items-center justify-between text-[11px] text-slate-300 font-semibold">
+                    <span>⚡ 원격 실행 명령 풀다운 (통합 제어):</span>
+                    <span className="text-[10px] text-emerald-400 font-mono">Clean Pulldown</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <select
+                        value={selectedRemoteAction}
+                        onChange={(e) => setSelectedRemoteAction(e.target.value)}
+                        className="w-full bg-[#24242e] border border-[#3f3f46] hover:border-blue-500/70 rounded px-2.5 py-2 text-xs text-slate-100 font-bold appearance-none cursor-pointer pr-8 shadow-inner"
+                      >
+                        <option value="shutdown">🛑 1. 대상 PC 즉시 전원 종료 (Power Off)</option>
+                        <option value="restart">🔄 2. 대상 PC 즉시 시스템 다시 시작 (Reboot)</option>
+                        <option value="sleep">🌙 3. 대상 PC 절전 모드 전환 (Sleep)</option>
+                        <option value="screenoff">📺 4. 대상 PC 화면 끄기 (Screen Off)</option>
+                        <option value="sync">📡 5. 선택한 스케줄 규칙 원격 일괄 동기화 (TCP 9988)</option>
+                        <option value="alarm">🚨 6. 사내 대상 PC 긴급 비상 알람 송출 (Alarm)</option>
+                      </select>
+                      <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    </div>
+                    <button
+                      onClick={() => {
+                        playSoundEffect('actionSuccess');
+                        const actionLabels: Record<string, string> = {
+                          shutdown: `🛑 대상 PC [${networkTargetIps}] 즉시 종료 명령을 송출했습니다.`,
+                          restart: `🔄 대상 PC [${networkTargetIps}] 즉시 다시 시작 명령을 송출했습니다.`,
+                          sleep: `🌙 대상 PC [${networkTargetIps}] 절전 모드 명령을 송출했습니다.`,
+                          screenoff: `📺 대상 PC [${networkTargetIps}] 화면 끄기 명령을 송출했습니다.`,
+                          sync: `📡 대상 PC [${networkTargetIps}]로 스케줄 규칙을 일괄 동기화했습니다. (TCP 9988)`,
+                          alarm: `🚨 대상 PC [${networkTargetIps}]에 긴급 알람을 전송했습니다.`,
+                        };
+                        showInAppToast(actionLabels[selectedRemoteAction] || '원격 명령이 전송되었습니다.');
+                      }}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded font-bold text-xs shadow flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 transition-colors"
+                    >
+                      <Play className="w-3.5 h-3.5 fill-white" />
+                      <span>전송 실행</span>
+                    </button>
+                  </div>
                 </div>
-                <button
-                  onClick={() => showInAppToast(`📡 [스케줄 동기화] 선택한 프리셋 규칙이 대상 PC로 성공적으로 전송/동기화되었습니다.`)}
-                  className="w-full py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded flex items-center justify-center gap-1.5 transition-colors shadow"
-                >
-                  <Calendar className="w-3.5 h-3.5" />
-                  <span>📡 예약 규칙 대상 PC 일괄 전송 (TCP 9988)</span>
-                </button>
               </div>
             </div>
           </div>
@@ -1128,8 +1653,11 @@ export const DesktopAppView: React.FC<DesktopAppViewProps> = ({
                 <span>ApplySharedSchedules v{APP_VERSION} - 스케줄 원클릭 주입기</span>
               </div>
               <button
-                onClick={() => setActiveApp('main')}
-                className="w-7 h-5 flex items-center justify-center hover:bg-red-600 hover:text-white rounded"
+                onClick={() => {
+                  setActiveApp('main');
+                  playSoundEffect('buttonClick');
+                }}
+                className="w-7 h-5 flex items-center justify-center hover:bg-red-600 hover:text-white rounded cursor-pointer"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -1166,8 +1694,11 @@ export const DesktopAppView: React.FC<DesktopAppViewProps> = ({
 
               {/* Action Button */}
               <button
-                onClick={() => showInAppToast('🚀 스케줄이 안전하게 주입 및 동기화되었습니다! (무결성 100% 검증)')}
-                className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded flex items-center justify-center gap-2 shadow transition-colors text-sm"
+                onClick={() => {
+                  playSoundEffect('actionSuccess');
+                  showInAppToast('🚀 스케줄이 안전하게 주입 및 동기화되었습니다! (무결성 100% 검증)');
+                }}
+                className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded flex items-center justify-center gap-2 shadow transition-colors text-sm cursor-pointer"
               >
                 <HardDrive className="w-4 h-4" />
                 <span>🚀 스케줄 원클릭 즉시 주입 및 적용</span>
@@ -1234,32 +1765,195 @@ export const DesktopAppView: React.FC<DesktopAppViewProps> = ({
                 </div>
               </div>
 
-              {/* 4. Sound & Alert Themes (Pixabay Sound Effects) */}
-              <div className="bg-[#18181b] p-3 rounded space-y-2 border border-[#27272a]">
+              {/* 4. Sound & Alert Themes (Pixabay Sound Effects & Web Audio Mixer) */}
+              <div className="bg-[#18181b] p-3 rounded space-y-3 border border-[#27272a]">
                 <div className="flex items-center justify-between">
-                  <span className="font-bold text-emerald-400">4. 알림 효과음 사운드 뱅크 (Pixabay 선별)</span>
-                  <span className="text-[10px] text-emerald-300/80 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20 font-mono">
-                    7개 테마
+                  <div className="flex items-center gap-1.5 font-bold text-emerald-400">
+                    <Volume2 className="w-4 h-4 text-emerald-400" />
+                    <span>4. 알림 효과음 사운드 뱅크 (Pixabay 선별 & Web Audio)</span>
+                  </div>
+                  <span className="text-[10px] text-emerald-300/90 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/30 font-mono">
+                    현재: {SOUND_THEMES.find(t => t.id === currentSoundTheme)?.nameKo || '클래식 벨'}
                   </span>
                 </div>
-                <div className="grid grid-cols-2 gap-1.5 pt-1">
-                  {SOUND_THEMES.map((th) => (
+
+                {/* Master Volume Controller & Quick Presets */}
+                <div className="bg-[#24242e] p-2.5 rounded border border-[#373744] space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-300 font-semibold flex items-center gap-1.5">
+                      {currentSoundVolume === 0 ? (
+                        <VolumeX className="w-4 h-4 text-rose-400" />
+                      ) : currentSoundVolume < 50 ? (
+                        <Volume1 className="w-4 h-4 text-amber-400" />
+                      ) : (
+                        <Volume2 className="w-4 h-4 text-emerald-400" />
+                      )}
+                      <span>마스터 볼륨 (Master Volume)</span>
+                    </span>
+                    <span className="font-mono font-bold text-emerald-400 text-sm">
+                      {currentSoundVolume}%
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2.5">
                     <button
-                      key={th.id}
                       type="button"
                       onClick={() => {
-                        soundEngine.play(th.id, 'preview');
-                        showInAppToast(`[${th.nameKo}] 효과음 재생`);
+                        const newVol = currentSoundVolume === 0 ? 80 : 0;
+                        handleVolumeChange(newVol);
+                        if (newVol > 0) playSoundEffect('buttonClick');
                       }}
-                      className="p-1.5 bg-[#2b2b36] hover:bg-[#383848] border border-[#3f3f46] rounded text-left flex items-center justify-between transition-colors"
+                      className="px-2 py-1 bg-[#2b2b36] hover:bg-[#383848] text-slate-300 hover:text-white rounded text-[11px] font-bold border border-[#3f3f46] transition-colors cursor-pointer"
                     >
-                      <div className="flex items-center gap-1.5 truncate">
-                        <span>{th.icon}</span>
-                        <span className="font-bold text-slate-200 truncate">{th.nameKo}</span>
-                      </div>
-                      <span className="text-[10px] text-emerald-400 font-bold ml-1">▶ 재생</span>
+                      {currentSoundVolume === 0 ? '🔊 음소거 해제' : '🔇 음소거'}
                     </button>
-                  ))}
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={currentSoundVolume}
+                      onChange={(e) => handleVolumeChange(parseInt(e.target.value))}
+                      className="flex-1 accent-emerald-500 cursor-pointer h-1.5 bg-slate-700 rounded-lg"
+                    />
+                  </div>
+
+                  {/* Quick Volume Preset Buttons */}
+                  <div className="flex items-center justify-between gap-1 pt-1 border-t border-[#373744]">
+                    <span className="text-[10px] text-slate-400 font-medium">빠른 볼륨 설정:</span>
+                    <div className="flex items-center gap-1">
+                      {[0, 30, 50, 80, 100].map((v) => (
+                        <button
+                          key={v}
+                          type="button"
+                          onClick={() => {
+                            handleVolumeChange(v);
+                            if (v > 0) playSoundEffect('buttonClick');
+                          }}
+                          className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-colors cursor-pointer ${
+                            currentSoundVolume === v
+                              ? 'bg-emerald-600 text-white'
+                              : 'bg-[#2b2b36] hover:bg-[#383848] text-slate-300'
+                          }`}
+                        >
+                          {v === 0 ? '0%' : `${v}%`}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 1. Sound Theme Pull-down Selection */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-[11px] text-slate-300 font-semibold">
+                    <span>알림음 테마 선택 (드롭다운 / 풀다운):</span>
+                    <span className="text-[10px] text-emerald-400 font-mono">
+                      ✓ {SOUND_THEMES.find(t => t.id === currentSoundTheme)?.nameKo}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <select
+                        value={currentSoundTheme}
+                        onChange={(e) => handleSelectSoundTheme(e.target.value as SoundTheme)}
+                        className="w-full bg-[#24242e] border border-[#3f3f46] hover:border-emerald-500/70 rounded px-3 py-2 text-xs font-bold text-slate-100 appearance-none focus:outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer pl-8 pr-8 shadow-inner"
+                      >
+                        {SOUND_THEMES.map((th) => (
+                          <option key={th.id} value={th.id} className="bg-[#1e1e24] text-slate-100 py-1 font-medium">
+                            {th.icon} {th.nameKo} ({th.nameEn}) - {th.descKo}
+                          </option>
+                        ))}
+                      </select>
+                      <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-sm pointer-events-none">
+                        {SOUND_THEMES.find(t => t.id === currentSoundTheme)?.icon || '🔔'}
+                      </span>
+                      <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playSoundEffect('timerAlarm');
+                        showInAppToast(`[${SOUND_THEMES.find(t => t.id === currentSoundTheme)?.nameKo}] 알림음 사운드 테스트 재생`);
+                      }}
+                      className="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap shadow shrink-0"
+                      title="선택된 알림음 사운드 즉시 테스트 재생"
+                    >
+                      <Play className="w-3 h-3 fill-white" />
+                      <span>Play Test (테스트 재생)</span>
+                    </button>
+                  </div>
+                  <div className="text-[10px] text-slate-400 pl-1">
+                    ℹ️ {SOUND_THEMES.find(t => t.id === currentSoundTheme)?.descKo}
+                  </div>
+                </div>
+
+                {/* 2. Situational Sound Audition Test Pull-down */}
+                <div className="bg-[#24242e] p-2.5 rounded border border-[#373744] space-y-2">
+                  <div className="flex items-center justify-between text-xs font-semibold text-slate-300">
+                    <span>상황별 효과음 테스트 풀다운:</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <select
+                        value={selectedSoundTestTrigger}
+                        onChange={(e) => setSelectedSoundTestTrigger(e.target.value as any)}
+                        className="w-full bg-[#1e1e24] border border-[#3f3f46] hover:border-blue-500/70 rounded px-3 py-2 text-xs text-slate-200 appearance-none focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer pr-8 font-medium shadow-inner"
+                      >
+                        <option value="preview" className="bg-[#1e1e24]">🔔 1. 테마 대표 시그니처 톤 (미리듣기)</option>
+                        <option value="warningTick" className="bg-[#1e1e24]">⏱️ 2. 10초 카운트다운 틱 경고음 (Tick)</option>
+                        <option value="hourlyChime" className="bg-[#1e1e24]">🏛️ 3. 매시 정각 시계탑 차임벨 (00분 정각)</option>
+                        <option value="timerAlarm" className="bg-[#1e1e24]">🚨 4. 타이머 만료 알람 경보음 (Alarm)</option>
+                        <option value="actionSuccess" className="bg-[#1e1e24]">✨ 5. 전원 명령 완료 및 스케줄 등록 성공음</option>
+                      </select>
+                      <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playSoundEffect(selectedSoundTestTrigger);
+                        const labels: Record<string, string> = {
+                          preview: '테마 대표 시그니처 톤',
+                          warningTick: '10초 카운트다운 틱 경고음',
+                          hourlyChime: '정각 시계탑 차임벨',
+                          timerAlarm: '타이머 만료 알람 경보음',
+                          actionSuccess: '명령 실행 및 성공음'
+                        };
+                        showInAppToast(`🔊 [${labels[selectedSoundTestTrigger] || selectedSoundTestTrigger}] 재생`);
+                      }}
+                      className="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap shadow shrink-0"
+                    >
+                      <Play className="w-3 h-3 fill-white" />
+                      <span>테스트 재생</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Additional Audio Toggles */}
+                <div className="space-y-1.5 pt-1 border-t border-[#27272a]">
+                  <label className="flex items-center justify-between cursor-pointer py-1 text-slate-300 hover:text-white">
+                    <span className="text-xs">🔔 매시 정각 시계탑 차임벨 (00분 00초) 알림</span>
+                    <input
+                      type="checkbox"
+                      checked={currentHourlyChime}
+                      onChange={(e) => handleHourlyChimeToggle(e.target.checked)}
+                      className="rounded bg-[#27272a] border-[#3f3f46] text-emerald-600 focus:ring-0 w-4 h-4 cursor-pointer"
+                    />
+                  </label>
+                  <label className="flex items-center justify-between cursor-pointer py-1 text-slate-300 hover:text-white">
+                    <span className="text-xs">🖱️ 버튼 클릭 및 조작 인터랙션 효과음</span>
+                    <input
+                      type="checkbox"
+                      checked={soundFeedbackEnabled}
+                      onChange={(e) => {
+                        setSoundFeedbackEnabled(e.target.checked);
+                        onSoundFeedbackChange?.(e.target.checked);
+                        try {
+                          localStorage.setItem('power_sound_feedback', e.target.checked ? 'true' : 'false');
+                        } catch {}
+                        if (e.target.checked) playSoundEffect('buttonClick');
+                      }}
+                      className="rounded bg-[#27272a] border-[#3f3f46] text-emerald-600 focus:ring-0 w-4 h-4 cursor-pointer"
+                    />
+                  </label>
                 </div>
               </div>
 
@@ -1290,12 +1984,62 @@ export const DesktopAppView: React.FC<DesktopAppViewProps> = ({
                 </div>
               </div>
 
-              {/* 6. Real-time Update Section */}
+              {/* 6. Auto-Lock Desktop Session on Idle (Timer Running) */}
+              <div className="bg-[#18181b] p-3 rounded space-y-2 border border-[#27272a]">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-blue-400 flex items-center gap-1.5">
+                    🔒 6. 타이머 가동 중 자동 화면 잠금 (Auto-Lock Desktop)
+                  </span>
+                  <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={idleLockEnabled}
+                      onChange={(e) => {
+                        setIdleLockEnabled(e.target.checked);
+                        try {
+                          localStorage.setItem('power_idle_lock_enabled', e.target.checked ? 'true' : 'false');
+                        } catch {}
+                        showInAppToast(e.target.checked ? '유휴 상태 자동 화면 잠금이 활성화되었습니다.' : '유휴 상태 자동 화면 잠금이 비활성화되었습니다.');
+                      }}
+                      className="sr-only peer"
+                    />
+                    <div className="relative w-7 h-4 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
+                  </label>
+                </div>
+                <div className="text-[11px] text-slate-300 leading-relaxed">
+                  타이머 가동 중 지정된 시간 동안 마우스/키보드 입력이 없으면 Windows 데스크톱 세션을 자동으로 잠급니다(Win + L).
+                </div>
+                <div className="flex items-center justify-between gap-2 pt-1 border-t border-[#27272a]">
+                  <span className="text-slate-400 text-xs">유휴 감지 시간:</span>
+                  <select
+                    value={idleLockMinutes}
+                    onChange={(e) => {
+                      const m = parseInt(e.target.value, 10);
+                      setIdleLockMinutes(m);
+                      try {
+                        localStorage.setItem('power_idle_lock_minutes', m.toString());
+                      } catch {}
+                    }}
+                    disabled={!idleLockEnabled}
+                    className={`bg-[#24242e] text-slate-200 text-xs font-semibold rounded px-2.5 py-1 border border-[#3f3f46] focus:outline-none focus:border-blue-500 cursor-pointer ${!idleLockEnabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  >
+                    <option value="1">1분 (1 min)</option>
+                    <option value="2">2분 (2 mins)</option>
+                    <option value="3">3분 (3 mins)</option>
+                    <option value="5">5분 (5 mins - 기본)</option>
+                    <option value="10">10분 (10 mins)</option>
+                    <option value="15">15분 (15 mins)</option>
+                    <option value="30">30분 (30 mins)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* 7. Real-time Update Section */}
               <div className="bg-gradient-to-r from-blue-950/40 to-indigo-950/40 p-3 rounded space-y-2 border border-blue-500/30">
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-blue-300 flex items-center gap-1.5">
                     <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                    6. GitHub 실시간 업데이트 & 버전 정보
+                    7. GitHub 실시간 업데이트 & 버전 정보
                   </span>
                   <span className="font-mono font-bold text-blue-400">v{APP_VERSION}</span>
                 </div>
@@ -1331,6 +2075,37 @@ export const DesktopAppView: React.FC<DesktopAppViewProps> = ({
                 취소
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Full-screen Desktop Session Lock Screen Overlay in Desktop View */}
+      {isDesktopLocked && (
+        <div className="fixed inset-0 z-[99999] bg-slate-950/90 backdrop-blur-md flex flex-col items-center justify-center p-6 text-white select-none">
+          <div className="relative z-10 flex flex-col items-center text-center max-w-sm w-full p-8 rounded-2xl bg-slate-900 border border-slate-700 shadow-2xl space-y-4">
+            <div className="w-16 h-16 rounded-2xl bg-blue-600/20 border border-blue-500/40 flex items-center justify-center text-blue-400">
+              <Lock className="w-8 h-8 animate-pulse" />
+            </div>
+            <div className="text-3xl font-mono font-bold text-slate-100">
+              {new Date().toLocaleTimeString()}
+            </div>
+            <div className="px-3 py-1 bg-amber-500/20 border border-amber-500/40 rounded-full text-amber-300 text-xs font-bold">
+              🔒 데스크톱 세션 잠김 (Idle Auto-Lock)
+            </div>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              타이머 가동 중 {idleLockMinutes}분 동안 활동이 없어 화면이 자동으로 잠겼습니다.
+            </p>
+            <button
+              onClick={() => {
+                setIsDesktopLocked(false);
+                lastUserActivityRef.current = Date.now();
+                soundEngine.play(currentSoundTheme, 'actionSuccess');
+                showInAppToast('🔓 데스크톱 세션 잠금이 정상 해제되었습니다.');
+              }}
+              className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg shadow cursor-pointer transition-colors text-xs flex items-center justify-center gap-2"
+            >
+              <span>🔓 잠금 해제 (클릭 또는 Enter)</span>
+            </button>
           </div>
         </div>
       )}

@@ -31,7 +31,14 @@ echo.
 set "APP_DIR=%~dp0"
 set "MAIN_EXE=%APP_DIR%PowerController.exe"
 set "SCHED_EXE=%APP_DIR%PowerNetworkScheduler.exe"
+
+:: Dynamic Version Extraction (Single Source of Truth)
 set "APP_VER=v2.9.1"
+if exist "%APP_DIR%package.json" (
+    for /f "usebackq tokens=*" %%v in (`powershell -NoProfile -Command "'v' + (Get-Content '%APP_DIR%package.json' -Raw | ConvertFrom-Json).version" 2^>nul`) do (
+        set "APP_VER=%%v"
+    )
+)
 
 :: 1. 메인 앱 (PowerController.exe) 규칙 등록 (표준 및 버전 표기 규칙)
 echo [1/4] PowerController 메인 프로그램 규칙 등록 중 (%APP_VER%)...

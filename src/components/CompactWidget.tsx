@@ -347,11 +347,14 @@ export default function CompactWidget({
   if (widgetDesign === 'standard') {
     return (
       <motion.div
+        key="standard-neon-ring"
         layout
-        initial={{ opacity: 0, scale: 0.9 }}
-        animate={{ opacity: effectiveOpacity / 100, scale: 1 }}
+        initial={{ opacity: 0, scale: 0.88, y: -10 }}
+        animate={{ opacity: effectiveOpacity / 100, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.88, y: -10 }}
+        transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
         style={{ width: `${widgetWidth}px` }}
-        className={`rounded-2xl overflow-hidden shadow-2xl border-2 flex flex-col max-h-[calc(100vh-2rem)] transition-all duration-300 ease-in-out ${
+        className={`rounded-2xl overflow-hidden shadow-2xl border-2 flex flex-col max-h-[calc(100vh-2rem)] transition-colors duration-300 ease-in-out ${
           isWarningActive 
             ? 'border-red-500/95 shadow-red-500/30 ring-4 ring-red-500/15' 
             : isPowerSavingActive
@@ -479,11 +482,14 @@ export default function CompactWidget({
   if (widgetDesign === 'cyber_hud') {
     return (
       <motion.div
+        key="cyber-hud"
         layout
-        initial={{ opacity: 0, scale: 0.9 }}
-        animate={{ opacity: effectiveOpacity / 100, scale: 1 }}
+        initial={{ opacity: 0, scale: 0.88, y: -10 }}
+        animate={{ opacity: effectiveOpacity / 100, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.88, y: -10 }}
+        transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
         style={{ width: `${widgetWidth}px` }}
-        className="rounded-xl overflow-hidden shadow-2xl border-2 border-cyan-500/80 bg-gray-950 text-cyan-400 font-mono select-none flex flex-col max-h-[calc(100vh-2rem)] transition-all duration-300 ease-in-out"
+        className="rounded-xl overflow-hidden shadow-2xl border-2 border-cyan-500/80 bg-gray-950 text-cyan-400 font-mono select-none flex flex-col max-h-[calc(100vh-2rem)] transition-colors duration-300 ease-in-out"
       >
         {/* HUD Top Bar */}
         <div className="shrink-0 bg-cyan-950/70 border-b border-cyan-500/30 px-3 py-1.5 flex items-center justify-between text-[13.5px] font-bold transition-all duration-300 ease-in-out">
@@ -588,11 +594,14 @@ export default function CompactWidget({
   if (widgetDesign === 'minimal_bar') {
     return (
       <motion.div
+        key="minimal-bar"
         layout
-        initial={{ opacity: 0, scale: 0.9 }}
-        animate={{ opacity: effectiveOpacity / 100, scale: 1 }}
+        initial={{ opacity: 0, scale: 0.88, y: -10 }}
+        animate={{ opacity: effectiveOpacity / 100, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.88, y: -10 }}
+        transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
         style={{ width: `${widgetWidth}px` }}
-        className="rounded-full shadow-2xl border border-blue-500/50 bg-gray-900/95 px-3 py-2 text-white flex items-center justify-between gap-2 select-none transition-all duration-300 ease-in-out"
+        className="rounded-full shadow-2xl border border-blue-500/50 bg-gray-900/95 px-3 py-2 text-white flex items-center justify-between gap-2 select-none transition-colors duration-300 ease-in-out"
       >
         {/* Mode icon indicator */}
         <div 
@@ -680,11 +689,14 @@ export default function CompactWidget({
   if (widgetDesign === 'retro_led') {
     return (
       <motion.div
+        key="retro-led"
         layout
-        initial={{ opacity: 0, scale: 0.9 }}
-        animate={{ opacity: effectiveOpacity / 100, scale: 1 }}
+        initial={{ opacity: 0, scale: 0.88, y: -10 }}
+        animate={{ opacity: effectiveOpacity / 100, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.88, y: -10 }}
+        transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
         style={{ width: `${widgetWidth}px` }}
-        className="rounded-2xl overflow-hidden shadow-2xl border-4 border-[#2b2416] bg-[#140f07] text-[#f59e0b] select-none flex flex-col max-h-[calc(100vh-2rem)] transition-all duration-300 ease-in-out"
+        className="rounded-2xl overflow-hidden shadow-2xl border-4 border-[#2b2416] bg-[#140f07] text-[#f59e0b] select-none flex flex-col max-h-[calc(100vh-2rem)] transition-colors duration-300 ease-in-out"
       >
         {/* Retro Header */}
         <div className="shrink-0 bg-[#1f170b] border-b border-[#3d2c10] px-3 py-1.5 flex items-center justify-between text-[13.5px] font-bold tracking-widest text-[#d97706] transition-all duration-300 ease-in-out">
@@ -765,11 +777,14 @@ export default function CompactWidget({
   // =========================================================================
   return (
     <motion.div
+      key="clean-card"
       layout
-      initial={{ opacity: 0, scale: 0.9 }}
-      animate={{ opacity: effectiveOpacity / 100, scale: 1 }}
+      initial={{ opacity: 0, scale: 0.88, y: -10 }}
+      animate={{ opacity: effectiveOpacity / 100, scale: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.88, y: -10 }}
+      transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
       style={{ width: `${widgetWidth}px` }}
-      className={`rounded-2xl overflow-hidden shadow-2xl border border-gray-500/20 flex flex-col max-h-[calc(100vh-2rem)] transition-all duration-300 ease-in-out ${currentThemeConfig.windowBg} ${selectedFont}`}
+      className={`rounded-2xl overflow-hidden shadow-2xl border border-gray-500/20 flex flex-col max-h-[calc(100vh-2rem)] transition-colors duration-300 ease-in-out ${currentThemeConfig.windowBg} ${selectedFont}`}
     >
       {/* Clean Top Bar */}
       <div className="shrink-0 p-4 pb-2 flex items-center justify-between border-b border-gray-500/10 transition-all duration-300 ease-in-out">

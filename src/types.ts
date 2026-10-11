@@ -5,10 +5,13 @@
 export const APP_VERSION = '2.9.1';
 export const APP_RELEASE_DATE = '2026-09-26';
 export const DEFAULT_PORT = 3032;
-export const GITHUB_REPO_OWNER = 'ahbiyout-all';
+export const DEVELOPER_NAME = 'AhBiYout';
+export const GITHUB_REPO_OWNER = 'AhBiYout-all';
 export const GITHUB_REPO_NAME = 'PowerController';
 export const GITHUB_REPO_URL = `https://github.com/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}`;
 export const GITHUB_RELEASES_URL = `https://github.com/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/releases`;
+export const OFFICIAL_BLOG_URL = 'https://ahbiyoutvibe.blogspot.com/';
+export const COMPANY_URL = 'https://www.cisnet.co.kr';
 
 export type PowerMode = 'shutdown' | 'restart' | 'sleep' | 'screenoff' | 'logout' | 'alarm';
 
