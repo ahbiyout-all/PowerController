@@ -78,6 +78,17 @@ if exist ".env" (
     echo Ensure '.env' is in .gitignore to prevent leaking secret keys.
 )
 
+:: Verify core build files manifest if available
+if exist "github_core_build\verify_core_files.py" (
+    echo [*] Auditing core build files manifest...
+    python "github_core_build\verify_core_files.py"
+    if errorlevel 1 (
+        echo [ERROR] Core build files verification failed! Aborting push.
+        pause
+        exit /b 1
+    )
+)
+
 :: 4. Initialize Local Git Repository if not present
 if not exist ".git" (
     echo [*] Initializing fresh local Git repository...
