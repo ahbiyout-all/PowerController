@@ -13,14 +13,14 @@ echo   Target    : https://github.com/AhBiYout-all/PowerController.git
 echo   Official  : https://ahbiyoutvibe.blogspot.com/
 echo   Company   : https://www.cisnet.co.kr
 echo ================================================================
-echo.
+echo(
 
 :: 1. Check Git Installation
 where git >nul 2>nul
 if errorlevel 1 (
     echo [ERROR] Git is not installed or not in system PATH.
     echo Please install Git for Windows from: https://git-scm.com/
-    echo.
+    echo(
     pause
     exit /b 1
 )
@@ -69,7 +69,7 @@ if "!APP_VER!"=="" set "APP_VER=2.9.1"
 
 title GitHub Auto Push and Release - PowerController v!APP_VER!
 echo [*] Dynamically Extracted Version: v!APP_VER!
-echo.
+echo(
 
 :: 3. Pre-flight Privacy & Security Verification
 echo [*] Running Privacy ^& Security Pre-flight Check...
@@ -126,7 +126,7 @@ git branch -M main
 
 :: 8. Commit Message Prompt
 set "DEFAULT_MSG=Release v!APP_VER! - Automated push with GitHub Actions CI/CD"
-echo.
+echo(
 echo Default Commit Message: "!DEFAULT_MSG!"
 set /p "USER_MSG=Enter custom commit message (or press Enter for default): "
 if not "!USER_MSG!"=="" (
@@ -136,7 +136,7 @@ if not "!USER_MSG!"=="" (
 )
 
 :: 9. Stage Changes (.gitignore filtered)
-echo.
+echo(
 echo [*] Staging all files adhering to .gitignore rules...
 git add -A
 
@@ -148,13 +148,13 @@ if errorlevel 1 (
 )
 
 :: 11. Create Semantic Version Tag
-echo.
+echo(
 echo [*] Tagging release v!APP_VER!...
 git tag -d "v!APP_VER!" >nul 2>nul
 git tag -a "v!APP_VER!" -m "PowerController Official Release v!APP_VER!"
 
 :: 12. Push to GitHub Remote
-echo.
+echo(
 echo [*] Pushing 'main' branch to GitHub...
 git push -u origin main
 if errorlevel 1 (
@@ -168,16 +168,16 @@ if errorlevel 1 (
     )
 )
 
-echo.
+echo(
 echo [*] Pushing version tag 'v!APP_VER!' to trigger GitHub Actions release pipeline...
 git push origin "v!APP_VER!" --force
 
-echo.
+echo(
 echo ================================================================
 echo   [SUCCESS] GitHub push and tag completed successfully!
 echo   Repository : https://github.com/AhBiYout-all/PowerController
 echo   Releases   : https://github.com/AhBiYout-all/PowerController/releases
 echo   Actions    : https://github.com/AhBiYout-all/PowerController/actions
 echo ================================================================
-echo.
+echo(
 pause
