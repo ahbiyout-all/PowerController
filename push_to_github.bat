@@ -90,9 +90,18 @@ if exist "github_core_build\verify_core_files.py" (
 )
 
 :: 4. Initialize Local Git Repository if not present
+set "REPO_URL=https://github.com/AhBiYout-all/PowerController.git"
 if not exist ".git" (
     echo [*] Initializing fresh local Git repository...
     git init
+    git branch -M main
+    git remote add origin !REPO_URL!
+    echo [*] Fetching remote history from origin...
+    git fetch origin main >nul 2>&1
+    if not errorlevel 1 (
+        echo [*] Synchronizing base tree with remote main...
+        git reset --soft origin/main >nul 2>&1
+    )
 ) else (
     echo [OK] Local Git repository is ready.
 )
@@ -103,7 +112,6 @@ git config user.email "AhBiYout-all@users.noreply.github.com"
 echo [*] Configured Author: AhBiYout-all ^<AhBiYout-all@users.noreply.github.com^>
 
 :: 6. Set Remote Origin URL (Default: PowerController)
-set "REPO_URL=https://github.com/AhBiYout-all/PowerController.git"
 git remote get-url origin >nul 2>nul
 if errorlevel 1 (
     echo [*] Adding remote origin: !REPO_URL!
@@ -150,9 +158,14 @@ echo.
 echo [*] Pushing 'main' branch to GitHub...
 git push -u origin main
 if errorlevel 1 (
-    echo [!] Standard push rejected. Attempting sync with remote...
-    git pull origin main --rebase >nul 2>&1
+    echo [!] Standard push rejected (remote has commits). Attempting rebase sync...
+    git fetch origin main
+    git pull origin main --rebase --allow-unrelated-histories >nul 2>&1
     git push -u origin main
+    if errorlevel 1 (
+        echo [!] Rebase sync conflicted or rejected. Updating remote main to current state...
+        git push -u origin main --force
+    )
 )
 
 echo.

@@ -49,7 +49,7 @@ jobs:
       - name: Install Toolchain & Inno Setup 6
         shell: bash
         run: |
-          npm ci
+          npm ci || npm install
           pip install --upgrade pip
           pip install pyinstaller pillow pystray
           choco install innosetup --no-progress -y
@@ -103,34 +103,44 @@ jobs:
           retention-days: 30
 
       - name: Create or Update GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.vars.outputs.tag }}
-          name: PowerController ${{ steps.vars.outputs.tag }} Windows 공식 설치 프로그램
-          target_commitish: ${{ github.sha }}
-          body: |
-            ## 🚀 PowerController ${{ steps.vars.outputs.tag }} Windows 공식 릴리스
-
-            ### 💿 Windows 공식 설치 파일 (Installer Asset Only)
-            - 🖥️ **Windows PC 공식 설치 마법사**: `PowerController_Setup_${{ steps.vars.outputs.tag }}.exe`
-              * Inno Setup 6 기반 폴더 풀림(Unpacked Multi-File) 개별 파일 설치
-              * 기존 설치본 감지 시 삭제(클린 설치) 또는 덮어쓰기 선택 안내 다이얼로그
-              * 무인 설치(/SILENT, /VERYSILENT) 완벽 지원
-              * Windows Defender 방화벽 인바운드/아웃바운드 규칙 무음 자동 등록 (기본명 및 버전명)
-              * 불필요한 개발용 문서 및 포터블 파일 배포 제외
-
-            ---
-            ### 📌 제작자 및 공식 채널 안내
-            - **개발자**: `AhBiYout`
-            - **GitHub 계정**: `AhBiYout-all` (https://github.com/AhBiYout-all)
-            - **저장소**: `PowerController` (https://github.com/AhBiYout-all/PowerController)
-            - **공식 구글 블로그**: https://ahbiyoutvibe.blogspot.com/
-            - **소속사**: https://www.cisnet.co.kr
-          files: release_assets/*
-          draft: false
-          prerelease: false
+        shell: bash
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ steps.vars.outputs.tag }}
+        run: |
+          echo "================================================================"
+          echo "Deploying Official Windows Release Asset for: $TAG_NAME"
+          echo "================================================================"
+
+          cat << 'EOF' > release_notes.md
+          ## 🚀 PowerController ${{ steps.vars.outputs.tag }} Windows 공식 릴리스
+
+          ### 💿 Windows 공식 설치 파일 (Installer Asset Only)
+          - 🖥️ **Windows PC 공식 설치 마법사**: `PowerController_Setup_${{ steps.vars.outputs.tag }}.exe`
+            * Inno Setup 6 기반 폴더 풀림(Unpacked Multi-File) 개별 파일 설치
+            * 기존 설치본 감지 시 삭제(클린 설치) 또는 덮어쓰기 선택 안내 다이얼로그
+            * 무인 설치(/SILENT, /VERYSILENT) 완벽 지원
+            * Windows Defender 방화벽 인바운드/아웃바운드 규칙 무음 자동 등록 (기본명 및 버전명)
+            * 불필요한 개발용 문서 및 포터블 파일 배포 제외
+
+          ---
+          ### 📌 제작자 및 공식 채널 안내
+          - **개발자**: `AhBiYout`
+          - **GitHub 계정**: `AhBiYout-all` (https://github.com/AhBiYout-all)
+          - **저장소**: `PowerController` (https://github.com/AhBiYout-all/PowerController)
+          - **공식 구글 블로그**: https://ahbiyoutvibe.blogspot.com/
+          - **소속사**: https://www.cisnet.co.kr
+          EOF
+
+          if gh release view "$TAG_NAME" >/dev/null 2>&1; then
+            echo "[*] Existing release found for $TAG_NAME. Uploading new installer with --clobber..."
+            gh release upload "$TAG_NAME" release_assets/* --clobber
+            gh release edit "$TAG_NAME" --title "PowerController $TAG_NAME Windows 공식 설치 프로그램" --notes-file release_notes.md
+          else
+            echo "[*] Creating new release for $TAG_NAME..."
+            gh release create "$TAG_NAME" release_assets/* --title "PowerController $TAG_NAME Windows 공식 설치 프로그램" --notes-file release_notes.md
+          fi
+          echo "[OK] Release creation/update successful!"
 
       - name: Prune Non-Installer Assets from Release
         shell: bash
