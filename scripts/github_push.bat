@@ -13,7 +13,7 @@ echo   Target    : https://github.com/AhBiYout-all/PowerController.git
 echo   Official  : https://ahbiyoutvibe.blogspot.com/
 echo   Company   : https://www.cisnet.co.kr
 echo ================================================================
-echo.
+echo(
 
 :: Call root push_to_github.bat
 call "%~dp0\..\push_to_github.bat"

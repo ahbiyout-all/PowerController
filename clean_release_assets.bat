@@ -7,7 +7,7 @@ echo ================================================================
 echo   GitHub Release Asset Cleaner (Keep Setup Installer ONLY)
 echo   Repository: https://github.com/ahbiyout-all/PowerController
 echo ================================================================
-echo.
+echo(
 
 where python >nul 2>nul
 if %ERRORLEVEL% equ 0 (
@@ -25,5 +25,5 @@ echo [!] Python is required to run the cleanup script.
 pause
 
 :END
-echo.
+echo(
 pause

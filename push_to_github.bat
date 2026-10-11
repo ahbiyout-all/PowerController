@@ -157,16 +157,18 @@ git tag -a "v!APP_VER!" -m "PowerController Official Release v!APP_VER!"
 echo(
 echo [*] Pushing 'main' branch to GitHub...
 git push -u origin main
-if errorlevel 1 (
-    echo [!] Standard push rejected (remote has commits). Attempting rebase sync...
-    git fetch origin main
-    git pull origin main --rebase --allow-unrelated-histories >nul 2>&1
-    git push -u origin main
-    if errorlevel 1 (
-        echo [!] Rebase sync conflicted or rejected. Updating remote main to current state...
-        git push -u origin main --force
-    )
-)
+if not errorlevel 1 goto :PUSH_MAIN_SUCCESS
+
+echo [!] Standard push rejected - attempting rebase sync...
+git fetch origin main
+git pull origin main --rebase --allow-unrelated-histories >nul 2>&1
+git push -u origin main
+if not errorlevel 1 goto :PUSH_MAIN_SUCCESS
+
+echo [!] Rebase sync conflicted or rejected - updating remote main to current state...
+git push -u origin main --force
+
+:PUSH_MAIN_SUCCESS
 
 echo(
 echo [*] Pushing version tag 'v!APP_VER!' to trigger GitHub Actions release pipeline...
