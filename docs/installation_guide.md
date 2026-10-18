@@ -1,6 +1,6 @@
 # PowerController 설치 및 패키징 가이드 (Inno Setup 6 Packaging Guide)
 
-본 문서는 **PowerController v2.9.1**의 배포용 인스톨러 생성 및 **Inno Setup 6** 기반 소프트웨어 패키징, 레지스트리 자동 등록, 무인 설치(Silent Install), 프로세스 강제 종료 락 해제 및 클린 언인스톨 파이프라인에 대한 엔지니어링 가이드입니다.
+본 문서는 **PowerController v2.9.2**의 배포용 인스톨러 생성 및 **Inno Setup 6** 기반 소프트웨어 패키징, 레지스트리 자동 등록, 무인 설치(Silent Install), 프로세스 강제 종료 락 해제 및 클린 언인스톨 파이프라인에 대한 엔지니어링 가이드입니다.
 
 ---
 

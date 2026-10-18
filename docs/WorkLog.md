@@ -1,7 +1,7 @@
 # PowerController 작업 로그 및 모듈화 로드맵 (WorkLog & Roadmap)
 
 ## 📌 문서 개요
-본 문서는 **PowerController v2.9.1+**의 순수 창작 DLL(Pure Custom Native DLL) 분리 설계 로드맵과 세부 작업 로그를 기록하고 관리하는 공식 문서입니다.  
+본 문서는 **PowerController v2.9.2+**의 순수 창작 DLL(Pure Custom Native DLL) 분리 설계 로드맵과 세부 작업 로그를 기록하고 관리하는 공식 문서입니다.  
 개발 행동 강령의 **모듈화, 단계별 순차 진행, 자아검증 수칙, 실현 가능성 원칙**을 엄격히 준수합니다.
 
 ---
@@ -21,6 +21,25 @@
 ---
 
 ## 📝 작업 로그 (Work Log)
+
+### 📅 [2026-10-17] - v2.9.2 공식 릴리즈 버전 승격 (Semantic Versioning SSOT 일괄 동기화)
+
+#### 1. 요구사항 및 문제 정의
+- v2.9.1 배포 이후 대규모 4대 테마(다크, 그레이, 화이트, 베이지) 연동 및 밝은 테마 가독성 결함 해결, 인스톨러 폴더 풀림(Unpacked Multi-File) 패키징, 기존 앱 설치 감지 시 클린 설치/덮어쓰기 분기 다이얼로그 및 무인 설치 스위치, Windows Defender 방화벽 무음 사전 등록(기본 및 버전 표기 명칭 포함), 깃허브 전용 업로드 폴더 제거 등 대규모 기능 개선 및 버그 픽스가 누적 완료됨.
+- 이에 따라 글로벌 표준인 Semantic Versioning(SemVer 2.0.0) 3단계 규약에 의거하여 **v2.9.2**로 정식 버전 승격 및 프로젝트 전반의 SSOT 동기화 진행.
+
+#### 2. 구현 내용
+1. **단일 버전 원천(SSOT) 승격**:
+   - `package.json`, `package-lock.json`의 버전을 `2.9.2`로 승격.
+   - `scripts/sync_version.py`를 실행하여 `src/types.ts`, `main.py`, `network_scheduler.py`, `installer.py`, `PowerController.iss`, `index.html`, `docs/PATCHNOTES.md`, `docs/patch_notes.md`, `version_*.txt` 전체 일괄 동기화.
+2. **빌드 스크립트 및 런처 동기화**:
+   - `build.bat`, `Register_Firewall_Rules.bat`, `scripts/build_all_platforms.bat`, `push_to_github.ps1`, `push_to_github.sh`, `github_sync.py` 내의 기본 버전 문자열을 `v2.9.2`로 최신화.
+3. **공식 문서 및 가이드 일체 갱신**:
+   - `docs/ROADMAP.md`, `docs/BLOG_RELEASE.md`, `docs/installation_guide.md`, `docs/patch_notes.md`, `docs/PATCHNOTES.md`에 v2.9.2 릴리즈 내역 및 방화벽/인스톨러/테마 개편 사항 반영.
+4. **빌드 및 린트 정적 검증**:
+   - `compile_applet` 및 `tsc --noEmit` 0 에러 통과.
+
+---
 
 ### 📅 [2026-10-17] - GitHub 실제 빌드 핵심 파일 선별 푸시 체계 구축 & 깃허브 전용 업로드 폴더(`github_core_build/`) 완전 제거
 

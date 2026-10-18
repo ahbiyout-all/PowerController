@@ -77,7 +77,7 @@ def get_data_filepath(filename):
         except Exception:
             return script_path
 
-APP_VERSION = "2.9.1"
+APP_VERSION = "2.9.2"
 GITHUB_REPO_OWNER = "AhBiYout"
 GITHUB_REPO_NAME = "PowerController"
 GITHUB_RELEASES_API = f"https://api.github.com/repos/{GITHUB_REPO_OWNER}/{GITHUB_REPO_NAME}/releases/latest"

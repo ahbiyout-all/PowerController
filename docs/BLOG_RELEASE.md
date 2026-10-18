@@ -6,7 +6,7 @@
 
 ## 1. 제목 (Title)
 
-**[공식 배포] PowerController v2.9.1 - 스마트 윈도우 전원 스케줄러 & 무인 설치 자동화 컨트롤러 (종료/재시작/절전/화면끔/원격제어)**
+**[공식 배포] PowerController v2.9.2 - 스마트 윈도우 전원 스케줄러 & 무인 설치 자동화 컨트롤러 (종료/재시작/절전/화면끔/원격제어)**
 
 ---
 
@@ -14,12 +14,13 @@
 
 안녕하세요, **PowerController** 공식 개발자 **AhBiYout**입니다.
 
-컴퓨터를 켜둔 채 퇴근하거나 잠들었을 때, 혹은 사내 수십 대의 PC를 정해진 시각에 일괄 종료하고 관리해야 할 때 겪었던 불편함을 완벽하게 해결해 드리는 **PowerController v2.9.1** 정식 버전을 배포합니다.
+컴퓨터를 켜둔 채 퇴근하거나 잠들었을 때, 혹은 사내 수십 대의 PC를 정해진 시각에 일괄 종료하고 관리해야 할 때 겪었던 불편함을 완벽하게 해결해 드리는 **PowerController v2.9.2** 정식 버전을 배포합니다.
 
 PowerController는 단순한 타이머 프로그램을 넘어, **윈도우 네이티브 커널 API 및 고성능 C/C++ DLL 아키텍처**와 **현대적인 모던 웹/데스크톱 UI**를 결합하여 설계된 차세대 스마트 전원 관리 솔루션입니다.
 
 ### 🌟 핵심 주요 기능
 - **⚡ 6대 핵심 전원 관리 모드**: 시스템 종료(Shutdown), 다시 시작(Reboot), 절전 모드(Sleep), 화면 끄기(Monitor Off), 로그아웃(Sign out), 사운드 알람(Alarm) 지원
+- **🎨 4대 테마(다크/그레이/화이트/베이지) & 고대비 가독성**: 밝은 테마에서도 텍스트가 묻히지 않는 고대비 시인성 극대화 및 창/패널/모달 전면 동기화
 - **🎛️ 깔끔한 풀다운(드롭다운) UI 인터페이스**: 복잡한 화면 분산을 방지하는 직관적인 풀다운 메뉴 및 기존 6분할 그리드 뷰 상호 전환 토글 지원
 - **📌 5종 디자인 상단 고정 컴팩트 위젯**: 네온 링(Neon Ring), 사이버 HUD(Cyber HUD), 슬림 바(Slim Bar), 레트로 LED(Retro LED), 클린 카드(Clean Card) 등 취향에 맞는 항상 위 플로팅 위젯 지원 (부드러운 페이드인 & 스케일 트랜지션 모션 탑재)
 - **🔔 Pixabay 선별 7대 프리미엄 사운드 엔진**: 클래식 벨, 마림바, 크리스탈, SF 신스, 웨스트민스터 차임, 경고음, 버블 등 Web Audio / 네이티브 오디오 믹서 통합
@@ -30,23 +31,20 @@ PowerController는 단순한 타이머 프로그램을 넘어, **윈도우 네�
 
 ---
 
-## 3. 업데이트 (Updates - v2.9.1)
+## 3. 업데이트 (Updates - v2.9.2)
 
-최신 **v2.9.1** 버전의 핵심 개선 및 추가 사항입니다:
+최신 **v2.9.2** 버전의 핵심 개선 및 추가 사항입니다:
 
-1. **GitHub Releases 기반 실시간 자동 업데이트 알림 시스템 탑재**
-   - 최신 버전 릴리즈 실시간 감지 및 인앱 원클릭 다운로드 팝업(`UpdateModal`) 연동
-2. **다중 선택 항목의 풀다운/드롭다운화 (Clean Screen Layout)**
-   - 전원 동작 모드, 시간 지연 프리셋, 스케줄러 설정, 위젯 스타일 등 동일 유형 다중 컨트롤을 컴팩트한 풀다운 메뉴로 전면 정돈
-3. **상단 고정 컴팩트 위젯 부드러운 페이드인 & 스케일 트랜지션 애니메이션**
-   - 모드 전환 시 `cubic-bezier(0.16, 1, 0.3, 1)` 기반 매끄러운 모션 효과 적용
-4. **데스크톱 앱 전면 사운드 스튜디오 및 인터랙션 피드백 완성**
-   - 7대 테마 선택, 마스터 볼륨(0~100%), 매시 정각 시계탑 차임벨, 카운트다운 틱, 타이머 만료음 완벽 동기화
-5. **Recharts 기반 60분 배터리 소모 차트 & 방전 예측 분석 엔진 구축**
-   - 실시간 방전 곡선, 잔여 사용 시간 예측, 시간당 소모율, 15% 이하 안전 작동 한계 알림
-6. **Inno Setup 6 기반 공식 인스톨러 및 무인 설치(Silent Install) 완비**
-   - `/SILENT`, `/VERYSILENT`, `/NORESTART` 완전 지원 및 기존 프로세스 멈춤(Hang) 방지 자동 파일 언락
-   - Windows Defender 방화벽 무음 사전 등록(메인, 커맨더 및 전용 포트 TCP 9988 / UDP 9985, 9986)
+1. **4대 테마(다크, 그레이, 화이트, 베이지) 고대비 가독성 전면 개선**
+   - 밝은 테마(화이트, 베이지)에서 글씨가 묻히던 문제를 해결하고 전 UI 컴포넌트와 모달에 고대비 텍스트 컬러 완벽 적용
+2. **Inno Setup 6 인스톨러 폴더 풀림(Unpacked Multi-File) 패키징**
+   - PyInstaller `--onedir` 디렉터리 트리 및 필수 네이티브 DLL을 개별 파일 구조로 전개하고 불필요 개발 문서 배포 제외
+3. **기존 앱 감지 시 클린 설치(삭제) / 덮어쓰기 선택 다이얼로그 및 무인 설치 스위치**
+   - 구버전 발견 시 사용자 확인 후 완전 삭제 후 설치 또는 업그레이드 지원, `/SILENT`, `/VERYSILENT`, `/CLEAN=1` 지원
+4. **Windows Defender Firewall 사전 무음 등록 (기본 이름 + 버전 표기 이름)**
+   - 설치 직후 메인/커맨더/포트를 무음 자동 등록하여 공용 네트워크 경고창 차단 (`PowerController v2.9.2` 동시 등록)
+5. **저장소 구조 간결화 및 빌드 파이프라인 단일화**
+   - 불필요한 중간 스테이징 폴더를 배제하고 루트 저장소 표준 구조로 일원화
 
 ---
 
@@ -63,16 +61,16 @@ PowerController는 단순한 타이머 프로그램을 넘어, **윈도우 네�
 Windows 전용 공식 인스톨러 설치 파일은 GitHub 공식 릴리즈 저장소에서 안전하게 바로 다운로드하실 수 있습니다.
 
 - 📥 **공식 설치 파일 다운로드 (Direct Download)**:  
-  **[PowerController_Setup_v2.9.1.exe 다운로드](https://github.com/AhBiYout-all/PowerController/releases/download/v2.9.1/PowerController_Setup_v2.9.1.exe)**
+  **[PowerController_Setup_v2.9.2.exe 다운로드](https://github.com/AhBiYout-all/PowerController/releases/download/v2.9.2/PowerController_Setup_v2.9.2.exe)**
 
 - 🌐 **GitHub 공식 릴리즈 배포 페이지**:  
-  [https://github.com/AhBiYout-all/PowerController/releases/tag/v2.9.1](https://github.com/AhBiYout-all/PowerController/releases/tag/v2.9.1)
+  [https://github.com/AhBiYout-all/PowerController/releases/tag/v2.9.2](https://github.com/AhBiYout-all/PowerController/releases/tag/v2.9.2)
 
 - 📦 **GitHub 공식 소스코드 저장소**:  
   [https://github.com/AhBiYout-all/PowerController](https://github.com/AhBiYout-all/PowerController)
 
 > **💡 무인 자동 설치 (사내 일괄 배포 관리자용 CLI 옵션)**:  
-> `PowerController_Setup_v2.9.1.exe /VERYSILENT /NORESTART`
+> `PowerController_Setup_v2.9.2.exe /VERYSILENT /NORESTART`
 
 ---
 
@@ -81,11 +79,11 @@ Windows 전용 공식 인스톨러 설치 파일은 GitHub 공식 릴리즈 저�
 | 항목 | 상세 정보 |
 | :--- | :--- |
 | **소프트웨어 명칭** | **PowerController** |
-| **최신 배포 버전** | **v2.9.1** (Semantic Versioning 2.0 준수) |
+| **최신 배포 버전** | **v2.9.2** (Semantic Versioning 2.0 준수) |
 | **빌드 패키지** | Inno Setup 6 Unpacked Multi-File 공식 인스톨러 |
-| **설치 파일명** | `PowerController_Setup_v2.9.1.exe` |
+| **설치 파일명** | `PowerController_Setup_v2.9.2.exe` |
 | **라이선스** | MIT License (한국어/영어 공식 고지서 탑재) |
-| **단일 버전 원천** | `package.json` (`v2.9.1`) 기준 전 컴포넌트 100% 일치 |
+| **단일 버전 원천** | `package.json` (`v2.9.2`) 기준 전 컴포넌트 100% 일치 |
 
 ---
 
@@ -117,6 +115,13 @@ Windows 전용 공식 인스톨러 설치 파일은 GitHub 공식 릴리즈 저�
 ## 9. 전체 업데이트(이전 기록 모두) (Historical Changelog)
 
 PowerController의 첫 릴리즈부터 현재까지의 전체 누적 패치 이력입니다:
+
+### [v2.9.2] - 2026-10-17
+- **4대 테마 고대비 가독성 전면 개선**: 다크, 그레이, 화이트, 베이지 4종 테마 전체 동기화 및 라이트 모드 고대비 시인성 보정.
+- **Inno Setup 6 폴더 풀림(Unpacked Multi-File) 패키징**: PyInstaller `--onedir` 디렉터리 트리 및 순수 창작 C/C++ DLL 개별 파일 배포 체계 구축.
+- **기존 앱 설치 감지 시 클린 설치/덮어쓰기 분기 다이얼로그**: 구버전 감지 시 완전 삭제 후 새로 설치(Clean Install) 또는 덮어쓰기(Overwrite) 선택 및 무인 모드(`/CLEAN=1`) 지원.
+- **Windows Defender Firewall 사전 무음 등록**: 설치 단계에서 기본 이름(`PowerController`)과 버전 표기 이름(`PowerController v2.9.2`)을 동시 등록하여 보안 경고창 원천 차단.
+- **저장소 구조 간결화**: 깃허브 전용 업로드 폴더 제거 및 프로젝트 루트 기반 표준 관리 체계 확립.
 
 ### [v2.9.1] - 2026-10-09
 - **GitHub Releases 기반 실시간 자동 업데이트**: 인앱 버전 비교 및 다운로드 팝업(`UpdateModal`) 연동.

@@ -6,8 +6,8 @@ VSVersionInfo(
   ffi=FixedFileInfo(
     # filevers and prodvers should be tuples of 4 integers or lists of 4 integers.
     # e.g. (1, 2, 3, 4)
-    filevers=(2, 9, 1, 0),
-    prodvers=(2, 9, 1, 0),
+    filevers=(2, 9, 2, 0),
+    prodvers=(2, 9, 2, 0),
     # Contains a bitmask that specifies the valid bits 'flags'
     mask=0x3f,
     # Contains a bitmask that specifies the attributes of the file.
@@ -31,25 +31,25 @@ VSVersionInfo(
         '041204B0',
         [StringStruct('CompanyName', 'AhBiYout'),
         StringStruct('FileDescription', 'PowerController - 스마트 시스템 전원 및 자동 종료 예약 제어기'),
-        StringStruct('FileVersion', '2.9.1'),
+        StringStruct('FileVersion', '2.9.2'),
         StringStruct('InternalName', 'PowerController'),
         StringStruct('LegalCopyright', 'Copyright (c) 2026 AhBiYout. All rights reserved.'),
         StringStruct('LegalTrademarks', 'PowerController™ (AhBiYout)'),
         StringStruct('OriginalFilename', 'PowerController.exe'),
         StringStruct('ProductName', 'PowerController - 스마트 시스템 전원 제어기'),
-        StringStruct('ProductVersion', '2.9.1'),
+        StringStruct('ProductVersion', '2.9.2'),
         StringStruct('Comments', 'Windows 시스템 전원 자동 종료, 재시작, 절전, 정각 알림(Hourly Chime), 부팅 브리핑, 스케줄러, 상단고정 미니 위젯 5종 테마 및 원격 네트워크 제어를 지원하는 고성능 스마트 전원 관리 유틸리티입니다.')]),
       StringTable(
         '040904B0',
         [StringStruct('CompanyName', 'AhBiYout'),
         StringStruct('FileDescription', 'PowerController - Smart Shutdown & Power Management Agent'),
-        StringStruct('FileVersion', '2.9.1'),
+        StringStruct('FileVersion', '2.9.2'),
         StringStruct('InternalName', 'PowerController'),
         StringStruct('LegalCopyright', 'Copyright (c) 2026 AhBiYout. All rights reserved.'),
         StringStruct('LegalTrademarks', 'PowerController is a trademark of AhBiYout.'),
         StringStruct('OriginalFilename', 'PowerController.exe'),
         StringStruct('ProductName', 'PowerController - Smart Shutdown Agent'),
-        StringStruct('ProductVersion', '2.9.1'),
+        StringStruct('ProductVersion', '2.9.2'),
         StringStruct('Comments', 'Smart Windows Power & Shutdown Controller with Mini Widget, Hourly Chime, Scheduler and Remote Network Manager.')])
       ]), 
     VarFileInfo([VarStruct('Translation', [1042, 1200, 1033, 1200])])

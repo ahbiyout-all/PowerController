@@ -33,7 +33,7 @@ set "MAIN_EXE=%APP_DIR%PowerController.exe"
 set "SCHED_EXE=%APP_DIR%PowerNetworkScheduler.exe"
 
 :: Dynamic Version Extraction (Single Source of Truth)
-set "APP_VER=v2.9.1"
+set "APP_VER=v2.9.2"
 if exist "%APP_DIR%package.json" (
     for /f "usebackq tokens=*" %%v in (`powershell -NoProfile -Command "'v' + (Get-Content '%APP_DIR%package.json' -Raw | ConvertFrom-Json).version" 2^>nul`) do (
         set "APP_VER=%%v"

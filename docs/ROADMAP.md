@@ -3,12 +3,12 @@
 **Author & Developer**: AhBiYout (GitHub: AhBiYout-all)  
 **Official Blog**: https://ahbiyoutvibe.blogspot.com/  
 **Company**: CISNet (http://www.cisnet.co.kr/)  
-**Current Version**: v2.9.1  
+**Current Version**: v2.9.2  
 
 ---
 
 ## 📌 Executive Summary
-This document tracks the verified tasks, engineering priorities, security audits, and release pipelines for the PowerController project following Semantic Versioning (v2.9.1).
+This document tracks the verified tasks, engineering priorities, security audits, and release pipelines for the PowerController project following Semantic Versioning (v2.9.2).
 
 ---
 

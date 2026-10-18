@@ -8,7 +8,7 @@ color 0b
 :: Target: PowerController_Setup_v%APP_VER%.exe (Inno Setup 6)
 :: -----------------------------------------------------------------------------
 
-set "APP_VER=2.9.1"
+set "APP_VER=2.9.2"
 if exist "package.json" (
     for /f "usebackq tokens=*" %%i in (`powershell -NoProfile -Command "(Get-Content package.json -Raw | ConvertFrom-Json).version" 2^>nul`) do (
         set "APP_VER=%%i"

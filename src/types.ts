@@ -2,7 +2,7 @@
  * Types for the Power Shutdown & Restart Controller app
  */
 
-export const APP_VERSION = '2.9.1';
+export const APP_VERSION = '2.9.2';
 export const APP_RELEASE_DATE = '2026-09-26';
 export const DEFAULT_PORT = 3032;
 export const DEVELOPER_NAME = 'AhBiYout';

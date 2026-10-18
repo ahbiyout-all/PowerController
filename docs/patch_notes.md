@@ -5,6 +5,29 @@
 
 ---
 
+## [v2.9.2] - 2026-10-17 (4대 테마 고대비 가독성, 인스톨러 클린설치/덮어쓰기 분기, 방화벽 사전 무음 등록)
+
+### 🎨 1. 4대 테마(다크, 그레이, 화이트, 베이지) 완벽 연동 및 라이트 모드 고대비 가독성 개편
+- **전체 컴포넌트 테마 동기화**: `DesktopAppView`, `AdvancedScheduler`, `CommandCopier`, `FavoritesManager`, `StartupTodayTasksModal`, `SmartAdvisorModal` 전반에 화이트(`white`) 및 베이지(`beige`) 테마 정밀 매핑.
+- **고대비 시인성 극대화**: 밝은 테마 환경에서 회색/흰색 글씨가 묻히는 문제를 해결하고 고대비 텍스트 컬러(`text-[#0f172a]`, `text-[#2c2217]`) 및 테두리/버튼 호버 스타일 전면 보정.
+- **테마 설정 일원화**: 로컬스토리지 `power_theme` 키와 데스크톱 설정 모달의 테마 셀렉터 리스트 완벽 일치.
+
+### 📦 2. Inno Setup 6 인스톨러 폴더 풀림(Unpacked Multi-File) 패키징 및 클린 설치/덮어쓰기 분기
+- **폴더 풀림(Unpacked Multi-File) 설치 구현**: PyInstaller `--onedir` 빌드 디렉터리(`dist\PowerController\*`) 트리 및 필수 네이티브 C/C++ DLL들을 개별 파일 구조로 깔끔하게 전개.
+- **기존 설치 감지 시 사용자 선택 다이얼로그**:
+  - `[예 (Yes)]`: 기존 버전 완전 삭제 후 클린 설치 (Clean Install, 권장)
+  - `[아니오 (No)]`: 기존 설정 및 파일 위에 덮어쓰기 (Overwrite / Upgrade)
+  - `[취소 (Cancel)]`: 설치 마법사 종료
+- **무인 설치(Silent Install) 스위치 고도화**: `/SILENT`, `/VERYSILENT`, `/NORESTART` 완전 지원 및 무인 모드 전용 `/CLEAN=1` 스위치 제공.
+- **불필요 파일 배포 제외**: 개발용 마크다운, 스크래치 파일 배포 원천 차단 및 필수 라이선스/에셋만 설치.
+
+### 🛡️ 3. Windows Defender Firewall 사전 무음 등록 (기본 이름 + 버전 표기 이름)
+- **인바운드/아웃바운드 및 전용 포트 사전 등록**: 메인(`PowerController.exe`), 커맨더(`PowerNetworkScheduler.exe`), 원격 통신 포트(TCP 9988, UDP 9985, UDP 9986)를 설치 직후(`ssPostInstall`) 무음 자동 등록.
+- **버전 표기 명칭 동시 등록**: 기본 이름(`PowerController`)과 버전 정보가 포함된 이름(`PowerController v2.9.2`)을 동시에 등록하여 공용 네트워크 보안 경고창 원천 차단.
+- **언인스톨 클린 정리**: 프로그램 제거 시(`usPostUninstall`) 등록된 모든 방화벽 규칙을 자동 소거.
+
+---
+
 ## [v2.9.1] - 2026-10-09 (GitHub 릴리스 자동화, 실시간 자동 업데이트 및 크로스 플랫폼 패키징)
 
 ### 🖥️ 1. 네이티브 데스크탑 앱(PowerController_v2.9.1.exe) 풀다운/드롭다운 UI 정돈 시스템 적용

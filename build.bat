@@ -21,8 +21,8 @@ echo.
 :: ---------------------------------------------------------------------------------
 :: Dynamic Version Extraction (Reads latest version from patch notes & package.json)
 :: ---------------------------------------------------------------------------------
-set "APP_VERSION=2.9.1"
-for /f "tokens=*" %%v in ('python -c "import json, re, os; v='2.9.1'; exec('''try:\n if os.path.exists('docs/patch_notes.md'):\n  with open('docs/patch_notes.md', 'r', encoding='utf-8') as f:\n   m = re.search(r'\[v?(\d+\.\d+\.\d+)\]', f.read())\n   if m: v = m.group(1)\n if v == '2.9.1' and os.path.exists('package.json'):\n  with open('package.json', 'r', encoding='utf-8') as f:\n   v = json.load(f).get('version', '2.9.1')\nexcept:\n pass'''); print(v)" 2^>nul') do (
+set "APP_VERSION=2.9.2"
+for /f "tokens=*" %%v in ('python -c "import json, re, os; v='2.9.2'; exec('''try:\n if os.path.exists('docs/patch_notes.md'):\n  with open('docs/patch_notes.md', 'r', encoding='utf-8') as f:\n   m = re.search(r'\[v?(\d+\.\d+\.\d+)\]', f.read())\n   if m: v = m.group(1)\n if v == '2.9.2' and os.path.exists('package.json'):\n  with open('package.json', 'r', encoding='utf-8') as f:\n   v = json.load(f).get('version', '2.9.2')\nexcept:\n pass'''); print(v)" 2^>nul') do (
     if not "%%v"=="" set "APP_VERSION=%%v"
 )
 
