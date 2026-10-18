@@ -193,9 +193,11 @@ export const BatteryHistoryChart: React.FC<BatteryHistoryChartProps> = ({
     return '#3b82f6'; // blue
   }, [analytics.isCharging, analytics.level]);
 
+  const isLight = ['white', 'beige'].includes(theme);
+
   return (
     <div className={`flex flex-col gap-2 p-3 rounded-xl border transition-all duration-300 ${
-      theme === 'beige' ? 'bg-[#eee7da]/80 border-[#c8bcaa]' : 'bg-black/20 dark:bg-black/40 border-gray-500/20'
+      isLight ? 'bg-[#eee7da]/80 border-[#c8bcaa]' : 'bg-black/20 dark:bg-black/40 border-gray-500/20'
     }`}>
       {/* Header with Title & Expand Toggle */}
       <div className="flex items-center justify-between">
@@ -213,7 +215,7 @@ export const BatteryHistoryChart: React.FC<BatteryHistoryChartProps> = ({
           </div>
           <div>
             <div className="flex items-center gap-1.5">
-              <span className={`text-[12.5px] font-bold ${theme === 'beige' ? 'text-[#2c2217]' : 'text-slate-200'}`}>
+              <span className={`text-[12.5px] font-bold ${isLight ? 'text-[#2c2217]' : 'text-slate-200'}`}>
                 {lang === 'en' ? '60-Min Battery Consumption & Timer Prediction' : '최근 60분 배터리 소모 추이 및 타이머 완주 예측'}
               </span>
               <span className={`px-1.5 py-0.2 text-[10px] font-mono font-bold rounded ${
@@ -238,7 +240,7 @@ export const BatteryHistoryChart: React.FC<BatteryHistoryChartProps> = ({
           type="button"
           onClick={() => setIsExpanded(!isExpanded)}
           className={`text-[11px] font-bold px-2 py-1 rounded transition-colors cursor-pointer ${
-            theme === 'beige' ? 'bg-[#ded4c3] text-[#3d3222] hover:bg-[#d4c8b5]' : 'bg-gray-800 hover:bg-gray-700 text-gray-300'
+            isLight ? 'bg-[#ded4c3] text-[#3d3222] hover:bg-[#d4c8b5]' : 'bg-gray-800 hover:bg-gray-700 text-gray-300'
           }`}
         >
           {isExpanded ? (lang === 'en' ? 'Hide Chart' : '차트 접기') : (lang === 'en' ? 'Show Chart' : '차트 보기')}
@@ -281,7 +283,7 @@ export const BatteryHistoryChart: React.FC<BatteryHistoryChartProps> = ({
 
       {/* Battery Health Insights Section (Estimated Time Remaining & Discharge Analysis) */}
       <div className={`p-2.5 rounded-lg border transition-all ${
-        theme === 'beige' ? 'bg-[#f4efe6] border-[#d8cdbc]' : 'bg-[#18181b]/90 border-gray-700/60'
+        isLight ? 'bg-[#f4efe6] border-[#d8cdbc]' : 'bg-[#18181b]/90 border-gray-700/60'
       }`}>
         <div className="flex items-center justify-between pb-1.5 border-b border-gray-500/10 mb-2">
           <span className="text-[11px] font-bold flex items-center gap-1.5 text-amber-400 dark:text-amber-300">
@@ -305,7 +307,7 @@ export const BatteryHistoryChart: React.FC<BatteryHistoryChartProps> = ({
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
           {/* 1. Estimated Total Time Remaining */}
           <div className={`p-2 rounded border flex flex-col justify-between ${
-            theme === 'beige' ? 'bg-[#eadecc] border-[#c8bcaa]' : 'bg-black/30 border-gray-800'
+            isLight ? 'bg-[#eadecc] border-[#c8bcaa]' : 'bg-black/30 border-gray-800'
           }`}>
             <div className="flex items-center gap-1 text-[10px] text-gray-400">
               <Clock className="w-3 h-3 text-blue-400" />
@@ -317,7 +319,7 @@ export const BatteryHistoryChart: React.FC<BatteryHistoryChartProps> = ({
                   ? 'text-emerald-400'
                   : analytics.level <= 15
                   ? 'text-rose-400'
-                  : theme === 'beige' ? 'text-[#2b2014]' : 'text-slate-100'
+                  : isLight ? 'text-[#2b2014]' : 'text-slate-100'
               }`}>
                 {analytics.isCharging
                   ? (lang === 'en' ? 'Continuous (AC)' : '상시 지속 (AC 연결)')
@@ -333,7 +335,7 @@ export const BatteryHistoryChart: React.FC<BatteryHistoryChartProps> = ({
 
           {/* 2. Discharge / Charge Rate */}
           <div className={`p-2 rounded border flex flex-col justify-between ${
-            theme === 'beige' ? 'bg-[#eadecc] border-[#c8bcaa]' : 'bg-black/30 border-gray-800'
+            isLight ? 'bg-[#eadecc] border-[#c8bcaa]' : 'bg-black/30 border-gray-800'
           }`}>
             <div className="flex items-center gap-1 text-[10px] text-gray-400">
               <Gauge className="w-3 h-3 text-amber-400" />
@@ -357,7 +359,7 @@ export const BatteryHistoryChart: React.FC<BatteryHistoryChartProps> = ({
 
           {/* 3. Safe Operation Window (Until 15% Cutoff) */}
           <div className={`p-2 rounded border flex flex-col justify-between ${
-            theme === 'beige' ? 'bg-[#eadecc] border-[#c8bcaa]' : 'bg-black/30 border-gray-800'
+            isLight ? 'bg-[#eadecc] border-[#c8bcaa]' : 'bg-black/30 border-gray-800'
           }`}>
             <div className="flex items-center gap-1 text-[10px] text-gray-400">
               <ShieldCheck className="w-3 h-3 text-emerald-400" />
@@ -369,7 +371,7 @@ export const BatteryHistoryChart: React.FC<BatteryHistoryChartProps> = ({
                   ? 'text-emerald-400'
                   : analytics.minutesTo15Percent <= 30
                   ? 'text-rose-400'
-                  : theme === 'beige' ? 'text-[#2b2014]' : 'text-emerald-300'
+                  : isLight ? 'text-[#2b2014]' : 'text-emerald-300'
               }`}>
                 {analytics.isCharging
                   ? (lang === 'en' ? 'Safe (No Drop)' : '안전 (방전 없음)')
@@ -398,19 +400,19 @@ export const BatteryHistoryChart: React.FC<BatteryHistoryChartProps> = ({
                   <stop offset="95%" stopColor={chartColor} stopOpacity={0.02} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke={theme === 'beige' ? '#c8bcaa' : '#334155'} opacity={0.4} />
+              <CartesianGrid strokeDasharray="3 3" stroke={isLight ? '#c8bcaa' : '#334155'} opacity={0.4} />
               <XAxis 
                 dataKey="timeLabel" 
-                tick={{ fontSize: 9.5, fill: theme === 'beige' ? '#5c4d38' : '#94a3b8' }} 
+                tick={{ fontSize: 9.5, fill: isLight ? '#5c4d38' : '#94a3b8' }} 
                 tickLine={false}
-                axisLine={{ stroke: theme === 'beige' ? '#c8bcaa' : '#475569', opacity: 0.5 }}
+                axisLine={{ stroke: isLight ? '#c8bcaa' : '#475569', opacity: 0.5 }}
               />
               <YAxis 
                 domain={[0, 100]} 
                 ticks={[0, 25, 50, 75, 100]}
-                tick={{ fontSize: 9.5, fill: theme === 'beige' ? '#5c4d38' : '#94a3b8' }} 
+                tick={{ fontSize: 9.5, fill: isLight ? '#5c4d38' : '#94a3b8' }} 
                 tickLine={false}
-                axisLine={{ stroke: theme === 'beige' ? '#c8bcaa' : '#475569', opacity: 0.5 }}
+                axisLine={{ stroke: isLight ? '#c8bcaa' : '#475569', opacity: 0.5 }}
                 unit="%"
               />
               <Tooltip

@@ -51,6 +51,18 @@ const modalThemeConfigs = {
     closeBtn: 'bg-[#334155] hover:bg-[#475569] text-slate-200',
     highlightText: 'text-blue-300'
   },
+  white: {
+    container: 'bg-white border-[#cbd5e1] text-[#0f172a] shadow-2xl',
+    headerBorder: 'border-[#cbd5e1]',
+    titleText: 'text-[#0f172a]',
+    subText: 'text-slate-600',
+    card: 'bg-[#f8fafc] border-[#cbd5e1] hover:border-blue-500',
+    cardTitle: 'text-[#0f172a]',
+    cardSubtext: 'text-slate-600',
+    iconBg: 'bg-white border-[#cbd5e1]',
+    closeBtn: 'bg-[#f1f5f9] hover:bg-[#e2e8f0] text-slate-700',
+    highlightText: 'text-blue-600'
+  },
   beige: {
     container: 'bg-[#faf6ee] border-[#dfd5c6] text-[#4a3e2b] shadow-2xl',
     headerBorder: 'border-[#dfd5c6]',

@@ -41,7 +41,7 @@ import {
   Volume1,
   Check
 } from 'lucide-react';
-import { APP_VERSION, SoundTheme } from '../types';
+import { APP_VERSION, SoundTheme, ThemeType } from '../types';
 import { soundEngine, SOUND_THEMES } from '../utils/soundEngine';
 import { UpdateModal } from './GitHubUpdateBanner';
 import BatteryHistoryChart from './BatteryHistoryChart';
@@ -66,6 +66,8 @@ interface DesktopAppViewProps {
   onHourlyChimeChange?: (enabled: boolean) => void;
   soundFeedbackEnabled?: boolean;
   onSoundFeedbackChange?: (enabled: boolean) => void;
+  theme?: ThemeType;
+  onThemeChange?: (theme: ThemeType) => void;
 }
 
 interface ScheduleRuleItem {
@@ -91,8 +93,51 @@ export const DesktopAppView: React.FC<DesktopAppViewProps> = ({
   hourlyChime: propHourlyChime,
   onHourlyChimeChange,
   soundFeedbackEnabled: propSoundFeedbackEnabled,
-  onSoundFeedbackChange
+  onSoundFeedbackChange,
+  theme: propTheme,
+  onThemeChange
 }) => {
+  const [currentTheme, setCurrentTheme] = useState<ThemeType>(() => {
+    if (propTheme) return propTheme;
+    try {
+      const saved = localStorage.getItem('power_theme');
+      return (saved as ThemeType) || 'beige';
+    } catch {
+      return 'beige';
+    }
+  });
+
+  useEffect(() => {
+    if (propTheme && propTheme !== currentTheme) {
+      setCurrentTheme(propTheme);
+    }
+  }, [propTheme]);
+
+  const isLight = currentTheme === 'white' || currentTheme === 'beige';
+  const isDark = currentTheme === 'dark';
+  const isGray = currentTheme === 'gray';
+  const isWhite = currentTheme === 'white';
+  const isBeige = currentTheme === 'beige';
+
+  const windowBg = isDark ? 'bg-[#181a24] text-[#e1e4ed] border-[#2d3142]' 
+    : isGray ? 'bg-[#334155] text-[#f8fafc] border-[#475569]'
+    : isWhite ? 'bg-[#ffffff] text-[#0f172a] border-[#cbd5e1]'
+    : 'bg-[#faf6ee] text-[#2c2217] border-[#c8bcaa]';
+
+  const titleBarBg = isDark ? 'bg-[#11131a] border-[#2b2f3d] text-gray-100'
+    : isGray ? 'bg-[#1e293b] border-[#475569] text-white'
+    : isWhite ? 'bg-[#f1f5f9] border-[#cbd5e1] text-[#0f172a]'
+    : 'bg-[#ebe2d4] border-[#c8bcaa] text-[#2c2217]';
+
+  const panelBg = isDark ? 'bg-[#18181b] border-[#27272a] text-slate-200'
+    : isGray ? 'bg-[#1e293b] border-[#475569] text-slate-100'
+    : isWhite ? 'bg-[#f8fafc] border-[#cbd5e1] text-[#0f172a]'
+    : 'bg-[#eee7da] border-[#c8bcaa] text-[#2c2217]';
+
+  const cardBg = isDark ? 'bg-[#24242e] border-[#3f3f46] text-slate-100'
+    : isGray ? 'bg-[#273142] border-[#475569] text-slate-100'
+    : isWhite ? 'bg-white border-[#cbd5e1] text-[#0f172a]'
+    : 'bg-white border-[#c8bcaa] text-[#2c2217]';
   // Active desktop program
   const [activeApp, setActiveApp] = useState<DesktopWindowType>('main');
 
@@ -535,10 +580,15 @@ export const DesktopAppView: React.FC<DesktopAppViewProps> = ({
     setRules(prev => prev.map(r => r.id === id ? { ...r, enabled: !r.enabled } : r));
   };
 
+  const desktopBg = isDark ? 'bg-slate-950 text-slate-100'
+    : isGray ? 'bg-slate-900 text-slate-100'
+    : isWhite ? 'bg-slate-100 text-[#0f172a]'
+    : 'bg-[#f5f0e6] text-[#2c2217]';
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans select-none antialiased">
+    <div className={`min-h-screen ${desktopBg} flex flex-col font-sans select-none antialiased`}>
       {/* Top Application Control Toolbar (Desktop OS Environment Simulation) */}
-      <header className="bg-slate-900/90 border-b border-slate-800 px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs shadow-md">
+      <header className={`border-b px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs shadow-md ${titleBarBg}`}>
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1.5 px-2.5 py-1 bg-blue-600/20 border border-blue-500/40 rounded text-blue-400 font-bold">
             <Monitor className="w-3.5 h-3.5" />
@@ -703,19 +753,19 @@ export const DesktopAppView: React.FC<DesktopAppViewProps> = ({
       </header>
 
       {/* Main Desktop Workspace Area */}
-      <main className="flex-1 p-3 sm:p-6 flex items-center justify-center bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-black overflow-y-auto">
+      <main className={`flex-1 p-3 sm:p-6 flex items-center justify-center overflow-y-auto ${desktopBg}`}>
         {/* ========================================================================= */}
         {/* WINDOW 1: PowerController.exe (Main Desktop Native Tkinter App)           */}
         {/* ========================================================================= */}
         {activeApp === 'main' && (
           <div
-            className={`w-full max-w-[540px] bg-[#1e1e24] border border-[#3f3f46] rounded shadow-2xl overflow-hidden flex flex-col text-[#f3f4f6] transition-all duration-200 ${
+            className={`w-full max-w-[540px] rounded shadow-2xl overflow-hidden flex flex-col transition-all duration-200 border ${windowBg} ${
               isWindowMaximized ? 'fixed inset-3 max-w-none z-40' : ''
             }`}
             style={{ fontFamily: "'Malgun Gothic', 'Segoe UI', Arial, sans-serif" }}
           >
             {/* Windows OS Title Bar */}
-            <div className="bg-[#18181b] border-b border-[#27272a] px-3 py-2 flex items-center justify-between text-xs select-none">
+            <div className={`border-b px-3 py-2 flex items-center justify-between text-xs select-none ${titleBarBg}`}>
               <div className="flex items-center gap-2 font-bold text-slate-200">
                 <div className="w-5 h-5 rounded-md overflow-hidden ring-1 ring-cyan-500/40 shadow-sm flex items-center justify-center bg-slate-950 flex-shrink-0">
                   <img src="/PowerController.png" alt="App Logo" className="w-full h-full object-cover scale-105" />
@@ -1184,7 +1234,7 @@ export const DesktopAppView: React.FC<DesktopAppViewProps> = ({
                         timerState={isTimerRunning ? 'running' : 'idle'}
                         secondsRemaining={remainingSeconds}
                         lang="ko"
-                        theme="dark"
+                        theme={currentTheme}
                       />
                     </div>
 
@@ -1445,11 +1495,11 @@ export const DesktopAppView: React.FC<DesktopAppViewProps> = ({
         {/* ========================================================================= */}
         {activeApp === 'network' && (
           <div
-            className="w-full max-w-[620px] bg-[#1e1e24] border border-[#3f3f46] rounded shadow-2xl overflow-hidden flex flex-col text-[#f3f4f6]"
+            className={`w-full max-w-[620px] rounded shadow-2xl overflow-hidden flex flex-col border ${windowBg}`}
             style={{ fontFamily: "'Malgun Gothic', 'Segoe UI', Arial, sans-serif" }}
           >
             {/* Window Title Bar */}
-            <div className="bg-[#18181b] border-b border-[#27272a] px-3 py-2 flex items-center justify-between text-xs select-none">
+            <div className={`border-b px-3 py-2 flex items-center justify-between text-xs select-none ${titleBarBg}`}>
               <div className="flex items-center gap-2 font-bold text-slate-200">
                 <div className="w-4 h-4 rounded bg-blue-600 flex items-center justify-center text-white text-[10px] font-black">
                   N
@@ -1641,11 +1691,11 @@ export const DesktopAppView: React.FC<DesktopAppViewProps> = ({
         {/* ========================================================================= */}
         {activeApp === 'injector' && (
           <div
-            className="w-full max-w-[500px] bg-[#1e1e24] border border-[#3f3f46] rounded shadow-2xl overflow-hidden flex flex-col text-[#f3f4f6]"
+            className={`w-full max-w-[500px] rounded shadow-2xl overflow-hidden flex flex-col border ${windowBg}`}
             style={{ fontFamily: "'Malgun Gothic', 'Segoe UI', Arial, sans-serif" }}
           >
             {/* Window Title Bar */}
-            <div className="bg-[#18181b] border-b border-[#27272a] px-3 py-2 flex items-center justify-between text-xs select-none">
+            <div className={`border-b px-3 py-2 flex items-center justify-between text-xs select-none ${titleBarBg}`}>
               <div className="flex items-center gap-2 font-bold text-slate-200">
                 <div className="w-4 h-4 rounded bg-emerald-600 flex items-center justify-center text-white text-[10px] font-black">
                   I
@@ -1711,8 +1761,8 @@ export const DesktopAppView: React.FC<DesktopAppViewProps> = ({
       {/* Settings Modal (Tkinter Settings Style) */}
       {showSettingsModal && (
         <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
-          <div className="w-full max-w-[480px] bg-[#1e1e24] border border-[#3f3f46] rounded shadow-2xl overflow-hidden text-xs">
-            <div className="bg-[#18181b] border-b border-[#27272a] px-3 py-2 flex items-center justify-between font-bold text-slate-200">
+          <div className={`w-full max-w-[480px] rounded shadow-2xl overflow-hidden text-xs border ${windowBg}`}>
+            <div className={`border-b px-3 py-2 flex items-center justify-between font-bold ${titleBarBg}`}>
               <span>⚙️ PowerController 환경설정 (Settings)</span>
               <button
                 onClick={() => setShowSettingsModal(false)}
@@ -1722,7 +1772,27 @@ export const DesktopAppView: React.FC<DesktopAppViewProps> = ({
               </button>
             </div>
             <div className="p-4 space-y-3 max-h-[75vh] overflow-y-auto">
-              <div className="bg-[#18181b] p-3 rounded space-y-2 border border-[#27272a]">
+              <div className={`p-3 rounded space-y-2 border ${panelBg}`}>
+                <span className="font-bold flex items-center gap-1">🎨 테마 스타일 변경 (Theme Selection)</span>
+                <select
+                  value={currentTheme}
+                  onChange={(e) => {
+                    const newTh = e.target.value as ThemeType;
+                    setCurrentTheme(newTh);
+                    localStorage.setItem('power_theme', newTh);
+                    onThemeChange?.(newTh);
+                    showInAppToast(`테마가 [${newTh}]로 변경되었습니다.`);
+                  }}
+                  className={`w-full p-2 rounded text-xs font-bold appearance-none cursor-pointer border ${cardBg}`}
+                >
+                  <option value="dark">🌑 다크 (Fluent Dark)</option>
+                  <option value="gray">🌫️ 그레이 (Simple Gray)</option>
+                  <option value="white">☀️ 화이트 (Clean White)</option>
+                  <option value="beige">☕ 베이지 (Cozy Beige)</option>
+                </select>
+              </div>
+
+              <div className={`${panelBg} p-3 rounded space-y-2 border`}>
                 <span className="font-bold text-slate-200">1. 부팅 및 트레이 동작</span>
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input type="checkbox" checked={autoStart} onChange={e => setAutoStart(e.target.checked)} />

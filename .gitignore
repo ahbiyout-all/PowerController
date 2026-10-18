@@ -1,48 +1,109 @@
-node_modules/
-build/
-dist/
-coverage/
-.DS_Store
-*.log
-.env*
-!.env.example
+# ==============================================================================
+# PowerController .gitignore
+# Strictly excludes build outputs, personal data, temp files, and push scripts.
+# Only core source files, official docs, configs, and build scripts are included.
+# ==============================================================================
 
-# Python cache & virtual environments
+# ------------------------------------------------------------------------------
+# 1. Push & Sync Scripts (Excluded from repository upload per user specification)
+# ------------------------------------------------------------------------------
+push_to_github.bat
+push_to_github.ps1
+push_to_github.sh
+github_sync.py
+scripts/github_push.bat
+*push_to_github*
+
+# ------------------------------------------------------------------------------
+# 2. Dependencies & Package Manager Artifacts
+# ------------------------------------------------------------------------------
+node_modules/
+.npm/
+.pnpm-store/
+bun.lock
+bun.lockb
+yarn.lock
+package-lock.json.bak
+
+# ------------------------------------------------------------------------------
+# 3. Build & Packaging Outputs (Binaries are published via GitHub Releases Assets)
+# ------------------------------------------------------------------------------
+dist/
+build/
+build_output/
+installer_output/
+release_assets/
+coverage/
+
+# Binary executable & archive files
+*.exe
+*.dll
+*.so
+*.dylib
+*.msi
+*.apk
+*.ipa
+*.zip
+*.7z
+*.tar
+*.tar.gz
+*.tgz
+*.rar
+
+# Ensure Application Icon is NEVER excluded
+!PowerController.ico
+!public/PowerController.ico
+
+# ------------------------------------------------------------------------------
+# 4. Python Runtime & Virtual Environments
+# ------------------------------------------------------------------------------
 __pycache__/
 *.py[cod]
 *$py.class
 *.spec
 .venv/
-env/
 venv/
+env/
 ENV/
+env.bak/
+venv.bak/
 
-# Temporary / OS files
-Thumbs.db
-*.tmp
-*.bak
-*.swp
-*~
-korean_lines*.txt
-bun.lock
-
-# IDE / Editor
-.vscode/
-.idea/
-
-# Local User Settings & Runtime Data (Private machine configurations)
+# ------------------------------------------------------------------------------
+# 5. Local User Settings, Private Data & Secrets
+# ------------------------------------------------------------------------------
 power_*.json
 sidebar_theme_config.json
 power_master_key.txt
-*.log
+*.token
+*.key
+*.pem
+*.cert
+.env*
+!.env.example
 
-# Executable / Binary build outputs (Binaries belong to GitHub Releases Assets)
-*.exe
-*.apk
-*.ipa
-*.zip
-!PowerController.ico
-build_output/
-installer_output/
-release_assets/
-ios/Payload/
+# ------------------------------------------------------------------------------
+# 6. Temporary, OS & Editor Artifacts
+# ------------------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
+*.tmp
+*.bak
+*.swp
+*.old_*
+*~
+*.log
+tmp/
+temp/
+korean_lines*.txt
+clean_worklog.py
+fix_app.py
+
+# ------------------------------------------------------------------------------
+# 7. IDE & Workspace Settings
+# ------------------------------------------------------------------------------
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+.aistudio/

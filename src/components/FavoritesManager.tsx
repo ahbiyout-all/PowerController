@@ -25,6 +25,14 @@ const favThemeConfigs = {
     cardText: 'text-slate-100 font-bold',
     cardBadge: 'bg-[#475569] border-[#475569] text-slate-100 font-semibold'
   },
+  white: {
+    container: 'bg-white border-[#cbd5e1] text-[#0f172a]',
+    form: 'bg-[#f8fafc] border-[#cbd5e1]',
+    input: 'bg-white text-[#0f172a] border-[#cbd5e1] focus:ring-blue-500 font-semibold',
+    card: 'bg-white border-[#cbd5e1] hover:border-blue-500 text-[#0f172a]',
+    cardText: 'text-[#0f172a] font-extrabold',
+    cardBadge: 'bg-blue-50 border-blue-200 text-blue-700 font-bold'
+  },
   beige: {
     container: 'bg-[#fdfbf7] border-[#c8bcaa] text-[#2c2217]',
     form: 'bg-[#f5eee4] border-[#c8bcaa]',
@@ -220,7 +228,11 @@ export default function FavoritesManager({ onFavSelect, lang = 'ko', theme = 'da
                     className={`py-2 px-1 rounded-lg font-semibold border flex flex-col items-center justify-center gap-1 cursor-pointer transition-all ${
                       isSelected
                         ? `${meta.bg} ${meta.border} ${meta.text} scale-[1.03] font-bold`
-                        : `${theme === 'beige' ? 'bg-[#ebe2d4] border-[#dfd5c6] text-[#4a3e2b]' : 'bg-white dark:bg-gray-900 border-gray-200/60 dark:border-gray-850/60 text-gray-500 dark:text-gray-400'} hover:text-gray-800 dark:hover:text-gray-200`
+                        : theme === 'white'
+                        ? 'bg-slate-100 border-slate-300 text-slate-800 hover:bg-slate-200'
+                        : theme === 'beige'
+                        ? 'bg-[#ebe2d4] border-[#dfd5c6] text-[#4a3e2b]'
+                        : 'bg-white dark:bg-gray-900 border-gray-200/60 dark:border-gray-850/60 text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
                     }`}
                   >
                     <Icon className="w-4 h-4 animate-pulse" />

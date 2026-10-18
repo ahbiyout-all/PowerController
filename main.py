@@ -243,6 +243,19 @@ THEMES = {
         "name_ko": "회색",
         "name_en": "Gray"
     },
+    "white": {
+        "bg": "#f8fafc",
+        "card": "#ffffff",
+        "text": "#0f172a",
+        "blue": "#2563eb",
+        "red": "#dc2626",
+        "green": "#059669",
+        "yellow": "#d97706",
+        "subtext": "#475569",
+        "secondary": "#e2e8f0",
+        "name_ko": "화이트",
+        "name_en": "White"
+    },
     "beige": {
         "bg": "#f5f0e6",
         "card": "#faf6ee",
@@ -8234,6 +8247,19 @@ if __name__ == "__main__":
         if save:
             self.save_theme(theme_name)
             
+        if hasattr(self, "var_settings_theme") and self.var_settings_theme:
+            disp_map = {
+                "dark": "🌙 다크 (Dark)" if self.lang == "ko" else "🌙 Dark Theme",
+                "gray": "🌫️ 회색 (Gray)" if self.lang == "ko" else "🌫️ Gray Theme",
+                "white": "☀️ 화이트 (White)" if self.lang == "ko" else "☀️ White Theme",
+                "beige": "☕ 베이지 (Beige)" if self.lang == "ko" else "☕ Beige Theme"
+            }
+            if theme_name in disp_map:
+                try:
+                    self.var_settings_theme.set(disp_map[theme_name])
+                except Exception:
+                    pass
+            
     def update_all_widget_colors(self):
         # Update top level root
         self._update_widget_colors_recursive(self.root)
@@ -8281,23 +8307,54 @@ if __name__ == "__main__":
                 # Check for foreground configurations
                 if "fg" in config or "foreground" in config:
                     curr_fg = widget.cget("fg")
-                    if curr_fg == self.old_theme["text"]:
-                        widget.configure(fg=self.new_theme["text"])
+                    is_accent_btn = isinstance(widget, tk.Button) and widget.cget("bg") in [
+                        self.new_theme["blue"], self.new_theme["green"], self.new_theme["red"],
+                        self.old_theme["blue"], self.old_theme["green"], self.old_theme["red"],
+                        "#2563eb", "#10b981", "#ef4444", "#3b82f6", "#059669", "#dc2626", "#ba3c2a"
+                    ]
+                    if curr_fg in [self.old_theme["text"], "white", "#ffffff", "#f3f4f6", "#f1f5f9", "#0f172a", "#2c2217", "#4a3e2b"]:
+                        if not is_accent_btn:
+                            widget.configure(fg=self.new_theme["text"])
                     elif curr_fg == self.old_theme["blue"]:
                         widget.configure(fg=self.new_theme["blue"])
                     elif curr_fg == self.old_theme["red"]:
                         widget.configure(fg=self.new_theme["red"])
                     elif curr_fg == self.old_theme["green"]:
                         widget.configure(fg=self.new_theme["green"])
-                    elif curr_fg == self.old_theme.get("yellow", "#eab308"):
-                        widget.configure(fg=self.new_theme["yellow"])
-                    elif curr_fg == self.old_theme["subtext"]:
-                        widget.configure(fg=self.new_theme["subtext"])
-                    elif curr_fg in ["#9ca3af", "#6b7280"]:
+                    elif curr_fg in [self.old_theme["subtext"], "#9ca3af", "#6b7280", "#cbd5e1", "#8d795f", "#475569", "#5c4d38"]:
                         widget.configure(fg=self.new_theme["subtext"])
 
                 # Check specific widget traits
-                if isinstance(widget, tk.Checkbutton):
+                if isinstance(widget, tk.Menubutton):
+                    widget.configure(
+                        bg=self.new_theme["card"],
+                        fg=self.new_theme["text"],
+                        activebackground=self.new_theme["blue"],
+                        activeforeground="white"
+                    )
+                    try:
+                        if "menu" in config:
+                            m = widget.nametowidget(widget.cget("menu"))
+                            m.configure(
+                                bg=self.new_theme["card"],
+                                fg=self.new_theme["text"],
+                                activebackground=self.new_theme["blue"],
+                                activeforeground="white"
+                            )
+                    except Exception:
+                        pass
+
+                elif isinstance(widget, tk.Scale):
+                    trough_c = self.new_theme.get("secondary", self.new_theme["card"])
+                    widget.configure(
+                        bg=self.new_theme["bg"],
+                        fg=self.new_theme["text"],
+                        troughcolor=trough_c,
+                        activebackground=self.new_theme["blue"],
+                        highlightbackground=self.new_theme["bg"]
+                    )
+
+                elif isinstance(widget, tk.Checkbutton):
                     if "selectcolor" in config:
                         curr_sel = widget.cget("selectcolor")
                         if curr_sel == self.old_theme["card"]:
@@ -8330,22 +8387,9 @@ if __name__ == "__main__":
 
                 elif isinstance(widget, tk.LabelFrame):
                     widget.configure(
-                        bg=self.new_theme["card"] if widget.cget("bg") == self.old_theme["card"] else self.new_theme["bg"],
-                        fg=self.new_theme["subtext"]
+                        bg=self.new_theme["bg"],
+                        fg=self.new_theme["blue"]
                     )
-
-                # OptionMenu menu components
-                try:
-                    if "menu" in config:
-                        m = widget.nametowidget(widget.cget("menu"))
-                        m.configure(
-                            bg=self.new_theme["card"],
-                            fg=self.new_theme["text"],
-                            activebackground=self.new_theme["blue"],
-                            activeforeground=self.new_theme["bg"]
-                        )
-                except Exception:
-                    pass
 
             except Exception:
                 pass
@@ -8495,10 +8539,10 @@ if __name__ == "__main__":
         frm_theme.pack(fill="x", padx=6, pady=4)
         
         theme_names_display = {
-            "dark": "🌙 다크 테마 (Dark)" if self.lang == "ko" else "🌙 Dark Theme",
-            "light": "☀️ 라이트 테마 (Light)" if self.lang == "ko" else "☀️ Light Theme",
-            "cyber": "⚡ 사이버네틱 (Cyber)" if self.lang == "ko" else "⚡ Cybernetic Theme",
-            "amber": "🍯 엠버 골드 (Amber)" if self.lang == "ko" else "🍯 Amber Gold Theme"
+            "dark": "🌙 다크 (Dark)" if self.lang == "ko" else "🌙 Dark Theme",
+            "gray": "🌫️ 회색 (Gray)" if self.lang == "ko" else "🌫️ Gray Theme",
+            "white": "☀️ 화이트 (White)" if self.lang == "ko" else "☀️ White Theme",
+            "beige": "☕ 베이지 (Beige)" if self.lang == "ko" else "☕ Beige Theme"
         }
         theme_rev_map = {v: k for k, v in theme_names_display.items()}
         cur_t_name = theme_names_display.get(getattr(self, "current_theme", "dark"), theme_names_display["dark"])
@@ -8507,6 +8551,19 @@ if __name__ == "__main__":
         def on_theme_dropdown_change(val):
             t_key = theme_rev_map.get(val, "dark")
             self.apply_theme(t_key)
+            if hasattr(self, "om_settings_theme"):
+                cur_cfg = THEMES.get(t_key, THEMES["dark"])
+                try:
+                    self.om_settings_theme.config(bg=cur_cfg["card"], fg=cur_cfg["text"])
+                    if "menu" in self.om_settings_theme.keys():
+                        self.om_settings_theme["menu"].config(
+                            bg=cur_cfg["card"],
+                            fg=cur_cfg["text"],
+                            activebackground=cur_cfg["blue"],
+                            activeforeground="white"
+                        )
+                except Exception:
+                    pass
             
         self.om_settings_theme = tk.OptionMenu(
             frm_theme,
@@ -8517,8 +8574,8 @@ if __name__ == "__main__":
         self.om_settings_theme.config(
             font=("Arial", 10, "bold"),
             bg=DARK_CARD,
-            fg="white",
-            activebackground="#2563eb",
+            fg=TEXT_COLOR,
+            activebackground=ACCENT_BLUE,
             activeforeground="white",
             highlightthickness=0,
             relief="flat",
@@ -8527,7 +8584,7 @@ if __name__ == "__main__":
             cursor="hand2"
         )
         if "menu" in self.om_settings_theme.keys():
-            self.om_settings_theme["menu"].config(font=("Arial", 10), bg=DARK_CARD, fg=TEXT_COLOR, activebackground="#2563eb", activeforeground="white")
+            self.om_settings_theme["menu"].config(font=("Arial", 10), bg=DARK_CARD, fg=TEXT_COLOR, activebackground=ACCENT_BLUE, activeforeground="white")
         self.om_settings_theme.pack(fill="x")
 
         # 2. Sound Theme Frame

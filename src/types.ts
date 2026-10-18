@@ -17,7 +17,7 @@ export type PowerMode = 'shutdown' | 'restart' | 'sleep' | 'screenoff' | 'logout
 
 export type TimerState = 'idle' | 'running' | 'paused' | 'complete';
 
-export type ThemeType = 'dark' | 'gray' | 'beige';
+export type ThemeType = 'dark' | 'gray' | 'white' | 'beige';
 
 export type SoundTheme = 'classic' | 'marimba' | 'crystal' | 'scifi' | 'westminster' | 'urgent' | 'bubble';
 

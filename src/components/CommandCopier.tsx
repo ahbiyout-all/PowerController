@@ -26,9 +26,17 @@ const copierThemeConfigs = {
     pre: 'text-blue-300 bg-slate-950 border-[#475569] font-mono font-bold',
     warning: 'bg-[#334155] border-[#475569] text-[#f8fafc]'
   },
+  white: {
+    container: 'bg-white border-[#cbd5e1] text-[#0f172a]',
+    controls: 'bg-[#f8fafc] border-[#cbd5e1] text-[#0f172a]',
+    item: 'bg-[#f8fafc] border-[#cbd5e1] text-[#0f172a] hover:border-blue-500',
+    badge: 'bg-blue-50 text-blue-700 border border-blue-200 font-bold',
+    pre: 'text-blue-700 bg-white border-[#cbd5e1] font-mono font-bold',
+    warning: 'bg-amber-50 border-amber-200 text-amber-900'
+  },
   beige: {
     container: 'bg-[#fdfbf7] border-[#c8bcaa] text-[#2c2217]',
-    controls: 'bg-[#f5eee4] border-[#c8bcaa]',
+    controls: 'bg-[#f5eee4] border-[#c8bcaa] text-[#2c2217]',
     item: 'bg-[#f5eee4] border-[#c8bcaa] text-[#2c2217] hover:border-[#584835]',
     badge: 'bg-[#e8ded0] text-[#5c4d38] font-bold',
     pre: 'text-[#1e3a8a] bg-white border-[#c8bcaa] font-mono font-bold',
@@ -227,7 +235,11 @@ export default function CommandCopier({ mode, durationSeconds, lang = 'ko', them
             className={`px-2 py-0.5 rounded text-[10px] border font-semibold ${
               customSeconds === 0
                 ? 'bg-blue-500 border-blue-500 text-white'
-                : `${theme === 'beige' ? 'bg-[#ebe2d4] border-[#dfd5c6] text-[#8c785c]' : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 text-gray-400 hover:text-gray-200'}`
+                : theme === 'white'
+                ? 'bg-slate-100 border-slate-300 text-slate-800 hover:bg-slate-200'
+                : theme === 'beige'
+                ? 'bg-[#ebe2d4] border-[#dfd5c6] text-[#8c785c]'
+                : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 text-gray-400 hover:text-gray-200'
             }`}
           >
             {lang === 'en' ? 'Instant' : '즉시 실행'}
@@ -239,7 +251,11 @@ export default function CommandCopier({ mode, durationSeconds, lang = 'ko', them
             className={`px-2 py-0.5 rounded text-[10px] border font-semibold ${
               customSeconds === null
                 ? 'bg-blue-500 border-blue-500 text-white'
-                : `${theme === 'beige' ? 'bg-[#ebe2d4] border-[#dfd5c6] text-[#8c785c]' : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 text-gray-400 hover:text-gray-200'}`
+                : theme === 'white'
+                ? 'bg-slate-100 border-slate-300 text-slate-800 hover:bg-slate-200'
+                : theme === 'beige'
+                ? 'bg-[#ebe2d4] border-[#dfd5c6] text-[#8c785c]'
+                : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 text-gray-400 hover:text-gray-200'
             }`}
           >
             {lang === 'en' ? 'Sync Timer' : '타이머 동기화'}
@@ -251,7 +267,9 @@ export default function CommandCopier({ mode, durationSeconds, lang = 'ko', them
         {getCommands().map((cmd) => (
           <div key={cmd.id} className={`relative group rounded-lg p-2.5 border transition-all duration-300 ${currentCopierTheme.item}`}>
             <div className="flex items-center justify-between mb-1">
-              <span className={`text-[11px] font-bold block ${theme === 'beige' ? 'text-[#4a3e2b]' : 'text-gray-200'}`}>
+              <span className={`text-[11px] font-bold block ${
+                theme === 'white' ? 'text-[#0f172a]' : theme === 'beige' ? 'text-[#4a3e2b]' : 'text-gray-200'
+              }`}>
                 {cmd.name}
               </span>
               <button

@@ -45,6 +45,14 @@ const schedulerThemeConfigs = {
     cardSubtext: 'text-slate-300',
     badge: 'bg-[#475569] border-[#475569] text-slate-200'
   },
+  white: {
+    container: 'bg-white border-[#cbd5e1] text-[#0f172a]',
+    form: 'bg-[#f8fafc] border-[#cbd5e1]',
+    input: 'bg-white text-[#0f172a] border-[#cbd5e1] focus:ring-blue-500 focus:border-blue-500',
+    card: 'bg-white border-[#cbd5e1] text-[#0f172a] hover:border-blue-400',
+    cardSubtext: 'text-slate-600',
+    badge: 'bg-blue-50 border-blue-200 text-blue-700 font-semibold'
+  },
   beige: {
     container: 'bg-white border-[#dfd5c6] text-[#4a3e2b]',
     form: 'bg-[#faf6ee] border-[#dfd5c6]',
@@ -623,7 +631,11 @@ export default function AdvancedScheduler({ onTriggerRule, addLog, soundEnabled,
                   className={`py-1.5 rounded-md border cursor-pointer ${
                     type === t.id
                       ? 'bg-blue-600 border-blue-600 text-white font-bold'
-                      : `${theme === 'beige' ? 'bg-[#ebe2d4] border-[#dfd5c6] text-[#4a3e2b]' : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 text-gray-500 hover:text-gray-200'}`
+                      : theme === 'white'
+                      ? 'bg-slate-100 border-slate-300 text-slate-800 hover:bg-slate-200'
+                      : theme === 'beige'
+                      ? 'bg-[#ebe2d4] border-[#dfd5c6] text-[#4a3e2b]'
+                      : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 text-gray-500 hover:text-gray-200'
                   }`}
                 >
                   {t.label}
@@ -681,7 +693,11 @@ export default function AdvancedScheduler({ onTriggerRule, addLog, soundEnabled,
                           className={`flex-1 py-1 rounded-md text-[10px] border font-bold cursor-pointer transition-all ${
                             active
                               ? 'bg-blue-500/20 border-blue-500/60 text-blue-500 text-xs'
-                              : `${theme === 'beige' ? 'bg-[#ebe2d4] border-[#dfd5c6] text-[#4a3e2b]' : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-805 text-gray-400 hover:text-gray-200'}`
+                              : theme === 'white'
+                              ? 'bg-slate-100 border-slate-300 text-slate-700 hover:bg-slate-200'
+                              : theme === 'beige'
+                              ? 'bg-[#ebe2d4] border-[#dfd5c6] text-[#4a3e2b]'
+                              : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-805 text-gray-400 hover:text-gray-200'
                           }`}
                         >
                           {nm}
@@ -735,7 +751,11 @@ export default function AdvancedScheduler({ onTriggerRule, addLog, soundEnabled,
                     className={`py-1.5 rounded-md border cursor-pointer ${
                       active
                         ? 'bg-indigo-600 border-indigo-600 text-white font-bold'
-                        : `${theme === 'beige' ? 'bg-[#ebe2d4] border-[#dfd5c6] text-[#4a3e2b]' : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 text-gray-500 hover:text-gray-200'}`
+                        : theme === 'white'
+                        ? 'bg-slate-100 border-slate-300 text-slate-700 hover:bg-slate-200'
+                        : theme === 'beige'
+                        ? 'bg-[#ebe2d4] border-[#dfd5c6] text-[#4a3e2b]'
+                        : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 text-gray-500 hover:text-gray-200'
                     }`}
                   >
                     {m.label}
@@ -842,7 +862,9 @@ export default function AdvancedScheduler({ onTriggerRule, addLog, soundEnabled,
                       </span>
                     </div>
  
-                    <h4 className={`text-xs font-extrabold mt-1 uppercase tracking-tight line-clamp-1 ${theme === 'beige' ? 'text-[#4a3e2b]' : 'text-gray-100'}`}>
+                    <h4 className={`text-xs font-extrabold mt-1 uppercase tracking-tight line-clamp-1 ${
+                      theme === 'white' ? 'text-[#0f172a]' : theme === 'beige' ? 'text-[#4a3e2b]' : 'text-gray-100'
+                    }`}>
                       {rule.label}
                     </h4>
  
@@ -851,18 +873,24 @@ export default function AdvancedScheduler({ onTriggerRule, addLog, soundEnabled,
                       {rule.type !== 'interval' && (
                         <p className="flex items-center gap-1">
                           <Clock className="w-3 h-3 text-blue-500 font-bold" />
-                          <span>{lang === 'en' ? 'Trigger time: ' : '기동 시간: '}<strong className={`${theme === 'beige' ? 'text-[#4a3e2b]' : 'text-gray-300'}`}>{rule.time}</strong></span>
+                          <span>{lang === 'en' ? 'Trigger time: ' : '기동 시간: '}<strong className={`${
+                            theme === 'white' ? 'text-[#0f172a]' : theme === 'beige' ? 'text-[#4a3e2b]' : 'text-gray-300'
+                          }`}>{rule.time}</strong></span>
                         </p>
                       )}
                       
                       {rule.type === 'weekly' && (
-                        <p>{lang === 'en' ? 'Weekdays: ' : '요일: '}<strong className={`${theme === 'beige' ? 'text-[#4a3e2b]' : 'text-gray-300'}`}>{getDaysLabel(rule.days)}</strong></p>
+                        <p>{lang === 'en' ? 'Weekdays: ' : '요일: '}<strong className={`${
+                          theme === 'white' ? 'text-[#0f172a]' : theme === 'beige' ? 'text-[#4a3e2b]' : 'text-gray-300'
+                        }`}>{getDaysLabel(rule.days)}</strong></p>
                       )}
                       
                       {rule.type === 'interval' && (
                         <p className="flex items-center gap-1">
                           <Timer className="w-3 h-3 text-purple-500 font-semibold" />
-                          <span>{lang === 'en' ? 'Loop interval: ' : '순환 주기: '}<strong className={`${theme === 'beige' ? 'text-[#4a3e2b]' : 'text-gray-300'}`}>{lang === 'en' ? `Every ${rule.intervalMinutes} mins` : `매 ${rule.intervalMinutes}분 마다`}</strong></span>
+                          <span>{lang === 'en' ? 'Loop interval: ' : '순환 주기: '}<strong className={`${
+                            theme === 'white' ? 'text-[#0f172a]' : theme === 'beige' ? 'text-[#4a3e2b]' : 'text-gray-300'
+                          }`}>{lang === 'en' ? `Every ${rule.intervalMinutes} mins` : `매 ${rule.intervalMinutes}분 마다`}</strong></span>
                         </p>
                       )}
 

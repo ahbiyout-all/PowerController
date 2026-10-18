@@ -124,7 +124,14 @@ export default function App() {
   const lastUserActivityRef = useRef<number>(Date.now());
 
   // Theme & Window properties
-  const [theme, setTheme] = useState<ThemeType>('beige');
+  const [theme, setTheme] = useState<ThemeType>(() => {
+    try {
+      const saved = localStorage.getItem('power_theme') as ThemeType;
+      return (saved && ['dark', 'gray', 'white', 'beige'].includes(saved)) ? saved : 'beige';
+    } catch {
+      return 'beige';
+    }
+  });
   const [alwaysOnTop, setAlwaysOnTop] = useState<boolean>(() => {
     try {
       const saved = localStorage.getItem('power_always_on_top');
@@ -682,6 +689,31 @@ export default function App() {
       logsInnerBg: 'bg-[#1e293b]',
       logsLineHover: 'hover:bg-[#334155]'
     },
+    white: {
+      bg: 'bg-[#f8fafc] text-[#0f172a]',
+      windowBg: 'bg-[#ffffff] border-[#cbd5e1] shadow-xl',
+      titleBar: 'bg-gradient-to-r from-[#f1f5f9] to-[#e2e8f0] text-[#0f172a] border-b border-[#cbd5e1]',
+      sidebarBg: 'bg-[#f1f5f9] border-r border-[#cbd5e1]',
+      mainAreaBg: 'bg-[#ffffff]',
+      border: 'border-[#cbd5e1]',
+      text: 'text-[#0f172a]',
+      subtext: 'text-[#475569]',
+      accentBg: 'bg-blue-600 hover:bg-blue-700 text-white border border-blue-700',
+      statusBarBg: 'bg-[#f1f5f9] border-t border-[#cbd5e1] text-[#334155]',
+      itemHover: 'hover:bg-[#f1f5f9]',
+      name: '클린 화이트',
+      panelBg: 'bg-[#f8fafc]',
+      panelBorder: 'border-[#cbd5e1]',
+      inputContainerBg: 'bg-white border-[#cbd5e1]',
+      inputBox: 'bg-[#ffffff] text-[#0f172a] border-[#cbd5e1] font-semibold',
+      btnInactive: 'bg-[#f1f5f9] hover:bg-[#e2e8f0] text-[#1e293b] border border-[#cbd5e1] font-medium',
+      subPanelBg: 'bg-[#f8fafc] border-[#cbd5e1]',
+      presetBtn: 'border-[#cbd5e1] hover:border-blue-600 bg-white hover:text-blue-600 text-[#334155] font-medium',
+      favoritesBoxBg: 'border-[#cbd5e1] bg-white',
+      logsPanelBg: 'border-[#cbd5e1] bg-white',
+      logsInnerBg: 'bg-[#f8fafc]',
+      logsLineHover: 'hover:bg-[#f1f5f9]'
+    },
     beige: {
       bg: 'bg-[#f5f0e6] text-[#2c2217]',
       windowBg: 'bg-[#faf6ee] border-[#c8bcaa] shadow-xl',
@@ -710,6 +742,7 @@ export default function App() {
   };
 
   const currentThemeConfig = themeConfigs[theme];
+  const isLight = ['white', 'beige'].includes(theme);
 
   const t = {
     title: lang === 'ko' ? '시스템 탐색기' : 'System Explorer',
@@ -768,6 +801,8 @@ export default function App() {
       document.body.classList.add('dark-mode');
     } else if (newTheme === 'gray') {
       document.body.style.backgroundColor = '#1e293b';
+    } else if (newTheme === 'white') {
+      document.body.style.backgroundColor = '#f8fafc';
     } else if (newTheme === 'beige') {
       document.body.style.backgroundColor = '#f5f0e6';
     }
@@ -778,7 +813,7 @@ export default function App() {
     localStorage.setItem('power_theme', newTheme);
     applyThemeStyles(newTheme);
     const themeName = lang === 'en' 
-      ? (newTheme === 'dark' ? 'Windows 11 Fluent Dark' : newTheme === 'gray' ? 'Simple Gray' : 'Cozy Beige')
+      ? (newTheme === 'dark' ? 'Windows 11 Fluent Dark' : newTheme === 'gray' ? 'Simple Gray' : newTheme === 'white' ? 'Clean White' : 'Cozy Beige')
       : themeConfigs[newTheme].name;
     addLog(lang === 'en' ? `Theme modified: [${themeName}]` : `테마 변경 완료: [${themeName}]`);
   };
@@ -802,7 +837,7 @@ export default function App() {
     addLog((lang === 'en' ? 'Current Time: ' : '현재 시간: ') + new Date().toLocaleTimeString(lang === 'en' ? 'en-US' : 'ko-KR'));
     
     const saved = localStorage.getItem('power_theme') as ThemeType;
-    const initialTheme = (saved && ['dark', 'gray', 'beige'].includes(saved)) ? saved : 'beige';
+    const initialTheme = (saved && ['dark', 'gray', 'white', 'beige'].includes(saved)) ? saved : 'beige';
     setTheme(initialTheme);
     applyThemeStyles(initialTheme);
   }, []);
@@ -1291,7 +1326,7 @@ export default function App() {
   };
 
   const cycleTheme = () => {
-    const list: ThemeType[] = ['dark', 'gray', 'beige'];
+    const list: ThemeType[] = ['dark', 'gray', 'white', 'beige'];
     const nextIdx = (list.indexOf(theme) + 1) % list.length;
     handleThemeChange(list[nextIdx]);
   };
@@ -1647,6 +1682,8 @@ export default function App() {
           onHourlyChimeChange={setHourlyChime}
           soundFeedbackEnabled={soundFeedbackEnabled}
           onSoundFeedbackChange={setSoundFeedbackEnabled}
+          theme={theme}
+          onThemeChange={handleThemeChange}
         />
 
         {/* License Modal Portal */}
@@ -1953,25 +1990,25 @@ Copyright (c) 2026 AhBiYout
         </div>
 
           {/* 2. Classic File Menu Bar (MenuBar) */}
-          <div className={`flex items-center px-4 py-1 text-[13.5px] border-b border-gray-500/10 bg-black/10 dark:bg-white/5 gap-3 select-none ${theme === 'beige' ? 'text-[#2c2217] font-semibold' : 'text-gray-200'}`}>
+          <div className={`flex items-center px-4 py-1 text-[13.5px] border-b border-gray-500/10 bg-black/10 dark:bg-white/5 gap-3 select-none ${isLight ? (theme === 'white' ? 'text-[#0f172a] font-semibold' : 'text-[#2c2217] font-semibold') : 'text-gray-200'}`}>
             <button onClick={() => {
               addLog(lang === 'en' ? 'Menu [File] triggered.' : '메뉴 [파일] 실행.');
               triggerNotification(lang === 'en' ? 'File Menu Options: Settings are auto-saved.' : '파일 메뉴 옵션: 설정이 자동으로 저장됩니다.', 'success');
-            }} className={`${theme === 'beige' ? 'hover:bg-black/10' : 'hover:text-white'} cursor-pointer px-1 py-0.5 rounded`}>{lang === 'en' ? 'File(F)' : '파일(F)'}</button>
+            }} className={`${isLight ? 'hover:bg-black/10' : 'hover:text-white'} cursor-pointer px-1 py-0.5 rounded`}>{lang === 'en' ? 'File(F)' : '파일(F)'}</button>
             <button onClick={() => {
               addLog(lang === 'en' ? 'Menu [Edit] triggered.' : '메뉴 [편집] 실행.');
               triggerNotification(lang === 'en' ? 'Edit Menu: You can click favorites presets below to instantly select them.' : '편집 메뉴: 하단 즐겨찾기 보관함을 통해 빠르고 정확한 지연 타이머를 설정할 수 있습니다.', 'info');
-            }} className={`${theme === 'beige' ? 'hover:bg-black/10' : 'hover:text-white'} cursor-pointer px-1 py-0.5 rounded`}>{lang === 'en' ? 'Edit(E)' : '편집(E)'}</button>
+            }} className={`${isLight ? 'hover:bg-black/10' : 'hover:text-white'} cursor-pointer px-1 py-0.5 rounded`}>{lang === 'en' ? 'Edit(E)' : '편집(E)'}</button>
             <button onClick={() => {
               addLog(lang === 'en' ? 'Menu [View] triggered.' : '메뉴 [보기] 실행.');
               cycleTheme();
-            }} className={`${theme === 'beige' ? 'hover:bg-black/10' : 'hover:text-white'} cursor-pointer px-1 py-0.5 rounded`}>{lang === 'en' ? 'View(V)' : '보기(V)'}</button>
+            }} className={`${isLight ? 'hover:bg-black/10' : 'hover:text-white'} cursor-pointer px-1 py-0.5 rounded`}>{lang === 'en' ? 'View(V)' : '보기(V)'}</button>
             
             <button onClick={() => {
               handleLangChange(lang === 'ko' ? 'en' : 'ko');
-            }} className={`${theme === 'beige' ? 'hover:bg-black/10' : 'hover:text-white'} cursor-pointer px-1 py-0.5 rounded`}>{lang === 'en' ? 'Language(L)' : '한/영(L)'}</button>
+            }} className={`${isLight ? 'hover:bg-black/10' : 'hover:text-white'} cursor-pointer px-1 py-0.5 rounded`}>{lang === 'en' ? 'Language(L)' : '한/영(L)'}</button>
             
-            <button onClick={() => triggerNotification(lang === 'en' ? `Power Auto Shutdown Controller v${APP_VERSION}\nAuthor: AhBiYout\nCompany: cisnet.co.kr\nGoogle Blog: https://ahbiyoutvibe.blogspot.com/` : `전원 자동 오프 제어기 v${APP_VERSION}\n제작자: AhBiYout\n회사: cisnet.co.kr\n구글 블로그: https://ahbiyoutvibe.blogspot.com/`, 'info')} className={`${theme === 'beige' ? 'hover:bg-black/10' : 'hover:text-white'} cursor-pointer px-1 py-0.5 rounded`}>{lang === 'en' ? 'Help(H)' : '도움말(H)'}</button>
+            <button onClick={() => triggerNotification(lang === 'en' ? `Power Auto Shutdown Controller v${APP_VERSION}\nAuthor: AhBiYout\nCompany: cisnet.co.kr\nGoogle Blog: https://ahbiyoutvibe.blogspot.com/` : `전원 자동 오프 제어기 v${APP_VERSION}\n제작자: AhBiYout\n회사: cisnet.co.kr\n구글 블로그: https://ahbiyoutvibe.blogspot.com/`, 'info')} className={`${isLight ? 'hover:bg-black/10' : 'hover:text-white'} cursor-pointer px-1 py-0.5 rounded`}>{lang === 'en' ? 'Help(H)' : '도움말(H)'}</button>
           </div>
 
           {/* 3. Tab Navigation Header Bar */}
@@ -1981,7 +2018,11 @@ Copyright (c) 2026 AhBiYout
               className={`py-1.5 rounded text-[13.5px] font-bold transition-all cursor-pointer ${
                 activeFolder === 'timer' || activeFolder === 'favorites' || activeFolder === 'packager' || activeFolder === 'command'
                   ? 'bg-[#3b82f6] text-white shadow font-extrabold'
-                  : theme === 'beige' ? 'bg-[#ebe2d4] hover:bg-[#ded1c0] text-[#3d3222]' : 'bg-black/20 hover:bg-white/5 text-gray-200'
+                  : theme === 'white'
+                  ? 'bg-slate-100 hover:bg-slate-200 text-slate-800'
+                  : theme === 'beige'
+                  ? 'bg-[#ebe2d4] hover:bg-[#ded1c0] text-[#3d3222]'
+                  : 'bg-black/20 hover:bg-white/5 text-gray-200'
               }`}
             >
               ⏱ {lang === 'en' ? 'Control' : '간편 제어'}
@@ -1991,7 +2032,11 @@ Copyright (c) 2026 AhBiYout
               className={`py-1.5 rounded text-[13.5px] font-bold transition-all cursor-pointer ${
                 activeFolder === 'scheduler'
                   ? 'bg-[#3b82f6] text-white shadow font-extrabold'
-                  : theme === 'beige' ? 'bg-[#ebe2d4] hover:bg-[#ded1c0] text-[#3d3222]' : 'bg-black/20 hover:bg-white/5 text-gray-200'
+                  : theme === 'white'
+                  ? 'bg-slate-100 hover:bg-slate-200 text-slate-800'
+                  : theme === 'beige'
+                  ? 'bg-[#ebe2d4] hover:bg-[#ded1c0] text-[#3d3222]'
+                  : 'bg-black/20 hover:bg-white/5 text-gray-200'
               }`}
             >
               📅 {lang === 'en' ? 'Scheduler' : '스케줄러'}
@@ -2001,7 +2046,11 @@ Copyright (c) 2026 AhBiYout
               className={`py-1.5 rounded text-[13.5px] font-bold transition-all cursor-pointer ${
                 activeFolder === 'logs'
                   ? 'bg-[#3b82f6] text-white shadow font-extrabold'
-                  : theme === 'beige' ? 'bg-[#ebe2d4] hover:bg-[#ded1c0] text-[#3d3222]' : 'bg-black/20 hover:bg-white/5 text-gray-200'
+                  : theme === 'white'
+                  ? 'bg-slate-100 hover:bg-slate-200 text-slate-800'
+                  : theme === 'beige'
+                  ? 'bg-[#ebe2d4] hover:bg-[#ded1c0] text-[#3d3222]'
+                  : 'bg-black/20 hover:bg-white/5 text-gray-200'
               }`}
             >
               📋 {lang === 'en' ? 'Logs' : '동작 기록'}
@@ -2051,7 +2100,9 @@ Copyright (c) 2026 AhBiYout
                         value={powerMode}
                         onChange={(e) => handleModeChange(e.target.value as PowerMode)}
                         className={`w-full py-2.5 pl-9 pr-8 rounded-xl font-bold text-xs appearance-none cursor-pointer border shadow-inner transition-colors duration-200 ${
-                          theme === 'beige'
+                          theme === 'white'
+                            ? 'bg-white border-[#cbd5e1] text-[#0f172a]'
+                            : theme === 'beige'
                             ? 'bg-[#ebdcc9] border-[#c2aa8b] text-[#2c2217]'
                             : 'bg-black/20 dark:bg-white/5 border-gray-500/20 text-gray-100 hover:border-blue-500/50'
                         }`}
@@ -2219,11 +2270,11 @@ Copyright (c) 2026 AhBiYout
                     {/* CPU telemetry */}
                     <div className="flex flex-col gap-0.5">
                       <div className="flex items-center justify-between text-[13.5px] font-bold">
-                        <span className={`flex items-center gap-1 ${theme === 'beige' ? 'text-blue-700' : 'text-blue-400'}`}>
+                        <span className={`flex items-center gap-1 ${isLight ? 'text-blue-700 font-bold' : 'text-blue-400'}`}>
                           <Cpu className="w-3 h-3" />
                           CPU {lang === 'en' ? 'Usage' : '점유율'}
                         </span>
-                        <span className={`font-mono text-[13.5px] font-bold ${theme === 'beige' ? 'text-[#2c2217]' : 'text-gray-200'}`}>
+                        <span className={`font-mono text-[13.5px] font-bold ${isLight ? (theme === 'white' ? 'text-[#0f172a]' : 'text-[#2c2217]') : 'text-gray-200'}`}>
                           {systemStatus ? `${systemStatus.cpu}%` : '--%'}
                         </span>
                       </div>
@@ -2238,11 +2289,11 @@ Copyright (c) 2026 AhBiYout
                     {/* Memory telemetry */}
                     <div className="flex flex-col gap-0.5">
                       <div className="flex items-center justify-between text-[13.5px] font-bold">
-                        <span className={`flex items-center gap-1 ${theme === 'beige' ? 'text-indigo-700' : 'text-indigo-400'}`}>
+                        <span className={`flex items-center gap-1 ${isLight ? 'text-indigo-700 font-bold' : 'text-indigo-400'}`}>
                           <HardDrive className="w-3 h-3" />
                           RAM {lang === 'en' ? 'Memory' : '메모리'}
                         </span>
-                        <span className={`font-mono text-[13.5px] font-bold ${theme === 'beige' ? 'text-[#2c2217]' : 'text-gray-200'}`}>
+                        <span className={`font-mono text-[13.5px] font-bold ${isLight ? (theme === 'white' ? 'text-[#0f172a]' : 'text-[#2c2217]') : 'text-gray-200'}`}>
                           {systemStatus ? `${systemStatus.memory.pct}%` : '--%'}
                         </span>
                       </div>
@@ -2260,11 +2311,11 @@ Copyright (c) 2026 AhBiYout
                     {/* Disk space telemetry */}
                     <div className="flex flex-col gap-0.5">
                       <div className="flex items-center justify-between text-[13.5px] font-bold">
-                        <span className={`flex items-center gap-1 ${theme === 'beige' ? 'text-emerald-800' : 'text-emerald-400'}`}>
+                        <span className={`flex items-center gap-1 ${isLight ? 'text-emerald-700 font-bold' : 'text-emerald-400'}`}>
                           <HardDrive className="w-3 h-3" />
                           Disk C: {lang === 'en' ? 'Usage' : '디스크'}
                         </span>
-                        <span className={`font-mono text-[13.5px] font-bold ${theme === 'beige' ? 'text-[#2c2217]' : 'text-gray-200'}`}>
+                        <span className={`font-mono text-[13.5px] font-bold ${isLight ? (theme === 'white' ? 'text-[#0f172a]' : 'text-[#2c2217]') : 'text-gray-200'}`}>
                           {systemStatus ? `${systemStatus.disk.pct}%` : '--%'}
                         </span>
                       </div>
@@ -2279,14 +2330,14 @@ Copyright (c) 2026 AhBiYout
                     {/* Network online latency */}
                     <div className="flex flex-col gap-0.5">
                       <div className="flex items-center justify-between text-[13.5px] font-bold">
-                        <span className={`flex items-center gap-1 ${theme === 'beige' ? 'text-pink-800' : 'text-pink-400'}`}>
+                        <span className={`flex items-center gap-1 ${isLight ? 'text-pink-700 font-bold' : 'text-pink-400'}`}>
                           <Network className="w-3 h-3" />
                           {lang === 'en' ? 'Network' : '네트워크'}
                         </span>
                         <span className={`font-mono text-[13.5px] px-1 rounded font-bold ${
                           systemStatus?.network.online 
-                            ? (theme === 'beige' ? 'bg-emerald-100 text-emerald-800' : 'bg-emerald-500/15 text-emerald-400')
-                            : (theme === 'beige' ? 'bg-rose-100 text-rose-800' : 'bg-rose-500/15 text-rose-400')
+                            ? (isLight ? 'bg-emerald-100 text-emerald-800' : 'bg-emerald-500/15 text-emerald-400')
+                            : (isLight ? 'bg-rose-100 text-rose-800' : 'bg-rose-500/15 text-rose-400')
                         }`}>
                           {systemStatus 
                             ? systemStatus.network.online 
@@ -2326,7 +2377,7 @@ Copyright (c) 2026 AhBiYout
                   {timerState === 'idle' ? (
                     <div className="flex items-center justify-center gap-2">
                       <div className="flex flex-col items-center">
-                        <span className={`text-[13.5px] font-bold mb-1 ${theme === 'beige' ? 'text-[#3d3222]' : 'text-gray-300'}`}>{runType === 'timer' ? (lang === 'en' ? 'H' : '시') : (lang === 'en' ? 'Hour' : '실행 시')}</span>
+                        <span className={`text-[13.5px] font-bold mb-1 ${isLight ? (theme === 'white' ? 'text-[#0f172a]' : 'text-[#3d3222]') : 'text-gray-300'}`}>{runType === 'timer' ? (lang === 'en' ? 'H' : '시') : (lang === 'en' ? 'Hour' : '실행 시')}</span>
                         <input
                           type="number"
                           min={0}
@@ -2336,9 +2387,9 @@ Copyright (c) 2026 AhBiYout
                           className={`w-16 text-center py-1.5 text-sm font-bold rounded font-mono transition-colors duration-300 focus:outline-none ${currentThemeConfig.inputBox}`}
                         />
                       </div>
-                      <span className={`font-bold mt-4 ${theme === 'beige' ? 'text-[#3d3222]' : 'text-gray-400'}`}>:</span>
+                      <span className={`font-bold mt-4 ${isLight ? (theme === 'white' ? 'text-slate-500' : 'text-[#3d3222]') : 'text-gray-400'}`}>:</span>
                       <div className="flex flex-col items-center">
-                        <span className={`text-[13.5px] font-bold mb-1 ${theme === 'beige' ? 'text-[#3d3222]' : 'text-gray-300'}`}>{runType === 'timer' ? (lang === 'en' ? 'M' : '분') : (lang === 'en' ? 'Minute' : '실행 분')}</span>
+                        <span className={`text-[13.5px] font-bold mb-1 ${isLight ? (theme === 'white' ? 'text-[#0f172a]' : 'text-[#3d3222]') : 'text-gray-300'}`}>{runType === 'timer' ? (lang === 'en' ? 'M' : '분') : (lang === 'en' ? 'Minute' : '실행 분')}</span>
                         <input
                           type="number"
                           min={0}
@@ -2350,9 +2401,9 @@ Copyright (c) 2026 AhBiYout
                       </div>
                       {runType === 'timer' && (
                         <>
-                          <span className={`font-bold mt-4 ${theme === 'beige' ? 'text-[#3d3222]' : 'text-gray-400'}`}>:</span>
+                          <span className={`font-bold mt-4 ${isLight ? (theme === 'white' ? 'text-slate-500' : 'text-[#3d3222]') : 'text-gray-400'}`}>:</span>
                           <div className="flex flex-col items-center">
-                            <span className={`text-[13.5px] font-bold mb-1 ${theme === 'beige' ? 'text-[#3d3222]' : 'text-gray-300'}`}>{lang === 'en' ? 'S' : '초'}</span>
+                            <span className={`text-[13.5px] font-bold mb-1 ${isLight ? (theme === 'white' ? 'text-[#0f172a]' : 'text-[#3d3222]') : 'text-gray-300'}`}>{lang === 'en' ? 'S' : '초'}</span>
                             <input
                               type="number"
                               min={0}
@@ -2427,8 +2478,10 @@ Copyright (c) 2026 AhBiYout
                        onClick={() => setActiveFolder('timer')}
                        className={`px-2.5 py-1 text-[13.5px] font-bold rounded cursor-pointer transition-all ${
                          activeFolder === 'timer' || activeFolder === 'favorites'
-                           ? theme === 'beige'
-                             ? 'bg-[#8c785c]/15 border border-[#8c785c]/40 text-[#8c785c] font-extrabold'
+                           ? isLight
+                             ? theme === 'white'
+                               ? 'bg-blue-50 border border-blue-300 text-blue-700 font-extrabold'
+                               : 'bg-[#8c785c]/15 border border-[#8c785c]/40 text-[#8c785c] font-extrabold'
                              : 'bg-blue-600/25 border border-blue-500/40 text-blue-400 font-extrabold'
                            : `${currentThemeConfig.btnInactive} text-[13.5px]`
                        }`}
@@ -2439,8 +2492,10 @@ Copyright (c) 2026 AhBiYout
                        onClick={() => setActiveFolder('packager')}
                        className={`px-2.5 py-1 text-[13.5px] font-bold rounded cursor-pointer transition-all ${
                          activeFolder === 'packager'
-                           ? theme === 'beige'
-                             ? 'bg-[#8c785c]/15 border border-[#8c785c]/40 text-[#8c785c] font-extrabold'
+                           ? isLight
+                             ? theme === 'white'
+                               ? 'bg-blue-50 border border-blue-300 text-blue-700 font-extrabold'
+                               : 'bg-[#8c785c]/15 border border-[#8c785c]/40 text-[#8c785c] font-extrabold'
                              : 'bg-blue-600/25 border border-blue-500/40 text-blue-400 font-extrabold'
                            : `${currentThemeConfig.btnInactive} text-[13.5px]`
                        }`}
@@ -2451,8 +2506,10 @@ Copyright (c) 2026 AhBiYout
                        onClick={() => setActiveFolder('command')}
                        className={`px-2.5 py-1 text-[13.5px] font-bold rounded cursor-pointer transition-all ${
                          activeFolder === 'command'
-                           ? theme === 'beige'
-                             ? 'bg-[#8c785c]/15 border border-[#8c785c]/40 text-[#8c785c] font-extrabold'
+                           ? isLight
+                             ? theme === 'white'
+                               ? 'bg-blue-50 border border-blue-300 text-blue-700 font-extrabold'
+                               : 'bg-[#8c785c]/15 border border-[#8c785c]/40 text-[#8c785c] font-extrabold'
                              : 'bg-blue-600/25 border border-blue-500/40 text-blue-400 font-extrabold'
                            : `${currentThemeConfig.btnInactive} text-[13.5px]`
                        }`}
@@ -2588,7 +2645,7 @@ Copyright (c) 2026 AhBiYout
                  </div>
 
                 {/* Author Info */}
-                <div className={`text-center text-[13.5px] font-mono select-none ${theme === 'beige' ? 'text-[#3d3222]' : 'text-gray-300'}`}>
+                <div className={`text-center text-[13.5px] font-mono select-none ${isLight ? (theme === 'white' ? 'text-slate-800' : 'text-[#3d3222]') : 'text-gray-300'}`}>
                   <div className="flex flex-col items-center gap-1 mt-1">
                     <div className="flex items-center justify-center gap-2 flex-wrap text-[13.5px]">
                       <span>{lang === 'en' ? 'Developer: AhBiYout' : '개발자: AhBiYout'}</span>
@@ -2599,20 +2656,20 @@ Copyright (c) 2026 AhBiYout
                           href="http://www.cisnet.co.kr/"
                           target="_blank"
                           rel="noopener noreferrer"
-                          className={`${theme === 'beige' ? 'text-blue-700 hover:underline font-bold' : 'text-blue-400 hover:underline'} cursor-pointer`}
+                          className={`${isLight ? 'text-blue-700 hover:underline font-bold' : 'text-blue-400 hover:underline'} cursor-pointer`}
                         >
                           http://www.cisnet.co.kr/
                         </a>
                       </span>
                       <span>|</span>
-                      <span className={`${theme === 'beige' ? 'text-blue-800' : 'text-blue-400'} font-semibold`}>v{APP_VERSION}</span>
+                      <span className={`${isLight ? 'text-blue-800' : 'text-blue-400'} font-semibold`}>v{APP_VERSION}</span>
                     </div>
                     <div className="flex items-center justify-center gap-2 flex-wrap text-[13.5px]">
                       <a
                         href="https://ahbiyoutvibe.blogspot.com/"
                         target="_blank"
                         rel="noopener noreferrer"
-                        className={`${theme === 'beige' ? 'text-blue-700 hover:underline font-bold' : 'text-blue-400 hover:underline'} cursor-pointer`}
+                        className={`${isLight ? 'text-blue-700 hover:underline font-bold' : 'text-blue-400 hover:underline'} cursor-pointer`}
                       >
                         {lang === 'en' ? 'Google Blog: https://ahbiyoutvibe.blogspot.com/' : '구글블로그: https://ahbiyoutvibe.blogspot.com/'}
                       </a>
@@ -2623,7 +2680,7 @@ Copyright (c) 2026 AhBiYout
                         setLicenseModalLang(lang);
                         setIsLicenseOpen(true);
                       }}
-                      className={`${theme === 'beige' ? 'text-[#5c4d38] hover:text-blue-700' : 'text-gray-300 hover:text-blue-400'} underline cursor-pointer font-semibold`}
+                      className={`${isLight ? (theme === 'white' ? 'text-slate-700 hover:text-blue-700' : 'text-[#5c4d38] hover:text-blue-700') : 'text-gray-300 hover:text-blue-400'} underline cursor-pointer font-semibold`}
                     >
                       {lang === 'en' ? '📄 View License & Terms Agreement Notice' : '📄 라이선스 및 약관 동의 고지서'}
                     </button>
@@ -2693,13 +2750,13 @@ Copyright (c) 2026 AhBiYout
             {/* Settings trigger button */}
             <button
               onClick={handleOpenSettings}
-              className={`w-full px-4 py-3 flex items-center justify-between hover:bg-black/10 text-[13.5px] font-bold transition-colors cursor-pointer ${theme === 'beige' ? 'text-[#2c2217]' : 'text-gray-200'}`}
+              className={`w-full px-4 py-3 flex items-center justify-between hover:bg-black/10 text-[13.5px] font-bold transition-colors cursor-pointer ${isLight ? (theme === 'white' ? 'text-[#0f172a]' : 'text-[#2c2217]') : 'text-gray-200'}`}
             >
-              <span className={`flex items-center gap-1.5 ${theme === 'beige' ? 'text-blue-700' : 'text-blue-400'}`}>
+              <span className={`flex items-center gap-1.5 ${isLight ? 'text-blue-700' : 'text-blue-400'}`}>
                 <Palette className="w-4 h-4" />
                 {lang === 'en' ? 'Settings ...' : '설정 ...'}
               </span>
-              <ChevronRight className={`w-4 h-4 ${theme === 'beige' ? 'text-[#5c4d38]' : 'text-gray-400'}`} />
+              <ChevronRight className={`w-4 h-4 ${isLight ? (theme === 'white' ? 'text-slate-500' : 'text-[#5c4d38]') : 'text-gray-400'}`} />
             </button>
           </div>
 
@@ -2722,23 +2779,23 @@ Copyright (c) 2026 AhBiYout
                 >
                   <div className="relative flex items-center">
                     {systemStatus.battery.charging ? (
-                      <BatteryCharging className={`w-4 h-4 ${theme === 'beige' ? 'text-emerald-700' : 'text-emerald-400'} animate-pulse`} />
+                      <BatteryCharging className={`w-4 h-4 ${isLight ? 'text-emerald-700 font-bold' : 'text-emerald-400'} animate-pulse`} />
                     ) : systemStatus.battery.level <= 20 ? (
                       <BatteryLow className="w-4 h-4 text-rose-500 animate-bounce" />
                     ) : systemStatus.battery.level <= 60 ? (
-                      <BatteryMedium className={`w-4 h-4 ${theme === 'beige' ? 'text-amber-700' : 'text-amber-400'}`} />
+                      <BatteryMedium className={`w-4 h-4 ${isLight ? 'text-amber-700 font-bold' : 'text-amber-400'}`} />
                     ) : (
-                      <BatteryFull className={`w-4 h-4 ${theme === 'beige' ? 'text-emerald-700' : 'text-emerald-400'}`} />
+                      <BatteryFull className={`w-4 h-4 ${isLight ? 'text-emerald-700 font-bold' : 'text-emerald-400'}`} />
                     )}
                   </div>
                   <span className="font-mono font-bold text-xs flex items-center gap-1">
                     <span>{systemStatus.battery.level}%</span>
                     <span className={`text-[10px] px-1 py-0.2 rounded font-sans font-semibold ${
                       systemStatus.battery.charging
-                        ? theme === 'beige' ? 'bg-emerald-200 text-emerald-800' : 'bg-emerald-500/20 text-emerald-300'
+                        ? isLight ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-emerald-500/20 text-emerald-300'
                         : systemStatus.battery.level <= 20
                         ? 'bg-rose-500/20 text-rose-400'
-                        : theme === 'beige' ? 'bg-amber-100 text-amber-800' : 'bg-black/30 text-gray-300'
+                        : isLight ? 'bg-amber-100 text-amber-800 border border-amber-300' : 'bg-black/30 text-gray-300'
                     }`}>
                       {systemStatus.battery.charging
                         ? (lang === 'en' ? 'Charging' : '충전중')
@@ -2747,7 +2804,7 @@ Copyright (c) 2026 AhBiYout
                   </span>
                 </div>
               )}
-              <span className="border-r border-gray-500/20 pr-4">{lang === 'en' ? 'Selected Power: ' : '선택한 전원: '}<strong className={theme === 'beige' ? 'text-blue-800 font-extrabold' : 'text-blue-400 font-bold'}>{getPowerModeKorean(powerMode)}</strong></span>
+              <span className="border-r border-gray-500/20 pr-4">{lang === 'en' ? 'Selected Power: ' : '선택한 전원: '}<strong className={isLight ? 'text-blue-800 font-extrabold' : 'text-blue-400 font-bold'}>{getPowerModeKorean(powerMode)}</strong></span>
               <span className="border-r border-gray-500/20 pr-4 hidden md:inline">{lang === 'en' ? 'Status: ' : '상태: '}<strong>{timerState === 'running' ? (lang === 'en' ? 'Monitoring' : '감시 작동 중') : (lang === 'en' ? 'Idle' : '대기')}</strong></span>
               <span className="hidden lg:inline pr-2">{currentTimeText}</span>
             </div>
@@ -3054,6 +3111,7 @@ Copyright (c) 2026 AhBiYout
                     >
                       <option value="dark" className="bg-gray-900">🌑 {lang === 'en' ? 'Fluent Dark (Default Modern Dark)' : '다크 (Fluent Dark - 기본 현대적 어두운 테마)'}</option>
                       <option value="gray" className="bg-gray-900">🌫️ {lang === 'en' ? 'Simple Gray (Balanced Neutral Slate)' : '그레이 (Simple Gray - 차분한 뉴트럴 슬레이트)'}</option>
+                      <option value="white" className="bg-gray-900">☀️ {lang === 'en' ? 'Clean White (Bright Modern Minimalist)' : '화이트 (Clean White - 깔끔하고 밝은 미니멀 테마)'}</option>
                       <option value="beige" className="bg-gray-900">☕ {lang === 'en' ? 'Cozy Beige (Warm & Soft Amber)' : '베이지 (Cozy Beige - 눈이 편안한 부드러운 웜톤)'}</option>
                     </select>
                     <ChevronDown className="w-3.5 h-3.5 text-gray-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />

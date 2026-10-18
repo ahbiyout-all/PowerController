@@ -157,6 +157,19 @@ const modalThemeStyles = {
     tabActive: 'bg-blue-600 text-white',
     tabInactive: 'bg-[#1e293b] text-slate-300 hover:bg-[#334155]'
   },
+  white: {
+    overlay: 'bg-black/50 backdrop-blur-sm',
+    box: 'bg-white border-[#cbd5e1] text-[#0f172a] shadow-2xl',
+    header: 'border-b border-[#cbd5e1] bg-[#f1f5f9]',
+    subtext: 'text-slate-600',
+    card: 'bg-[#f8fafc] border-[#cbd5e1] hover:border-blue-500 text-[#0f172a]',
+    cardActive: 'bg-blue-50 border-blue-500 ring-1 ring-blue-500/50',
+    cardDesc: 'text-slate-600',
+    badge: 'bg-blue-50 border-blue-200 text-blue-700 font-semibold',
+    applyBtn: 'bg-blue-600 hover:bg-blue-500 text-white shadow-md',
+    tabActive: 'bg-blue-600 text-white',
+    tabInactive: 'bg-[#f1f5f9] text-slate-700 hover:bg-[#e2e8f0]'
+  },
   beige: {
     overlay: 'bg-black/50 backdrop-blur-sm',
     box: 'bg-[#faf6ee] border-[#dfd5c6] text-[#4a3e2b] shadow-2xl',
