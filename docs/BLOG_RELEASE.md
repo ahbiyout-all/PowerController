@@ -200,6 +200,6 @@ PowerController의 첫 릴리즈부터 현재까지의 전체 누적 패치 이�
 
 ## 10. 추천 태그 (Recommended Tags)
 
-> **태그 규격 준수 안내**: 한글/영어 혼합 구성, 총 17개 (20개 이하 요건 충족), 콤마 포함 총 181자 (200글자 이내 요건 완벽 충족).
+> **구글 블로그(Blogger) 라벨 정책 준수 안내**: 해시태그(`#`) 기호를 제외한 콤마(,) 구분형 순수 키워드 형태로 구성 (구글 블로그는 라벨 등록 시 `#` 기호가 포함되면 URL 인코딩 및 태그 분류 오류를 유발하므로 순수 단어로 입력해야 합니다). 한글/영어 혼합 구성, 총 16개 (20개 이하 요건 충족), 콤마 포함 총 165자 (200글자 이내 요건 완벽 충족).
 
-#PowerController, #PC종료예약, #윈도우자동종료, #전원스케줄러, #원격종료, #컴퓨터자동종료, #윈도우11, #타이머, #절전모드, #시스템종료, #InnoSetup, #WindowsTimer, #ShutdownTimer, #AutoShutdown, #WakeOnLAN, #AhBiYout, #CISNet
+PowerController, PC종료예약, 윈도우자동종료, 전원스케줄러, 원격종료, 컴퓨터자동종료, 윈도우11, 타이머, 절전모드, 시스템종료, InnoSetup, WindowsTimer, AutoShutdown, WakeOnLAN, AhBiYout, CISNet

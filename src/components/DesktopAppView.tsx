@@ -454,6 +454,10 @@ export const DesktopAppView: React.FC<DesktopAppViewProps> = ({
     { ip: '192.168.0.22', host: 'MEETING-ROOM-PC', isSelf: false, tokenSet: true, status: '대기 중 (Online)' }
   ]);
   const [selectedPresetIndex, setSelectedPresetIndex] = useState(0);
+  const [selectedDeviceIPs, setSelectedDeviceIPs] = useState<string[]>(['192.168.0.10', '192.168.0.15']);
+  const [remoteControlLogs, setRemoteControlLogs] = useState<string[]>([
+    `[${new Date().toLocaleTimeString()}] [NetBeaconEngine] 원격 제어판 초기화 완료 (선택된 디바이스 대상 명령 송출 대기 중)`
+  ]);
 
   // Countdown effect
   useEffect(() => {
@@ -1543,31 +1547,190 @@ export const DesktopAppView: React.FC<DesktopAppViewProps> = ({
                 </div>
               </div>
 
-              {/* Section 2: Online PC Discovery Monitoring */}
-              <div className="bg-[#18181b] border border-[#27272a] p-3 rounded space-y-2">
+              {/* Section 2: Online PC Discovery & Remote Control Panel */}
+              <div className="bg-[#18181b] border border-[#27272a] p-3 rounded space-y-2.5">
                 <div className="flex items-center justify-between font-bold">
-                  <span className="text-slate-200">💻 사내망 탐지 PC 모니터링 목록 (NetBeaconEngine 0.0% CPU)</span>
-                  <span className="text-blue-400 font-bold">{detectedPcs.length}대 감지</span>
-                </div>
-                <div className="bg-[#2b2b36] border border-[#3f3f46] rounded p-2 max-h-36 overflow-y-auto space-y-1">
-                  {detectedPcs.map((pc, idx) => (
-                    <div
-                      key={idx}
-                      className={`p-1.5 rounded flex items-center justify-between text-xs ${
-                        pc.isSelf ? 'bg-blue-950/40 border border-blue-500/30' : 'hover:bg-[#353544]'
-                      }`}
+                  <span className="text-slate-200">💻 사내망 탐지 디바이스 원격 제어판 (NetBeaconEngine)</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-blue-400 font-bold">{detectedPcs.length}대 탐지</span>
+                    <button
+                      onClick={() => {
+                        setSelectedDeviceIPs(detectedPcs.map(p => p.ip));
+                        playSoundEffect('buttonClick');
+                        showInAppToast('✅ 모든 탐지된 디바이스가 선택되었습니다.');
+                      }}
+                      className="px-2 py-0.5 bg-blue-600/20 hover:bg-blue-600/40 text-blue-300 border border-blue-500/40 rounded text-[10px] font-bold cursor-pointer"
                     >
-                      <div className="flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-                        <span className="font-bold text-slate-100">{pc.ip}</span>
-                        <span className="text-slate-400 font-mono">({pc.host})</span>
-                        {pc.isSelf && (
-                          <span className="px-1.5 py-0.2 bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded text-[10px] font-bold">
-                            👑 관리자 PC
-                          </span>
-                        )}
+                      전체 선택
+                    </button>
+                    <button
+                      onClick={() => {
+                        setSelectedDeviceIPs([]);
+                        playSoundEffect('buttonClick');
+                        showInAppToast('🗑️ 모든 디바이스 선택이 해제되었습니다.');
+                      }}
+                      className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded text-[10px] font-semibold cursor-pointer"
+                    >
+                      해제
+                    </button>
+                  </div>
+                </div>
+
+                {/* Device Checkbox List */}
+                <div className="bg-[#2b2b36] border border-[#3f3f46] rounded p-2 max-h-36 overflow-y-auto space-y-1">
+                  {detectedPcs.map((pc, idx) => {
+                    const isSelected = selectedDeviceIPs.includes(pc.ip);
+                    return (
+                      <div
+                        key={idx}
+                        onClick={() => {
+                          setSelectedDeviceIPs(prev =>
+                            isSelected ? prev.filter(ip => ip !== pc.ip) : [...prev, pc.ip]
+                          );
+                          playSoundEffect('buttonClick');
+                        }}
+                        className={`p-1.5 rounded flex items-center justify-between text-xs cursor-pointer transition-colors ${
+                          isSelected
+                            ? 'bg-blue-600/30 border border-blue-500/60 font-bold text-white'
+                            : 'hover:bg-[#353544] text-slate-300'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => {}}
+                            className="rounded border-slate-600 bg-slate-900 text-blue-500 focus:ring-0 cursor-pointer"
+                          />
+                          <span className={`w-2 h-2 rounded-full ${isSelected ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`}></span>
+                          <span className="font-mono">{pc.ip}</span>
+                          <span className="text-slate-400 font-sans">({pc.host})</span>
+                          {pc.isSelf && (
+                            <span className="px-1.5 py-0.2 bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded text-[9px] font-bold">
+                              👑 본인
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-slate-400 text-[11px]">{pc.status}</span>
                       </div>
-                      <span className="text-slate-400 text-[11px]">{pc.status}</span>
+                    );
+                  })}
+                </div>
+
+                {/* Selected Devices Quick Action Bar */}
+                <div className="space-y-1.5 pt-1 border-t border-[#27272a]">
+                  <div className="flex items-center justify-between text-[11px] text-slate-300 font-semibold">
+                    <span>⚡ 선택된 디바이스 ({selectedDeviceIPs.length}대) 즉시 원격 제어:</span>
+                    <span className="text-[10px] text-emerald-400 font-mono">TCP 9988 직결</span>
+                  </div>
+                  <div className="grid grid-cols-5 gap-1.5">
+                    <button
+                      onClick={() => {
+                        if (selectedDeviceIPs.length === 0) {
+                          showInAppToast('⚠️ 제어할 대상 디바이스를 최소 1대 이상 선택해주세요.');
+                          return;
+                        }
+                        playSoundEffect('actionSuccess');
+                        const msg = `[${new Date().toLocaleTimeString()}] 🛑 [즉시 종료] 대상(${selectedDeviceIPs.join(', ')}) 원격 전송 완료 [OK]`;
+                        setRemoteControlLogs(prev => [msg, ...prev]);
+                        showInAppToast(`🛑 선택된 ${selectedDeviceIPs.length대} 디바이스에 즉시 종료 명령이 전송되었습니다.`);
+                        setNetworkTargetIps(selectedDeviceIPs.join(', '));
+                      }}
+                      className="py-1.5 px-2 bg-red-600 hover:bg-red-500 text-white rounded font-bold text-[11px] shadow flex items-center justify-center gap-1 cursor-pointer transition-colors"
+                      title="선택된 PC 즉시 전원 종료"
+                    >
+                      <Power className="w-3 h-3" />
+                      <span>종료</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (selectedDeviceIPs.length === 0) {
+                          showInAppToast('⚠️ 제어할 대상 디바이스를 최소 1대 이상 선택해주세요.');
+                          return;
+                        }
+                        playSoundEffect('actionSuccess');
+                        const msg = `[${new Date().toLocaleTimeString()}] 🔄 [즉시 재시작] 대상(${selectedDeviceIPs.join(', ')}) 원격 전송 완료 [OK]`;
+                        setRemoteControlLogs(prev => [msg, ...prev]);
+                        showInAppToast(`🔄 선택된 ${selectedDeviceIPs.length}대 디바이스에 즉시 재시작 명령이 전송되었습니다.`);
+                        setNetworkTargetIps(selectedDeviceIPs.join(', '));
+                      }}
+                      className="py-1.5 px-2 bg-amber-600 hover:bg-amber-500 text-white rounded font-bold text-[11px] shadow flex items-center justify-center gap-1 cursor-pointer transition-colors"
+                      title="선택된 PC 즉시 시스템 다시 시작"
+                    >
+                      <RotateCw className="w-3 h-3" />
+                      <span>재시작</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (selectedDeviceIPs.length === 0) {
+                          showInAppToast('⚠️ 제어할 대상 디바이스를 최소 1대 이상 선택해주세요.');
+                          return;
+                        }
+                        playSoundEffect('actionSuccess');
+                        const msg = `[${new Date().toLocaleTimeString()}] 🌙 [절전 모드] 대상(${selectedDeviceIPs.join(', ')}) 원격 전송 완료 [OK]`;
+                        setRemoteControlLogs(prev => [msg, ...prev]);
+                        showInAppToast(`🌙 선택된 ${selectedDeviceIPs.length}대 디바이스에 절전 모드 명령이 전송되었습니다.`);
+                        setNetworkTargetIps(selectedDeviceIPs.join(', '));
+                      }}
+                      className="py-1.5 px-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded font-bold text-[11px] shadow flex items-center justify-center gap-1 cursor-pointer transition-colors"
+                      title="선택된 PC 절전 모드 전환"
+                    >
+                      <Moon className="w-3 h-3" />
+                      <span>절전</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (selectedDeviceIPs.length === 0) {
+                          showInAppToast('⚠️ 제어할 대상 디바이스를 최소 1대 이상 선택해주세요.');
+                          return;
+                        }
+                        playSoundEffect('actionSuccess');
+                        const msg = `[${new Date().toLocaleTimeString()}] 📺 [화면 끄기] 대상(${selectedDeviceIPs.join(', ')}) 원격 전송 완료 [OK]`;
+                        setRemoteControlLogs(prev => [msg, ...prev]);
+                        showInAppToast(`📺 선택된 ${selectedDeviceIPs.length}대 디바이스의 화면을 껐습니다.`);
+                        setNetworkTargetIps(selectedDeviceIPs.join(', '));
+                      }}
+                      className="py-1.5 px-2 bg-slate-700 hover:bg-slate-600 text-white rounded font-bold text-[11px] shadow flex items-center justify-center gap-1 cursor-pointer transition-colors"
+                      title="선택된 PC 디스플레이 화면 끄기"
+                    >
+                      <Monitor className="w-3 h-3" />
+                      <span>화면끔</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (selectedDeviceIPs.length === 0) {
+                          showInAppToast('⚠️ 제어할 대상 디바이스를 최소 1대 이상 선택해주세요.');
+                          return;
+                        }
+                        playSoundEffect('timerAlarm');
+                        const msg = `[${new Date().toLocaleTimeString()}] 🚨 [긴급 비상 알람] 대상(${selectedDeviceIPs.join(', ')}) 송출 완료 [OK]`;
+                        setRemoteControlLogs(prev => [msg, ...prev]);
+                        showInAppToast(`🚨 선택된 ${selectedDeviceIPs.length}대 디바이스에 긴급 비상 알람을 송출했습니다.`);
+                        setNetworkTargetIps(selectedDeviceIPs.join(', '));
+                      }}
+                      className="py-1.5 px-2 bg-rose-600 hover:bg-rose-500 text-white rounded font-bold text-[11px] shadow flex items-center justify-center gap-1 cursor-pointer transition-colors"
+                      title="긴급 알람 송출"
+                    >
+                      <Bell className="w-3 h-3" />
+                      <span>알람</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Live Remote Execution Console */}
+                <div className="bg-[#111318] border border-[#27272a] rounded p-2 text-[10px] font-mono space-y-1 max-h-24 overflow-y-auto">
+                  <div className="text-slate-400 font-bold flex items-center justify-between pb-1 border-b border-[#27272a]">
+                    <span>📋 원격 제어 실시간 실행 콘솔 (TCP 9988 ACK)</span>
+                    <button
+                      onClick={() => setRemoteControlLogs([`[${new Date().toLocaleTimeString()}] 콘솔 로그가 초기화되었습니다.`])}
+                      className="text-slate-500 hover:text-slate-300 cursor-pointer"
+                    >
+                      지우기
+                    </button>
+                  </div>
+                  {remoteControlLogs.map((log, lIdx) => (
+                    <div key={lIdx} className="text-emerald-400/90 whitespace-nowrap overflow-hidden text-ellipsis">
+                      {log}
                     </div>
                   ))}
                 </div>
