@@ -46,7 +46,7 @@ import { soundEngine, SOUND_THEMES } from '../utils/soundEngine';
 import { UpdateModal } from './GitHubUpdateBanner';
 import BatteryHistoryChart from './BatteryHistoryChart';
 
-export type DesktopWindowType = 'main' | 'network' | 'injector';
+export type DesktopWindowType = 'main' | 'network' | 'injector' | 'devices';
 
 interface DesktopAppViewProps {
   onSwitchToWeb?: () => void;
@@ -631,6 +631,20 @@ export const DesktopAppView: React.FC<DesktopAppViewProps> = ({
           >
             <Wifi className="w-3 h-3" />
             <span>PowerNetworkScheduler.exe</span>
+          </button>
+          <button
+            onClick={() => {
+              setActiveApp('devices');
+              playSoundEffect('buttonClick');
+            }}
+            className={`px-3 py-1 rounded font-medium transition-colors flex items-center gap-1.5 ${
+              activeApp === 'devices'
+                ? 'bg-blue-600 text-white shadow-sm font-bold'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+            }`}
+          >
+            <Cpu className="w-3 h-3 text-emerald-400" />
+            <span>DeviceController.exe</span>
           </button>
           <button
             onClick={() => {
@@ -1916,6 +1930,166 @@ export const DesktopAppView: React.FC<DesktopAppViewProps> = ({
                 <HardDrive className="w-4 h-4" />
                 <span>🚀 스케줄 원클릭 즉시 주입 및 적용</span>
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* WINDOW 4: DeviceController.exe (Dedicated Individual Device Control Panel) */}
+        {/* ========================================================================= */}
+        {activeApp === 'devices' && (
+          <div
+            className={`w-full max-w-[640px] rounded shadow-2xl overflow-hidden flex flex-col border ${windowBg}`}
+            style={{ fontFamily: "'Malgun Gothic', 'Segoe UI', Arial, sans-serif" }}
+          >
+            {/* Window Title Bar */}
+            <div className={`border-b px-3 py-2 flex items-center justify-between text-xs select-none ${titleBarBg}`}>
+              <div className="flex items-center gap-2 font-bold text-slate-200">
+                <div className="w-4 h-4 rounded bg-emerald-600 flex items-center justify-center text-white text-[10px] font-black">
+                  D
+                </div>
+                <span>DeviceController v{APP_VERSION} - 사내 감지 디바이스 개별 원격 제어판</span>
+              </div>
+              <div className="flex items-center gap-1 text-slate-400">
+                <span className="text-[11px] text-emerald-400 font-bold mr-2">🟢 개별 제어 모드 활성</span>
+                <button
+                  onClick={() => setActiveApp('main')}
+                  className="w-7 h-5 flex items-center justify-center hover:bg-red-600 hover:text-white rounded cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-4 space-y-3.5 text-xs">
+              <div className="bg-blue-950/30 border border-blue-500/40 p-3 rounded space-y-1">
+                <div className="font-bold text-blue-400 flex items-center gap-1.5">
+                  <Wifi className="w-4 h-4" />
+                  <span>개별 디바이스 직접 제어 타워 (TCP 9988 직결)</span>
+                </div>
+                <div className="text-[11px] text-slate-300">
+                  사내망에서 탐지된 각 개별 PC별로 전원 종료(Shutdown), 시스템 재시작(Restart), 절전 모드(Sleep)를 개별적으로 즉시 실행할 수 있습니다.
+                </div>
+              </div>
+
+              {/* Individual Device Cards List */}
+              <div className="space-y-2 max-h-[50vh] overflow-y-auto pr-1">
+                {detectedPcs.map((pc, idx) => (
+                  <div
+                    key={idx}
+                    className="bg-[#18181b] border border-[#27272a] hover:border-blue-500/50 p-3 rounded-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 transition-all shadow"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-9 h-9 rounded-md bg-[#2b2b36] border border-[#3f3f46] flex items-center justify-center text-slate-200 font-bold">
+                        <Cpu className="w-4 h-4 text-blue-400" />
+                      </div>
+                      <div>
+                        <div className="font-bold text-slate-100 flex items-center gap-1.5">
+                          <span>{pc.host}</span>
+                          {pc.isSelf && (
+                            <span className="px-1.5 py-0.2 bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded text-[9px] font-bold">
+                              👑 본인 PC
+                            </span>
+                          )}
+                          <span className="px-1.5 py-0.2 bg-emerald-500/20 text-emerald-300 rounded text-[9px]">
+                            {pc.status}
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-slate-400 font-mono mt-0.5">
+                          IP: {pc.ip} | TCP 9988 포트 대기 중
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Individual Control Action Buttons ('Shutdown', 'Restart', 'Sleep') */}
+                    <div className="flex items-center gap-1.5 w-full sm:w-auto justify-end flex-wrap">
+                      <button
+                        onClick={() => {
+                          playSoundEffect('actionSuccess');
+                          const msg = `[${new Date().toLocaleTimeString()}] 🛑 [개별 종료] 대상 PC(${pc.host} / ${pc.ip}) 전원 종료 명령 송출 [OK]`;
+                          setRemoteControlLogs(prev => [msg, ...prev]);
+                          showInAppToast(`🛑 [${pc.host}] PC에 즉시 전원 종료(Shutdown) 명령이 전송되었습니다.`);
+                        }}
+                        className="px-2.5 py-1.5 bg-red-600 hover:bg-red-500 text-white rounded font-bold text-[11px] shadow flex items-center gap-1 cursor-pointer transition-colors"
+                        title="이 PC 즉시 전원 종료 (Shutdown)"
+                      >
+                        <Power className="w-3 h-3" />
+                        <span>종료</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          playSoundEffect('actionSuccess');
+                          const msg = `[${new Date().toLocaleTimeString()}] 🔄 [개별 재시작] 대상 PC(${pc.host} / ${pc.ip}) 재시작 명령 송출 [OK]`;
+                          setRemoteControlLogs(prev => [msg, ...prev]);
+                          showInAppToast(`🔄 [${pc.host}] PC에 즉시 재시작(Restart) 명령이 전송되었습니다.`);
+                        }}
+                        className="px-2.5 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded font-bold text-[11px] shadow flex items-center gap-1 cursor-pointer transition-colors"
+                        title="이 PC 시스템 다시 시작 (Restart)"
+                      >
+                        <RotateCw className="w-3 h-3" />
+                        <span>재시작</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          playSoundEffect('actionSuccess');
+                          const msg = `[${new Date().toLocaleTimeString()}] 🌙 [개별 절전] 대상 PC(${pc.host} / ${pc.ip}) 절전 모드 명령 송출 [OK]`;
+                          setRemoteControlLogs(prev => [msg, ...prev]);
+                          showInAppToast(`🌙 [${pc.host}] PC를 절전(Sleep) 모드로 전환했습니다.`);
+                        }}
+                        className="px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded font-bold text-[11px] shadow flex items-center gap-1 cursor-pointer transition-colors"
+                        title="이 PC 절전 모드 전환 (Sleep)"
+                      >
+                        <Moon className="w-3 h-3" />
+                        <span>절전</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          playSoundEffect('actionSuccess');
+                          const msg = `[${new Date().toLocaleTimeString()}] 📺 [화면 끄기] 대상 PC(${pc.host} / ${pc.ip}) 화면 끄기 송출 [OK]`;
+                          setRemoteControlLogs(prev => [msg, ...prev]);
+                          showInAppToast(`📺 [${pc.host}] PC의 디스플레이 화면을 껐습니다.`);
+                        }}
+                        className="px-2.5 py-1.5 bg-slate-700 hover:bg-slate-600 text-white rounded font-bold text-[11px] shadow flex items-center gap-1 cursor-pointer transition-colors"
+                        title="이 PC 화면 끄기"
+                      >
+                        <Monitor className="w-3 h-3" />
+                        <span>화면끔</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          playSoundEffect('timerAlarm');
+                          const msg = `[${new Date().toLocaleTimeString()}] 🚨 [비상 알람] 대상 PC(${pc.host} / ${pc.ip}) 알람 송출 [OK]`;
+                          setRemoteControlLogs(prev => [msg, ...prev]);
+                          showInAppToast(`🚨 [${pc.host}] PC에 긴급 비상 알람을 송출했습니다.`);
+                        }}
+                        className="px-2.5 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded font-bold text-[11px] shadow flex items-center gap-1 cursor-pointer transition-colors"
+                        title="긴급 알람 송출"
+                      >
+                        <Bell className="w-3 h-3" />
+                        <span>알람</span>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Realtime Execution Log for Individual Device Control */}
+              <div className="bg-[#111318] border border-[#27272a] rounded p-2 text-[10px] font-mono space-y-1 max-h-24 overflow-y-auto">
+                <div className="text-slate-400 font-bold flex items-center justify-between pb-1 border-b border-[#27272a]">
+                  <span>📋 개별 디바이스 원격 제어실시간 실행 콘솔</span>
+                  <button
+                    onClick={() => setRemoteControlLogs([`[${new Date().toLocaleTimeString()}] 콘솔 로그가 초기화되었습니다.`])}
+                    className="text-slate-500 hover:text-slate-300 cursor-pointer"
+                  >
+                    지우기
+                  </button>
+                </div>
+                {remoteControlLogs.map((log, lIdx) => (
+                  <div key={lIdx} className="text-emerald-400/90 whitespace-nowrap overflow-hidden text-ellipsis">
+                    {log}
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         )}
