@@ -41,10 +41,11 @@ import {
   Volume1,
   Check
 } from 'lucide-react';
-import { APP_VERSION, SoundTheme, ThemeType } from '../types';
+import { APP_VERSION, LabDevice, SoundTheme, ThemeType } from '../types';
 import { soundEngine, SOUND_THEMES } from '../utils/soundEngine';
 import { UpdateModal } from './GitHubUpdateBanner';
 import BatteryHistoryChart from './BatteryHistoryChart';
+import { LabNetworkFleetPanel, generate50LabPreset } from './LabNetworkFleetPanel';
 import {
   AppLang,
   getInitialLanguage,
@@ -335,8 +336,6 @@ export const DesktopAppView: React.FC<DesktopAppViewProps> = ({
     }
   });
 
-  // Window 2 Remote Action Pulldown selection
-  const [selectedRemoteAction, setSelectedRemoteAction] = useState<string>('shutdown');
 
   // Sync with prop changes if passed from App.tsx
   useEffect(() => {
@@ -558,16 +557,9 @@ export const DesktopAppView: React.FC<DesktopAppViewProps> = ({
   // Logs
   const [logs, setLogs] = useState<string[]>(() => buildDefaultLogs(currentLang));
 
-  // Network Scheduler states
-  const [networkTargetIps, setNetworkTargetIps] = useState<string>('192.168.0.10, 192.168.0.15');
-  const [detectedPcs, setDetectedPcs] = useState([
-    { ip: '192.168.0.5', host: 'ADMIN-DESKTOP', isSelf: true, tokenSet: true, statusKo: '대기 중 (Online)', statusEn: 'Ready (Online)' },
-    { ip: '192.168.0.10', host: 'RESEARCH-LAB-01', isSelf: false, tokenSet: true, statusKo: '대기 중 (Online)', statusEn: 'Ready (Online)' },
-    { ip: '192.168.0.15', host: 'DESIGN-WORK-02', isSelf: false, tokenSet: false, statusKo: '대기 중 (Online)', statusEn: 'Ready (Online)' },
-    { ip: '192.168.0.22', host: 'MEETING-ROOM-PC', isSelf: false, tokenSet: true, statusKo: '대기 중 (Online)', statusEn: 'Ready (Online)' }
-  ]);
-  const [selectedPresetIndex, setSelectedPresetIndex] = useState(0);
-  const [selectedDeviceIPs, setSelectedDeviceIPs] = useState<string[]>(['192.168.0.10', '192.168.0.15']);
+  // Network Scheduler / 50-PC Lab Fleet states
+  const [labDevices, setLabDevices] = useState<LabDevice[]>(() => generate50LabPreset('192.168.10.', 101, 10));
+  const [selectedDeviceIPs, setSelectedDeviceIPs] = useState<string[]>(['192.168.10.101', '192.168.10.102', '192.168.10.103']);
   const [remoteControlLogs, setRemoteControlLogs] = useState<string[]>(() => [
     currentLang === 'en'
       ? `[${new Date().toLocaleTimeString('en-US')}] [NetBeaconEngine] Remote control panel ready (awaiting command dispatch)`
@@ -1787,11 +1779,11 @@ export const DesktopAppView: React.FC<DesktopAppViewProps> = ({
         )}
 
         {/* ========================================================================= */}
-        {/* WINDOW 2: PowerNetworkScheduler.exe (Standalone Commander Tower)          */}
+        {/* WINDOW 2: PowerNetworkScheduler.exe (50-PC Lab Fleet Control Tower)       */}
         {/* ========================================================================= */}
         {activeApp === 'network' && (
           <div
-            className={`w-full max-w-[620px] rounded shadow-2xl overflow-hidden flex flex-col border ${windowBg} ${
+            className={`w-full max-w-[940px] rounded shadow-2xl overflow-hidden flex flex-col border ${windowBg} ${
               isWindowMaximized ? 'fixed inset-3 max-w-none z-40 overflow-y-auto' : ''
             }`}
             style={{ fontFamily: "'Malgun Gothic', 'Segoe UI', Arial, sans-serif" }}
@@ -1802,11 +1794,11 @@ export const DesktopAppView: React.FC<DesktopAppViewProps> = ({
                 <div className="w-4 h-4 rounded bg-blue-600 flex items-center justify-center text-white text-[10px] font-black">
                   N
                 </div>
-                <span>PowerNetworkScheduler v{APP_VERSION} - {L('사내 원격 통합 제어 타워', 'Remote Unified Control Tower')}</span>
+                <span>PowerNetworkScheduler v{APP_VERSION} - {L('50대 컴퓨터실 원격 통합 제어 타워', '50-PC Lab Remote Fleet Control Tower')}</span>
               </div>
               <div className={`flex items-center gap-1 ${secondaryText}`}>
                 <span className={`text-[11px] font-bold mr-2 ${isLight ? 'text-emerald-700' : 'text-emerald-400'}`}>
-                  {L('● UDP 9986 감시 중', '● UDP 9986 Listening')}
+                  {L('● UDP 9986 / TCP 9988 병렬 워커 가동', '● UDP 9986 / TCP 9988 Parallel')}
                 </span>
                 <button
                   onClick={() => setIsWindowMaximized(!isWindowMaximized)}
@@ -1824,18 +1816,18 @@ export const DesktopAppView: React.FC<DesktopAppViewProps> = ({
               </div>
             </div>
 
-            <div className="p-4 space-y-3.5 text-xs">
+            <div className="p-4 space-y-3 text-xs">
               {/* Section 1: Administrator Recovery Key & Token */}
-              <div className={`border p-3 rounded space-y-2 ${panelBg}`}>
+              <div className={`border p-2.5 rounded space-y-2 ${panelBg}`}>
                 <div className="flex items-center justify-between font-bold">
                   <span className={primaryText}>
                     {L('🔑 관리자 보안 인증 & 비상 복구 키 (ScheduleCrypto)', '🔑 Admin Auth & Recovery Key (ScheduleCrypto)')}
                   </span>
                   <span className={`text-[10px] font-mono ${isLight ? 'text-emerald-700' : 'text-emerald-400'}`}>
-                    {L('HMAC-SHA256 암호화', 'HMAC-SHA256 Signed')}
+                    HMAC-SHA256 Signed
                   </span>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <input
                     type="password"
                     defaultValue="PowerRescue#2026!Admin"
@@ -1851,344 +1843,17 @@ export const DesktopAppView: React.FC<DesktopAppViewProps> = ({
                 </div>
               </div>
 
-              {/* Section 2: Online PC Discovery & Remote Control Panel */}
-              <div className={`border p-3 rounded space-y-2.5 ${panelBg}`}>
-                <div className="flex items-center justify-between font-bold">
-                  <span className={primaryText}>
-                    {L('💻 사내망 탐지 디바이스 원격 제어판 (NetBeaconEngine)', '💻 LAN Detected Devices Control (NetBeaconEngine)')}
-                  </span>
-                  <div className="flex items-center gap-1.5">
-                    <span className={`font-bold ${isLight ? 'text-blue-600' : 'text-blue-400'}`}>
-                      {L(`${detectedPcs.length}대 탐지`, `${detectedPcs.length} Found`)}
-                    </span>
-                    <button
-                      onClick={() => {
-                        setSelectedDeviceIPs(detectedPcs.map(p => p.ip));
-                        playSoundEffect('buttonClick');
-                        showInAppToast(L('✅ 모든 탐지된 디바이스가 선택되었습니다.', '✅ All detected devices selected.'));
-                      }}
-                      className={`px-2 py-0.5 border rounded text-[10px] font-bold cursor-pointer whitespace-nowrap ${isLight ? 'bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-300' : 'bg-blue-600/20 hover:bg-blue-600/40 text-blue-300 border-blue-500/40'}`}
-                    >
-                      {L('전체 선택', 'Select All')}
-                    </button>
-                    <button
-                      onClick={() => {
-                        setSelectedDeviceIPs([]);
-                        playSoundEffect('buttonClick');
-                        showInAppToast(L('🗑️ 모든 디바이스 선택이 해제되었습니다.', '🗑️ All device selections cleared.'));
-                      }}
-                      className={`px-2 py-0.5 border rounded text-[10px] font-semibold cursor-pointer whitespace-nowrap ${subtleBtnBg}`}
-                    >
-                      {L('해제', 'Clear')}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Device Checkbox List */}
-                <div className={`border rounded p-2 max-h-36 overflow-y-auto space-y-1 ${cardBg}`}>
-                  {detectedPcs.map((pc, idx) => {
-                    const isSelected = selectedDeviceIPs.includes(pc.ip);
-                    return (
-                      <div
-                        key={idx}
-                        onClick={() => {
-                          setSelectedDeviceIPs(prev =>
-                            isSelected ? prev.filter(ip => ip !== pc.ip) : [...prev, pc.ip]
-                          );
-                          playSoundEffect('buttonClick');
-                        }}
-                        className={`p-1.5 rounded flex items-center justify-between text-xs cursor-pointer transition-colors ${
-                          isSelected
-                            ? isLight
-                              ? 'bg-blue-50 border border-blue-400 font-bold text-slate-900'
-                              : 'bg-blue-600/30 border border-blue-500/60 font-bold text-white'
-                            : isLight
-                              ? 'hover:bg-black/5 text-slate-700'
-                              : 'hover:bg-[#353544] text-slate-300'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => {}}
-                            className="rounded border-slate-400 text-blue-500 focus:ring-0 cursor-pointer"
-                          />
-                          <span className={`w-2 h-2 rounded-full ${isSelected ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`}></span>
-                          <span className="font-mono">{pc.ip}</span>
-                          <span className={`font-sans ${secondaryText}`}>({pc.host})</span>
-                          {pc.isSelf && (
-                            <span className={`px-1.5 py-0.2 border rounded text-[9px] font-bold ${isLight ? 'bg-amber-100 text-amber-800 border-amber-300' : 'bg-amber-500/20 text-amber-300 border-amber-500/40'}`}>
-                              {L('👑 본인', '👑 Self')}
-                            </span>
-                          )}
-                        </div>
-                        <span className={`text-[11px] ${secondaryText}`}>{isEn ? pc.statusEn : pc.statusKo}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {/* Selected Devices Quick Action Bar */}
-                <div className={`space-y-1.5 pt-1 border-t ${subtleDivider}`}>
-                  <div className={`flex items-center justify-between text-[11px] font-semibold ${primaryText}`}>
-                    <span>
-                      {L(
-                        `⚡ 선택된 디바이스 (${selectedDeviceIPs.length}대) 즉시 원격 제어:`,
-                        `⚡ Immediate Action for ${selectedDeviceIPs.length} Selected Device(s):`
-                      )}
-                    </span>
-                    <span className={`text-[10px] font-mono ${isLight ? 'text-emerald-700' : 'text-emerald-400'}`}>{L('TCP 9988 직결', 'TCP 9988 Direct')}</span>
-                  </div>
-                  <div className="grid grid-cols-5 gap-1.5">
-                    <button
-                      onClick={() => {
-                        if (selectedDeviceIPs.length === 0) {
-                          showInAppToast(L('⚠️ 제어할 대상 디바이스를 최소 1대 이상 선택해주세요.', '⚠️ Select at least one target device first.'));
-                          return;
-                        }
-                        playSoundEffect('actionSuccess');
-                        const msg = `[${new Date().toLocaleTimeString()}] 🛑 [${L('즉시 종료', 'Shutdown')}] ${L('대상', 'Targets')}(${selectedDeviceIPs.join(', ')}) [OK]`;
-                        setRemoteControlLogs(prev => [msg, ...prev]);
-                        showInAppToast(
-                          L(
-                            `🛑 선택된 ${selectedDeviceIPs.length}대 디바이스에 즉시 종료 명령이 전송되었습니다.`,
-                            `🛑 Shutdown command dispatched to ${selectedDeviceIPs.length} device(s).`
-                          )
-                        );
-                        setNetworkTargetIps(selectedDeviceIPs.join(', '));
-                      }}
-                      className="py-1.5 px-2 bg-red-600 hover:bg-red-500 text-white rounded font-bold text-[11px] shadow flex items-center justify-center gap-1 cursor-pointer transition-colors whitespace-nowrap"
-                      title={L('선택된 PC 즉시 전원 종료', 'Immediate Shutdown on selected PCs')}
-                    >
-                      <Power className="w-3 h-3" />
-                      <span>{L('종료', 'Shutdown')}</span>
-                    </button>
-                    <button
-                      onClick={() => {
-                        if (selectedDeviceIPs.length === 0) {
-                          showInAppToast(L('⚠️ 제어할 대상 디바이스를 최소 1대 이상 선택해주세요.', '⚠️ Select at least one target device first.'));
-                          return;
-                        }
-                        playSoundEffect('actionSuccess');
-                        const msg = `[${new Date().toLocaleTimeString()}] 🔄 [${L('즉시 재시작', 'Restart')}] ${L('대상', 'Targets')}(${selectedDeviceIPs.join(', ')}) [OK]`;
-                        setRemoteControlLogs(prev => [msg, ...prev]);
-                        showInAppToast(
-                          L(
-                            `🔄 선택된 ${selectedDeviceIPs.length}대 디바이스에 즉시 재시작 명령이 전송되었습니다.`,
-                            `🔄 Restart command dispatched to ${selectedDeviceIPs.length} device(s).`
-                          )
-                        );
-                        setNetworkTargetIps(selectedDeviceIPs.join(', '));
-                      }}
-                      className="py-1.5 px-2 bg-amber-600 hover:bg-amber-500 text-white rounded font-bold text-[11px] shadow flex items-center justify-center gap-1 cursor-pointer transition-colors whitespace-nowrap"
-                      title={L('선택된 PC 즉시 시스템 다시 시작', 'Immediate Restart on selected PCs')}
-                    >
-                      <RotateCw className="w-3 h-3" />
-                      <span>{L('재시작', 'Restart')}</span>
-                    </button>
-                    <button
-                      onClick={() => {
-                        if (selectedDeviceIPs.length === 0) {
-                          showInAppToast(L('⚠️ 제어할 대상 디바이스를 최소 1대 이상 선택해주세요.', '⚠️ Select at least one target device first.'));
-                          return;
-                        }
-                        playSoundEffect('actionSuccess');
-                        const msg = `[${new Date().toLocaleTimeString()}] 🌙 [${L('절전 모드', 'Sleep')}] ${L('대상', 'Targets')}(${selectedDeviceIPs.join(', ')}) [OK]`;
-                        setRemoteControlLogs(prev => [msg, ...prev]);
-                        showInAppToast(
-                          L(
-                            `🌙 선택된 ${selectedDeviceIPs.length}대 디바이스에 절전 모드 명령이 전송되었습니다.`,
-                            `🌙 Sleep command dispatched to ${selectedDeviceIPs.length} device(s).`
-                          )
-                        );
-                        setNetworkTargetIps(selectedDeviceIPs.join(', '));
-                      }}
-                      className="py-1.5 px-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded font-bold text-[11px] shadow flex items-center justify-center gap-1 cursor-pointer transition-colors whitespace-nowrap"
-                      title={L('선택된 PC 절전 모드 전환', 'Put selected PCs to Sleep')}
-                    >
-                      <Moon className="w-3 h-3" />
-                      <span>{L('절전', 'Sleep')}</span>
-                    </button>
-                    <button
-                      onClick={() => {
-                        if (selectedDeviceIPs.length === 0) {
-                          showInAppToast(L('⚠️ 제어할 대상 디바이스를 최소 1대 이상 선택해주세요.', '⚠️ Select at least one target device first.'));
-                          return;
-                        }
-                        playSoundEffect('actionSuccess');
-                        const msg = `[${new Date().toLocaleTimeString()}] 📺 [${L('화면 끄기', 'Screen Off')}] ${L('대상', 'Targets')}(${selectedDeviceIPs.join(', ')}) [OK]`;
-                        setRemoteControlLogs(prev => [msg, ...prev]);
-                        showInAppToast(
-                          L(
-                            `📺 선택된 ${selectedDeviceIPs.length}대 디바이스의 화면을 껐습니다.`,
-                            `📺 Screen Off dispatched to ${selectedDeviceIPs.length} device(s).`
-                          )
-                        );
-                        setNetworkTargetIps(selectedDeviceIPs.join(', '));
-                      }}
-                      className="py-1.5 px-2 bg-slate-700 hover:bg-slate-600 text-white rounded font-bold text-[11px] shadow flex items-center justify-center gap-1 cursor-pointer transition-colors whitespace-nowrap"
-                      title={L('선택된 PC 디스플레이 화면 끄기', 'Turn off monitor on selected PCs')}
-                    >
-                      <Monitor className="w-3 h-3" />
-                      <span>{L('화면끔', 'Screen Off')}</span>
-                    </button>
-                    <button
-                      onClick={() => {
-                        if (selectedDeviceIPs.length === 0) {
-                          showInAppToast(L('⚠️ 제어할 대상 디바이스를 최소 1대 이상 선택해주세요.', '⚠️ Select at least one target device first.'));
-                          return;
-                        }
-                        playSoundEffect('timerAlarm');
-                        const msg = `[${new Date().toLocaleTimeString()}] 🚨 [${L('긴급 비상 알람', 'Alarm')}] ${L('대상', 'Targets')}(${selectedDeviceIPs.join(', ')}) [OK]`;
-                        setRemoteControlLogs(prev => [msg, ...prev]);
-                        showInAppToast(
-                          L(
-                            `🚨 선택된 ${selectedDeviceIPs.length}대 디바이스에 긴급 비상 알람을 송출했습니다.`,
-                            `🚨 Emergency alarm dispatched to ${selectedDeviceIPs.length} device(s).`
-                          )
-                        );
-                        setNetworkTargetIps(selectedDeviceIPs.join(', '));
-                      }}
-                      className="py-1.5 px-2 bg-rose-600 hover:bg-rose-500 text-white rounded font-bold text-[11px] shadow flex items-center justify-center gap-1 cursor-pointer transition-colors whitespace-nowrap"
-                      title={L('긴급 알람 송출', 'Broadcast emergency alarm')}
-                    >
-                      <Bell className="w-3 h-3" />
-                      <span>{L('알람', 'Alarm')}</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Live Remote Execution Console */}
-                <div className={`border rounded p-2 text-[10px] font-mono space-y-1 max-h-24 overflow-y-auto ${panelBg}`}>
-                  <div className={`font-bold flex items-center justify-between pb-1 border-b ${subtleDivider} ${secondaryText}`}>
-                    <span>{L('📋 원격 제어 실시간 실행 콘솔 (TCP 9988 ACK)', '📋 Live Remote Execution Console (TCP 9988 ACK)')}</span>
-                    <button
-                      onClick={() => setRemoteControlLogs([
-                        `[${new Date().toLocaleTimeString()}] ${L('콘솔 로그가 초기화되었습니다.', 'Console logs cleared.')}`
-                      ])}
-                      className={`cursor-pointer ${isLight ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-slate-200'}`}
-                    >
-                      {L('지우기', 'Clear')}
-                    </button>
-                  </div>
-                  {remoteControlLogs.map((log, lIdx) => (
-                    <div key={lIdx} className={`whitespace-nowrap overflow-hidden text-ellipsis ${isLight ? 'text-emerald-700' : 'text-emerald-400/90'}`}>
-                      {log}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Section 3: Popular 10 Presets Dropdown */}
-              <div className={`border p-3 rounded space-y-2 ${panelBg}`}>
-                <div className={`font-bold ${primaryText}`}>{L('🎯 10대 자주 쓰는 전원 시나리오 프리셋', '🎯 Top 10 Power Scenario Presets')}</div>
-                <select
-                  value={selectedPresetIndex}
-                  onChange={e => setSelectedPresetIndex(parseInt(e.target.value))}
-                  className={`w-full border rounded p-1.5 text-xs ${inputFieldBg}`}
-                >
-                  <option value={0}>{L('🏢 1. 정시 퇴근 자동 종료 (월~금 18:30)', '🏢 1. Office EOD Auto Shutdown (Mon-Fri 18:30)')}</option>
-                  <option value={1}>{L('🌙 2. 야간 심야 자동 종료 (매일 23:30)', '🌙 2. Midnight Auto Shutdown (Daily 23:30)')}</option>
-                  <option value={2}>{L('☕ 3. 점심시간 절전 모드 (월~금 12:00)', '☕ 3. Lunch Break Sleep Mode (Mon-Fri 12:00)')}</option>
-                  <option value={3}>{L('🔄 4. 월요일 아침 정기 리부팅 (월 08:30)', '🔄 4. Monday Morning Maintenance Reboot (Mon 08:30)')}</option>
-                  <option value={4}>{L('💾 5. 금요일 퇴근 전 백업 알림 (금 18:00)', '💾 5. Friday Backup Alarm (Fri 18:00)')}</option>
-                  <option value={5}>{L('⚡ 6. 1시간 후 빠른 종료 (현재 + 1시간)', '⚡ 6. Quick Shutdown in 1 Hour (+1h)')}</option>
-                  <option value={6}>{L('💤 7. 30분 무작업 시 절전 (유휴 절전)', '💤 7. Idle Sleep After 30 Mins')}</option>
-                  <option value={7}>{L('📺 8. 모니터 화면 즉시 끄기 (화면 절전)', '📺 8. Immediate Monitor Screen Off')}</option>
-                  <option value={8}>{L('⏰ 9. 정기 시스템 점검 리셋 (일 04:00)', '⏰ 9. Weekly System Check Reset (Sun 04:00)')}</option>
-                  <option value={9}>{L('🚨 10. 긴급 정지 비상 알람', '🚨 10. Emergency Stop Alarm Broadcast')}</option>
-                </select>
-              </div>
-
-              {/* Section 4: Target IP & Unified Remote Action Pulldown */}
-              <div className={`border p-3 rounded space-y-2.5 ${panelBg}`}>
-                <div className="flex items-center justify-between">
-                  <span className={`font-bold ${primaryText}`}>{L('🎯 대상 PC 지정 (풀다운 빠른 선택 및 직접 입력)', '🎯 Target PCs (Quick Select or Manual IP)')}</span>
-                  <span className={`text-[10px] font-mono ${isLight ? 'text-blue-600' : 'text-blue-400'}`}>{L('단일 & 그룹 IP', 'Single & Group IP')}</span>
-                </div>
-
-                {/* Pulldown PC Selector */}
-                <div className="relative">
-                  <select
-                    defaultValue=""
-                    onChange={(e) => {
-                      if (!e.target.value) return;
-                      setNetworkTargetIps(e.target.value);
-                      playSoundEffect('buttonClick');
-                      showInAppToast(L(`🎯 대상 PC [${e.target.value}]가 즉시 지정되었습니다.`, `🎯 Target PC [${e.target.value}] selected.`));
-                      e.target.value = '';
-                    }}
-                    className={`w-full border hover:border-blue-500/70 rounded px-2.5 py-1.5 text-xs font-medium appearance-none focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer pr-8 shadow-inner ${inputFieldBg}`}
-                  >
-                    <option value="">{L('💻 감지된 사내 PC 풀다운 선택 (클릭 시 자동 입력)...', '💻 Quick-pick detected LAN PC...')}</option>
-                    <optgroup label={L('📡 실시간 탐지된 활성 PC', '📡 Real-time Active PCs')}>
-                      {detectedPcs.map((pc, idx) => (
-                        <option key={idx} value={pc.ip}>
-                          {pc.ip} ({pc.host}) - {isEn ? pc.statusEn : pc.statusKo} {pc.isSelf ? L('[👑 관리자 본인 PC]', '[👑 Host PC]') : ''}
-                        </option>
-                      ))}
-                    </optgroup>
-                    <optgroup label={L('📢 사내 그룹 및 브로드캐스트', '📢 Subnet Groups & Broadcast')}>
-                      <option value="192.168.1.255">{L('📢 사내 전체 서브넷 브로드캐스트 (192.168.1.255)', '📢 Whole Subnet Broadcast (192.168.1.255)')}</option>
-                      <option value="192.168.1.101, 192.168.1.102, 192.168.1.103">{L('🏢 개발팀 전체 PC (101, 102, 103)', '🏢 Engineering Team PCs (101, 102, 103)')}</option>
-                      <option value="192.168.1.104, 192.168.1.105">{L('📊 기획/디자인팀 PC (104, 105)', '📊 Design & Planning PCs (104, 105)')}</option>
-                    </optgroup>
-                  </select>
-                  <ChevronDown className={`w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none ${secondaryText}`} />
-                </div>
-
-                <input
-                  type="text"
-                  value={networkTargetIps}
-                  onChange={e => setNetworkTargetIps(e.target.value)}
-                  placeholder={L('대상 IP 직접 입력 (쉼표로 복수 지정 가능)', 'Enter target IPs (comma-separated)')}
-                  className={`w-full border px-2.5 py-1.5 rounded text-xs font-mono ${inputFieldBg}`}
-                />
-                
-                {/* Unified Remote Command Pulldown & Execution */}
-                <div className={`space-y-1.5 pt-1 border-t ${subtleDivider}`}>
-                  <div className={`flex items-center justify-between text-[11px] font-semibold ${secondaryText}`}>
-                    <span>{L('⚡ 원격 실행 명령 풀다운 (통합 제어):', '⚡ Unified Remote Action Pulldown:')}</span>
-                    <span className={`text-[10px] font-mono ${isLight ? 'text-emerald-700' : 'text-emerald-400'}`}>Clean Pulldown</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="relative flex-1">
-                      <select
-                        value={selectedRemoteAction}
-                        onChange={(e) => setSelectedRemoteAction(e.target.value)}
-                        className={`w-full border hover:border-blue-500/70 rounded px-2.5 py-2 text-xs font-bold appearance-none cursor-pointer pr-8 shadow-inner ${inputFieldBg}`}
-                      >
-                        <option value="shutdown">{L('🛑 1. 대상 PC 즉시 전원 종료 (Power Off)', '🛑 1. Immediate Remote Power Off')}</option>
-                        <option value="restart">{L('🔄 2. 대상 PC 즉시 시스템 다시 시작 (Reboot)', '🔄 2. Immediate Remote System Reboot')}</option>
-                        <option value="sleep">{L('🌙 3. 대상 PC 절전 모드 전환 (Sleep)', '🌙 3. Remote Sleep / Suspend')}</option>
-                        <option value="screenoff">{L('📺 4. 대상 PC 화면 끄기 (Screen Off)', '📺 4. Remote Display Screen Off')}</option>
-                        <option value="sync">{L('📡 5. 선택한 스케줄 규칙 원격 일괄 동기화 (TCP 9988)', '📡 5. Batch Sync Selected Schedule Rules (TCP 9988)')}</option>
-                        <option value="alarm">{L('🚨 6. 사내 대상 PC 긴급 비상 알람 송출 (Alarm)', '🚨 6. Broadcast Emergency Alarm')}</option>
-                      </select>
-                      <ChevronDown className={`w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none ${secondaryText}`} />
-                    </div>
-                    <button
-                      onClick={() => {
-                        playSoundEffect('actionSuccess');
-                        const actionLabels: Record<string, string> = {
-                          shutdown: L(`🛑 대상 PC [${networkTargetIps}] 즉시 종료 명령을 송출했습니다.`, `🛑 Dispatched immediate shutdown to [${networkTargetIps}].`),
-                          restart: L(`🔄 대상 PC [${networkTargetIps}] 즉시 다시 시작 명령을 송출했습니다.`, `🔄 Dispatched immediate restart to [${networkTargetIps}].`),
-                          sleep: L(`🌙 대상 PC [${networkTargetIps}] 절전 모드 명령을 송출했습니다.`, `🌙 Dispatched sleep command to [${networkTargetIps}].`),
-                          screenoff: L(`📺 대상 PC [${networkTargetIps}] 화면 끄기 명령을 송출했습니다.`, `📺 Dispatched screen-off command to [${networkTargetIps}].`),
-                          sync: L(`📡 대상 PC [${networkTargetIps}]로 스케줄 규칙을 일괄 동기화했습니다. (TCP 9988)`, `📡 Batch synced schedule rules to [${networkTargetIps}] (TCP 9988).`),
-                          alarm: L(`🚨 대상 PC [${networkTargetIps}]에 긴급 알람을 전송했습니다.`, `🚨 Dispatched emergency alarm to [${networkTargetIps}].`),
-                        };
-                        showInAppToast(actionLabels[selectedRemoteAction] || L('원격 명령이 전송되었습니다.', 'Remote command dispatched.'));
-                      }}
-                      className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded font-bold text-xs shadow flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 transition-colors"
-                    >
-                      <Play className="w-3.5 h-3.5 fill-white" />
-                      <span>{L('전송 실행', 'Dispatch')}</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
+              {/* Section 2: Full 50-PC Computer Lab Control Tower */}
+              <LabNetworkFleetPanel
+                lang={currentLang}
+                theme={currentTheme}
+                devices={labDevices}
+                onDevicesChange={setLabDevices}
+                selectedIps={selectedDeviceIPs}
+                onSelectedIpsChange={setSelectedDeviceIPs}
+                onToast={(msg) => showInAppToast(msg)}
+                onPlaySound={(kind) => playSoundEffect(kind)}
+              />
             </div>
           </div>
         )}
@@ -2288,7 +1953,7 @@ export const DesktopAppView: React.FC<DesktopAppViewProps> = ({
         {/* ========================================================================= */}
         {activeApp === 'devices' && (
           <div
-            className={`w-full max-w-[640px] rounded shadow-2xl overflow-hidden flex flex-col border ${windowBg} ${
+            className={`w-full max-w-[740px] rounded shadow-2xl overflow-hidden flex flex-col border ${windowBg} ${
               isWindowMaximized ? 'fixed inset-3 max-w-none z-40 overflow-y-auto' : ''
             }`}
             style={{ fontFamily: "'Malgun Gothic', 'Segoe UI', Arial, sans-serif" }}
@@ -2299,12 +1964,18 @@ export const DesktopAppView: React.FC<DesktopAppViewProps> = ({
                 <div className="w-4 h-4 rounded bg-emerald-600 flex items-center justify-center text-white text-[10px] font-black">
                   D
                 </div>
-                <span>DeviceController v{APP_VERSION} - {L('사내 감지 디바이스 개별 원격 제어판', 'Individual Device Remote Control')}</span>
+                <span>DeviceController v{APP_VERSION} - {L('감지 디바이스 개별 원격 제어판', 'Individual Device Remote Control')} ({labDevices.length}{L('대', ' PCs')})</span>
               </div>
               <div className={`flex items-center gap-1 ${secondaryText}`}>
-                <span className={`text-[11px] font-bold mr-2 ${isLight ? 'text-emerald-700' : 'text-emerald-400'}`}>
-                  {L('🟢 개별 제어 모드 활성', '🟢 Direct Mode Active')}
-                </span>
+                <button
+                  type="button"
+                  onClick={() => setActiveApp('network')}
+                  className={`mr-2 px-2 py-0.5 rounded text-[11px] font-bold border cursor-pointer ${
+                    isLight ? 'bg-blue-50 text-blue-700 border-blue-300 hover:bg-blue-100' : 'bg-blue-500/20 text-blue-300 border-blue-500/40 hover:bg-blue-500/30'
+                  }`}
+                >
+                  {L('🏫 50대 관제 그리드 열기', '🏫 Open 50-PC Grid')}
+                </button>
                 <button
                   onClick={() => setIsWindowMaximized(!isWindowMaximized)}
                   className={`w-7 h-5 flex items-center justify-center rounded cursor-pointer ${isLight ? 'hover:bg-black/10' : 'hover:bg-[#27272a]'}`}
@@ -2322,143 +1993,182 @@ export const DesktopAppView: React.FC<DesktopAppViewProps> = ({
             </div>
 
             <div className="p-4 space-y-3.5 text-xs">
-              <div className={`border p-3 rounded space-y-1 ${isLight ? 'bg-blue-50 border-blue-300' : 'bg-blue-950/30 border-blue-500/40'}`}>
-                <div className={`font-bold flex items-center gap-1.5 ${isLight ? 'text-blue-700' : 'text-blue-400'}`}>
-                  <Wifi className="w-4 h-4" />
-                  <span>{L('개별 디바이스 직접 제어 타워 (TCP 9988 직결)', 'Direct Per-Device Control Tower (TCP 9988)')}</span>
+              <div className={`border p-3 rounded flex flex-col sm:flex-row sm:items-center justify-between gap-2 ${isLight ? 'bg-blue-50 border-blue-300' : 'bg-blue-950/30 border-blue-500/40'}`}>
+                <div>
+                  <div className={`font-bold flex items-center gap-1.5 ${isLight ? 'text-blue-700' : 'text-blue-400'}`}>
+                    <Wifi className="w-4 h-4" />
+                    <span>{L('개별 디바이스 직접 제어 타워 (TCP 9988 직결)', 'Direct Per-Device Control Tower (TCP 9988)')}</span>
+                  </div>
+                  <div className={`text-[11px] mt-0.5 ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
+                    {L(
+                      '컴퓨터실 전체 등록 좌석(50대)별로 전원 종료(Shutdown), 재시작(Restart), 절전(Sleep), 화면 끄기, 알람을 즉시 실행할 수 있습니다.',
+                      'Trigger immediate Shutdown, Restart, Sleep, Screen Off, or Alarm on any individual registered PC across the lab.'
+                    )}
+                  </div>
                 </div>
-                <div className={`text-[11px] ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
-                  {L(
-                    '사내망에서 탐지된 각 개별 PC별로 전원 종료(Shutdown), 시스템 재시작(Restart), 절전 모드(Sleep)를 개별적으로 즉시 실행할 수 있습니다.',
-                    'Trigger immediate Shutdown, Restart, Sleep, Screen Off, or Alarm on each individual LAN PC detected via NetBeaconEngine.'
-                  )}
+                <div className={`text-[11px] font-mono font-bold whitespace-nowrap ${isLight ? 'text-emerald-700' : 'text-emerald-400'}`}>
+                  {L('온라인', 'Online')}: {labDevices.filter(d => d.status === 'online').length} / {labDevices.length}
                 </div>
               </div>
 
               {/* Individual Device Cards List */}
-              <div className="space-y-2 max-h-[50vh] overflow-y-auto pr-1">
-                {detectedPcs.map((pc, idx) => (
-                  <div
-                    key={idx}
-                    className={`border hover:border-blue-500/50 p-3 rounded-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 transition-all shadow ${panelBg}`}
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <div className={`w-9 h-9 rounded-md border flex items-center justify-center font-bold ${cardBg}`}>
-                        <Cpu className={`w-4 h-4 ${isLight ? 'text-blue-600' : 'text-blue-400'}`} />
-                      </div>
-                      <div>
-                        <div className={`font-bold flex items-center gap-1.5 ${primaryText}`}>
-                          <span>{pc.host}</span>
-                          {pc.isSelf && (
-                            <span className={`px-1.5 py-0.2 border rounded text-[9px] font-bold ${isLight ? 'bg-amber-100 text-amber-800 border-amber-300' : 'bg-amber-500/20 text-amber-300 border-amber-500/40'}`}>
-                              {L('👑 본인 PC', '👑 Host PC')}
-                            </span>
-                          )}
-                          <span className={`px-1.5 py-0.2 rounded text-[9px] ${isLight ? 'bg-emerald-100 text-emerald-800' : 'bg-emerald-500/20 text-emerald-300'}`}>
-                            {isEn ? pc.statusEn : pc.statusKo}
-                          </span>
-                        </div>
-                        <div className={`text-[11px] font-mono mt-0.5 ${secondaryText}`}>
-                          {L(`IP: ${pc.ip} | TCP 9988 포트 대기 중`, `IP: ${pc.ip} | TCP 9988 Listening`)}
-                        </div>
-                      </div>
-                    </div>
+              <div className="space-y-2 max-h-[52vh] overflow-y-auto pr-1">
+                {labDevices.map((pc) => {
+                  const statusLabel =
+                    pc.status === 'online'
+                      ? L('온라인', 'Online')
+                      : pc.status === 'offline'
+                      ? L('오프라인', 'Offline')
+                      : pc.status === 'waking'
+                      ? L('기상중', 'Waking')
+                      : L('오류', 'Error');
+                  const statusBadgeCls =
+                    pc.status === 'online'
+                      ? isLight ? 'bg-emerald-100 text-emerald-800' : 'bg-emerald-500/20 text-emerald-300'
+                      : pc.status === 'waking'
+                      ? isLight ? 'bg-amber-100 text-amber-800' : 'bg-amber-500/20 text-amber-300'
+                      : isLight ? 'bg-slate-200 text-slate-700' : 'bg-slate-700/60 text-slate-300';
 
-                    {/* Individual Control Action Buttons ('Shutdown', 'Restart', 'Sleep') */}
-                    <div className="flex items-center gap-1.5 w-full sm:w-auto justify-end flex-wrap">
-                      <button
-                        onClick={() => {
-                          playSoundEffect('actionSuccess');
-                          const msg = `[${new Date().toLocaleTimeString()}] 🛑 [${L('개별 종료', 'Shutdown')}] ${pc.host} (${pc.ip}) [OK]`;
-                          setRemoteControlLogs(prev => [msg, ...prev]);
-                          showInAppToast(
-                            L(
-                              `🛑 [${pc.host}] PC에 즉시 전원 종료(Shutdown) 명령이 전송되었습니다.`,
-                              `🛑 Shutdown command sent to [${pc.host}].`
+                  const triggerDeviceCmd = (
+                    actionKey: 'shutdown' | 'restart' | 'sleep' | 'screenoff' | 'alarm',
+                    koTag: string,
+                    enTag: string,
+                    toastMsg: string,
+                    sound: 'actionSuccess' | 'timerAlarm' = 'actionSuccess'
+                  ) => {
+                    playSoundEffect(sound);
+                    const ts = new Date().toLocaleTimeString(isEn ? 'en-US' : 'ko-KR');
+                    const msg = `[${ts}] [${L(koTag, enTag)}] #${pc.seatNo} ${pc.hostname} (${pc.ip}) [OK]`;
+                    setRemoteControlLogs(prev => [msg, ...prev.slice(0, 49)]);
+                    setLabDevices(prev =>
+                      prev.map(d =>
+                        d.ip === pc.ip
+                          ? {
+                              ...d,
+                              status: actionKey === 'shutdown' || actionKey === 'sleep' ? 'offline' : 'online',
+                              lastAck: `${enTag} ACK`,
+                            }
+                          : d
+                      )
+                    );
+                    showInAppToast(toastMsg);
+                  };
+
+                  return (
+                    <div
+                      key={pc.ip}
+                      className={`border hover:border-blue-500/50 p-2.5 rounded-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 transition-all shadow ${panelBg}`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className={`w-9 h-9 rounded-md border flex flex-col items-center justify-center font-bold shrink-0 ${cardBg}`}>
+                          <Cpu className={`w-3.5 h-3.5 ${pc.status === 'online' ? (isLight ? 'text-blue-600' : 'text-blue-400') : secondaryText}`} />
+                          <span className="text-[9px] font-mono">{pc.seatNo}</span>
+                        </div>
+                        <div className="min-w-0">
+                          <div className={`font-bold flex items-center gap-1.5 flex-wrap ${primaryText}`}>
+                            <span>{pc.hostname}</span>
+                            {pc.isSelf && (
+                              <span className={`px-1.5 py-0.2 border rounded text-[9px] font-bold ${isLight ? 'bg-amber-100 text-amber-800 border-amber-300' : 'bg-amber-500/20 text-amber-300 border-amber-500/40'}`}>
+                                {L('👑 교사용 PC', '👑 Host PC')}
+                              </span>
+                            )}
+                            <span className={`px-1.5 py-0.2 rounded text-[9px] font-bold ${statusBadgeCls}`}>
+                              {statusLabel}
+                            </span>
+                            {pc.rulesCount > 0 && (
+                              <span className={`text-[10px] font-mono ${secondaryText}`}>
+                                ({pc.rulesCount} {L('규칙', 'rules')})
+                              </span>
+                            )}
+                          </div>
+                          <div className={`text-[10.5px] font-mono mt-0.5 truncate ${secondaryText}`}>
+                            {pc.ip} · MAC {pc.mac} · {pc.group}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Individual Control Action Buttons ('Shutdown', 'Restart', 'Sleep', 'Screen Off', 'Alarm') */}
+                      <div className="flex items-center gap-1 w-full sm:w-auto justify-end flex-wrap shrink-0">
+                        <button
+                          onClick={() =>
+                            triggerDeviceCmd(
+                              'shutdown',
+                              '개별 종료',
+                              'Shutdown',
+                              L(`🛑 [#${pc.seatNo} ${pc.hostname}] PC에 즉시 전원 종료 명령을 전송했습니다.`, `🛑 Shutdown command sent to [#${pc.seatNo} ${pc.hostname}].`)
                             )
-                          );
-                        }}
-                        className="px-2.5 py-1.5 bg-red-600 hover:bg-red-500 text-white rounded font-bold text-[11px] shadow flex items-center gap-1 cursor-pointer transition-colors whitespace-nowrap"
-                        title={L('이 PC 즉시 전원 종료 (Shutdown)', 'Shutdown this PC immediately')}
-                      >
-                        <Power className="w-3 h-3" />
-                        <span>{L('종료', 'Shutdown')}</span>
-                      </button>
-                      <button
-                        onClick={() => {
-                          playSoundEffect('actionSuccess');
-                          const msg = `[${new Date().toLocaleTimeString()}] 🔄 [${L('개별 재시작', 'Restart')}] ${pc.host} (${pc.ip}) [OK]`;
-                          setRemoteControlLogs(prev => [msg, ...prev]);
-                          showInAppToast(
-                            L(
-                              `🔄 [${pc.host}] PC에 즉시 재시작(Restart) 명령이 전송되었습니다.`,
-                              `🔄 Restart command sent to [${pc.host}].`
+                          }
+                          className="px-2 py-1 bg-red-600 hover:bg-red-500 text-white rounded font-bold text-[11px] shadow flex items-center gap-1 cursor-pointer transition-colors whitespace-nowrap"
+                          title={L('이 PC 즉시 전원 종료 (Shutdown)', 'Shutdown this PC immediately')}
+                        >
+                          <Power className="w-3 h-3" />
+                          <span>{L('종료', 'Shutdown')}</span>
+                        </button>
+                        <button
+                          onClick={() =>
+                            triggerDeviceCmd(
+                              'restart',
+                              '개별 재시작',
+                              'Restart',
+                              L(`🔄 [#${pc.seatNo} ${pc.hostname}] PC에 즉시 재시작 명령을 전송했습니다.`, `🔄 Restart command sent to [#${pc.seatNo} ${pc.hostname}].`)
                             )
-                          );
-                        }}
-                        className="px-2.5 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded font-bold text-[11px] shadow flex items-center gap-1 cursor-pointer transition-colors whitespace-nowrap"
-                        title={L('이 PC 시스템 다시 시작 (Restart)', 'Restart this PC immediately')}
-                      >
-                        <RotateCw className="w-3 h-3" />
-                        <span>{L('재시작', 'Restart')}</span>
-                      </button>
-                      <button
-                        onClick={() => {
-                          playSoundEffect('actionSuccess');
-                          const msg = `[${new Date().toLocaleTimeString()}] 🌙 [${L('개별 절전', 'Sleep')}] ${pc.host} (${pc.ip}) [OK]`;
-                          setRemoteControlLogs(prev => [msg, ...prev]);
-                          showInAppToast(
-                            L(
-                              `🌙 [${pc.host}] PC를 절전(Sleep) 모드로 전환했습니다.`,
-                              `🌙 Sleep command sent to [${pc.host}].`
+                          }
+                          className="px-2 py-1 bg-amber-600 hover:bg-amber-500 text-white rounded font-bold text-[11px] shadow flex items-center gap-1 cursor-pointer transition-colors whitespace-nowrap"
+                          title={L('이 PC 시스템 다시 시작 (Restart)', 'Restart this PC immediately')}
+                        >
+                          <RotateCw className="w-3 h-3" />
+                          <span>{L('재시작', 'Restart')}</span>
+                        </button>
+                        <button
+                          onClick={() =>
+                            triggerDeviceCmd(
+                              'sleep',
+                              '개별 절전',
+                              'Sleep',
+                              L(`🌙 [#${pc.seatNo} ${pc.hostname}] PC를 절전 모드로 전환했습니다.`, `🌙 Sleep command sent to [#${pc.seatNo} ${pc.hostname}].`)
                             )
-                          );
-                        }}
-                        className="px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded font-bold text-[11px] shadow flex items-center gap-1 cursor-pointer transition-colors whitespace-nowrap"
-                        title={L('이 PC 절전 모드 전환 (Sleep)', 'Put this PC to Sleep')}
-                      >
-                        <Moon className="w-3 h-3" />
-                        <span>{L('절전', 'Sleep')}</span>
-                      </button>
-                      <button
-                        onClick={() => {
-                          playSoundEffect('actionSuccess');
-                          const msg = `[${new Date().toLocaleTimeString()}] 📺 [${L('화면 끄기', 'Screen Off')}] ${pc.host} (${pc.ip}) [OK]`;
-                          setRemoteControlLogs(prev => [msg, ...prev]);
-                          showInAppToast(
-                            L(
-                              `📺 [${pc.host}] PC의 디스플레이 화면을 껐습니다.`,
-                              `📺 Screen Off sent to [${pc.host}].`
+                          }
+                          className="px-2 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded font-bold text-[11px] shadow flex items-center gap-1 cursor-pointer transition-colors whitespace-nowrap"
+                          title={L('이 PC 절전 모드 전환 (Sleep)', 'Put this PC to Sleep')}
+                        >
+                          <Moon className="w-3 h-3" />
+                          <span>{L('절전', 'Sleep')}</span>
+                        </button>
+                        <button
+                          onClick={() =>
+                            triggerDeviceCmd(
+                              'screenoff',
+                              '화면 끄기',
+                              'Screen Off',
+                              L(`📺 [#${pc.seatNo} ${pc.hostname}] PC 화면을 껐습니다.`, `📺 Screen Off sent to [#${pc.seatNo} ${pc.hostname}].`)
                             )
-                          );
-                        }}
-                        className="px-2.5 py-1.5 bg-slate-700 hover:bg-slate-600 text-white rounded font-bold text-[11px] shadow flex items-center gap-1 cursor-pointer transition-colors whitespace-nowrap"
-                        title={L('이 PC 화면 끄기', 'Turn off monitor on this PC')}
-                      >
-                        <Monitor className="w-3 h-3" />
-                        <span>{L('화면끔', 'Screen Off')}</span>
-                      </button>
-                      <button
-                        onClick={() => {
-                          playSoundEffect('timerAlarm');
-                          const msg = `[${new Date().toLocaleTimeString()}] 🚨 [${L('비상 알람', 'Alarm')}] ${pc.host} (${pc.ip}) [OK]`;
-                          setRemoteControlLogs(prev => [msg, ...prev]);
-                          showInAppToast(
-                            L(
-                              `🚨 [${pc.host}] PC에 긴급 비상 알람을 송출했습니다.`,
-                              `🚨 Emergency alarm sent to [${pc.host}].`
+                          }
+                          className="px-2 py-1 bg-slate-700 hover:bg-slate-600 text-white rounded font-bold text-[11px] shadow flex items-center gap-1 cursor-pointer transition-colors whitespace-nowrap"
+                          title={L('이 PC 화면 끄기', 'Turn off monitor on this PC')}
+                        >
+                          <Monitor className="w-3 h-3" />
+                          <span>{L('화면끔', 'Screen Off')}</span>
+                        </button>
+                        <button
+                          onClick={() =>
+                            triggerDeviceCmd(
+                              'alarm',
+                              '비상 알람',
+                              'Alarm',
+                              L(`🚨 [#${pc.seatNo} ${pc.hostname}] PC에 긴급 알람을 송출했습니다.`, `🚨 Emergency alarm sent to [#${pc.seatNo} ${pc.hostname}].`),
+                              'timerAlarm'
                             )
-                          );
-                        }}
-                        className="px-2.5 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded font-bold text-[11px] shadow flex items-center gap-1 cursor-pointer transition-colors whitespace-nowrap"
-                        title={L('긴급 알람 송출', 'Send emergency alarm')}
-                      >
-                        <Bell className="w-3 h-3" />
-                        <span>{L('알람', 'Alarm')}</span>
-                      </button>
+                          }
+                          className="px-2 py-1 bg-rose-600 hover:bg-rose-500 text-white rounded font-bold text-[11px] shadow flex items-center gap-1 cursor-pointer transition-colors whitespace-nowrap"
+                          title={L('긴급 알람 송출', 'Send emergency alarm')}
+                        >
+                          <Bell className="w-3 h-3" />
+                          <span>{L('알람', 'Alarm')}</span>
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               {/* Realtime Execution Log for Individual Device Control */}

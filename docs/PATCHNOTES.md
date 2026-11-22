@@ -7,9 +7,12 @@
 
 ## [v2.9.2] - 2026-10-17 (개별 디바이스 제어판, 자동 언어 감지, 4대 테마 고대비 및 전수 감사 픽스)
 
-### 🖥️ 1. 개별 디바이스 원격 제어판 (`DeviceController`) & 사내 커맨더 타워 확장
-- **개별 PC 즉시 원격 제어 패널 신설**: 웹 사이드바/뷰 및 데스크톱 네이티브 뷰(`DeviceController.exe`)에서 사내망 탐지 PC별로 **종료(Shutdown), 재시작(Restart), 절전(Sleep), 화면끔(Screen Off), 비상 알람(Alarm)**을 개별 또는 다중 선택하여 즉시 송출.
-- **실시간 원격 실행 ACK 콘솔**: TCP 9988 직결 제어 명령 전송 결과를 실시간 타임스탬프 콘솔로 모니터링.
+### 🖥️ 1. 50대 컴퓨터실 통합 원격 제어 타워 (`PowerNetworkScheduler`) & 개별 디바이스 제어판 (`DeviceController`)
+- **50대 컴퓨터실 병렬 관제 엔진 & 재시도(`ThreadPoolExecutor` / Bounded Worker)**: `network_scheduler.py`에 최대 24스레드 병렬 TCP/UDP 배치 디스패처, 실시간 진행률 바(`Done / Total · OK · Fail`), 및 실패 PC 원클릭 재시도(`Retry Failed`) 탑재.
+- **좌석 배치 그리드 뷰(`5/8/10`열) ↔ 정렬 가능한 상세 목록 뷰**: 웹 대시보드(`Lab Fleet 50` 탭), 데스크톱 네이티브 뷰(`PowerNetworkScheduler.exe`), 독립형 Python 앱 모두에서 단일 로스터 상태 기반 2종 뷰 즉시 전환 및 그룹·상태·키워드 필터 제공.
+- **IP 대역 스캐너 · RFC-4180 CSV 좌석 일괄 등록 · 교시별 프로필 & 순차 WOL**: `start_ip–end_ip` IPv4 범위 자동 좌석 배정, `seat_no,ip,mac,hostname,group,row,col,memo` CSV 가져오기/내보내기, 일과·교시별 다중 규칙 번들 일괄 배포, 스위치 과부하 방지 `100ms~1000ms` 순차 WOL 기상 및 15초 실시간 생존·타이머 폴링 지원.
+- **독립형 전송기 OS 언어 자동 감지(KO/EN) & 프리-버그 전수 수정**: Windows/Linux OS 로케일 자동 감지 + 상단 `KO | EN | Auto` 실시간 전환 및 `network_pc_groups.json` 저장, 기존 5건의 잠재 결함 수정 및 `main.py` 원격 즉시 제어(`sleep`/`screenoff`/`lock`/`alarm`) + 실시간 타이머 폴링 응답 확장.
+- **개별 PC 즉시 원격 제어 패널**: 웹 사이드바/뷰 및 데스크톱 네이티브 뷰(`DeviceController.exe`)에서 등록된 50대 PC별로 **종료(Shutdown), 재시작(Restart), 절전(Sleep), 화면끔(Screen Off), 비상 알람(Alarm)**을 개별 또는 다중 선택하여 즉시 송출.
 
 ### 🌐 2. 브라우저/OS 기본 언어 자동 감지 & 동적 다국어 스크립트 생성
 - **자동 감지 및 수동 토글 공존 (`src/utils/i18n.ts`)**: 최초 방문 시 `navigator.language` 기반 한국어/영어(`KO`/`EN`) 자동 감지(`auto`), 수동 전환(`manual`) 및 `Auto Reset` 복원 기능 지원.

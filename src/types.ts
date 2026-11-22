@@ -21,7 +21,39 @@ export type ThemeType = 'dark' | 'gray' | 'white' | 'beige';
 
 export type SoundTheme = 'classic' | 'marimba' | 'crystal' | 'scifi' | 'westminster' | 'urgent' | 'bubble';
 
-export type ExplorerFolder = 'timer' | 'scheduler' | 'packager' | 'command' | 'favorites' | 'logs';
+export type ExplorerFolder = 'timer' | 'scheduler' | 'network' | 'packager' | 'command' | 'favorites' | 'logs';
+
+export type LabDeviceStatus = 'online' | 'offline' | 'failed';
+
+export interface LabDevice {
+  ip: string;
+  seatNo: string;
+  hostname: string;
+  mac: string;
+  group: string;
+  row: number;
+  col: number;
+  memo?: string;
+  isSelf?: boolean;
+  status: LabDeviceStatus;
+  latencyMs?: number;
+  rulesCount: number;
+  timerRunning?: boolean;
+  remainingSeconds?: number;
+  activeMode?: string;
+  lastAck?: string;
+  lastError?: string;
+}
+
+export interface LabScheduleProfile {
+  id: string;
+  nameKo: string;
+  nameEn: string;
+  descKo: string;
+  descEn: string;
+  rulesCount: number;
+  summaryRules: { labelKo: string; labelEn: string; time: string; mode: string }[];
+}
 
 export interface FavoritePreset {
   id: string;

@@ -37,6 +37,10 @@
    - **`src/components/FavoritesManager.tsx` / `BatteryHistoryChart.tsx` / `StartupTodayTasksModal.tsx`**: 6모드 버튼 그리드(`grid-cols-3 sm:grid-cols-6`) 정렬 및 영문/한글 날짜·간격 라벨 현지화 완성.
    - **Python / HTML / CI 스크립트**: `main.py`의 `GITHUB_REPO_OWNER`를 `AhBiYout-all`로 교정하고 폰트 미리보기 버전을 `APP_VERSION`으로 동적화; `scripts/sync_version.py`의 `network_scheduler.py`(`APP_VERSION`) 및 `index.html`(`og:title` 속성 순서) 정규식 수정; `index.html`, `native_bridge.py`, `build_packages.py`, `clean_github_release_assets.py`, `.github/workflows/release.yml`, `push_to_github.*`의 잔여 `2.9.1`/저장소 URL 불일치를 `v2.9.2` 및 `AhBiYout-all/PowerController`로 통일 (단, 기존 `ScheduleCrypto.dll` HMAC 호환 키 `PowerController_v2.9.1_Enterprise_SecKey_2026`은 유지).
 
+4. **컴퓨터실 50대 환경 독립형 네트워크 원격 스케줄 전송기 및 시뮬레이터 고도화**:
+   - **`network_scheduler.py` & `main.py`**: OS 언어 자동 감지(`detect_os_lang`) 및 `KO | EN | Auto` 실시간 전환, `ThreadPoolExecutor(max_workers=24)` 병렬 전송 + `Retry Failed`, 좌석 배치 캔버스 그리드(`5/8/10`열) ↔ `ttk.Treeview` 정렬 테이블 전환, IP 대역 스캐너(`expand_ipv4_range`), RFC-4180 CSV 가져오기/내보내기(`parse_lab_roster_csv`), 교시·일과별 스케줄 프로필(`LAB_SCHEDULE_PROFILES`) 일괄 배포, 순차 WOL(`100ms~1000ms`), 15초 실시간 생존·타이머 폴링 구현 및 기존 잠재 버그 5종 수정. `main.py` 원격 즉시 제어(`sleep`/`screenoff`/`lock`/`alarm`) 및 `query_status`/`poll_packet` 타이머 상태 응답 확장.
+   - **웹·데스크톱 시뮬레이터 (`src/types.ts`, `src/components/LabNetworkFleetPanel.tsx`, `src/components/DesktopAppView.tsx`, `src/App.tsx`)**: 공유 50대 컴퓨터실 통합 관제 타워 컴포넌트 구축 및 웹 Explorer(`[50대 관제]` 탭·사이드바, `max-w-[960px]` 확장) + 데스크톱 Window 2(`PowerNetworkScheduler.exe`)·Window 4(`DeviceController.exe`) 전수 연동.
+
 ---
 
 ### 📅 [2026-10-17] - v2.9.2 공식 릴리즈 버전 승격 (Semantic Versioning SSOT 일괄 동기화)

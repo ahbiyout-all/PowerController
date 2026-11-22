@@ -6972,12 +6972,17 @@ if __name__ == "__main__":
 
         # 4. 원격 상태 조회 명령
         if action == "query_status":
+            timer_running = bool(getattr(self, "timer_running", False))
+            rem_sec = int(getattr(self, "remaining_seconds", 0)) if timer_running else 0
             return {
-                "success": True, 
+                "success": True,
                 "count": len(getattr(self, "rules", [])),
                 "receiver_active": True,
                 "device": socket.gethostname() if "socket" in globals() else "PowerPC",
-                "mac": get_local_mac()
+                "mac": get_local_mac(),
+                "timer_running": timer_running,
+                "remaining_seconds": rem_sec,
+                "active_mode": getattr(self, "mode", "shutdown") if timer_running else ""
             }
 
         # 5. 보안 토큰 단독 인증 검증 명령
@@ -6993,7 +6998,7 @@ if __name__ == "__main__":
                 "device": socket.gethostname() if "socket" in globals() else "PowerPC"
             }
 
-        # 5-1. 원격 즉시 전원 실행 명령 (immediate_power) - 'shutdown'(종료), 'reboot'(다시시작)
+        # 5-1. 원격 즉시 전원 실행 명령 (immediate_power) - shutdown / reboot / sleep / screenoff / lock / alarm
         if action == "immediate_power":
             if hasattr(self, "network_receive_enabled") and not self.network_receive_enabled.get():
                 msg = "클라이언트의 '원격 예약 수신' 옵션이 해제되어 있어 즉시 전원 제어 명령을 거부합니다." if self.lang == "ko" else "Remote receiver is disabled on client. Immediate power command rejected."
@@ -7001,25 +7006,66 @@ if __name__ == "__main__":
                 return {"success": False, "message": msg}
 
             power_cmd = str(payload.get("power_cmd", "shutdown")).lower().strip()
-            is_reboot = power_cmd in ["restart", "reboot", "다시시작", "다시 시작"]
-            cmd_kr = "다시 시작" if is_reboot else "시스템 종료"
+            if power_cmd in ["restart", "reboot", "다시시작", "다시 시작"]:
+                norm_cmd = "reboot"
+                cmd_kr, cmd_en = "다시 시작", "Reboot"
+            elif power_cmd in ["sleep", "절전", "절전모드", "절전 모드"]:
+                norm_cmd = "sleep"
+                cmd_kr, cmd_en = "절전 모드", "Sleep"
+            elif power_cmd in ["screenoff", "screen_off", "화면끄기", "화면 끄기"]:
+                norm_cmd = "screenoff"
+                cmd_kr, cmd_en = "화면 끄기", "Screen Off"
+            elif power_cmd in ["lock", "화면잠금", "화면 잠금"]:
+                norm_cmd = "lock"
+                cmd_kr, cmd_en = "화면 잠금", "Lock"
+            elif power_cmd in ["alarm", "알람", "긴급알람", "긴급 알람"]:
+                norm_cmd = "alarm"
+                cmd_kr, cmd_en = "비상 알람", "Alarm"
+            else:
+                norm_cmd = "shutdown"
+                cmd_kr, cmd_en = "시스템 종료", "Shutdown"
+
             force = payload.get("force", True)
             f_param = " /f" if force else ""
             grace = max(0, int(payload.get("grace_period_sec", 3)))
 
-            msg = f"외부 관리자({client_ip})로부터 즉시 [{cmd_kr}] 명령이 수신되어 {grace}초 후 실행됩니다." if self.lang == "ko" else f"Immediate [{cmd_kr}] command received from admin ({client_ip}). Executing in {grace}s."
+            msg = (
+                f"외부 관리자({client_ip})로부터 즉시 [{cmd_kr}] 명령이 수신되어 {grace}초 후 실행됩니다."
+                if self.lang == "ko"
+                else f"Immediate [{cmd_en}] command received from admin ({client_ip}). Executing in {grace}s."
+            )
             self.log_event(msg)
 
             def _execute_immediate_worker():
                 import time
                 time.sleep(1.2)  # 네트워크 ACK 응답 패킷 전송 완료 대기
-                if is_reboot:
+                if norm_cmd == "alarm":
+                    alarm_title = f"원격 알람 ({client_ip})" if self.lang == "ko" else f"Remote Alarm ({client_ip})"
+                    self.root.after(0, lambda: self.trigger_alarm_popup(alarm_title))
+                    return
+                if norm_cmd == "screenoff":
+                    if native_bridge:
+                        native_bridge.turn_off_monitor_fast()
+                    else:
+                        os.system("powershell (Add-Type '[DllImport(\"user32.dll\")]^public static extern int SendMessage(int hWnd, int hMsg, int wParam, int lParam);' -Name a -PassThru)::SendMessage(-1,0x0112,0xF170,2)")
+                    return
+                if norm_cmd == "lock":
+                    if native_bridge:
+                        native_bridge.lock_workstation_fast()
+                    else:
+                        os.system("rundll32.exe user32.dll,LockWorkStation")
+                    return
+                if norm_cmd == "sleep":
+                    os.system("rundll32.exe powrprof.dll,SetSuspendState 0,1,0")
+                    return
+
+                if norm_cmd == "reboot":
                     os.system(f"shutdown /r{f_param} /t {grace}")
                 else:
                     os.system(f"shutdown /s{f_param} /t {grace}")
                 try:
                     self.root.destroy()
-                except:
+                except Exception:
                     pass
                 sys.exit(0)
 
@@ -7161,13 +7207,17 @@ if __name__ == "__main__":
                         except:
                             pass
 
+                        timer_running = bool(getattr(self, "timer_running", False))
                         poll_packet = {
                             "type": "client_sync_poll",
                             "client_ip": local_ip,
                             "hostname": socket.gethostname() if "socket" in globals() else "PowerPC",
                             "mac": get_local_mac(),
                             "has_token": bool(self.network_auth_token.get().strip()) if hasattr(self, "network_auth_token") else False,
-                            "rules_count": len(getattr(self, "rules", []))
+                            "rules_count": len(getattr(self, "rules", [])),
+                            "timer_running": timer_running,
+                            "remaining_seconds": int(getattr(self, "remaining_seconds", 0)) if timer_running else 0,
+                            "active_mode": getattr(self, "mode", "shutdown") if timer_running else ""
                         }
                         data_bytes = json.dumps(poll_packet).encode("utf-8")
                         

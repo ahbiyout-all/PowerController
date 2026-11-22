@@ -47,7 +47,7 @@ import {
   BatteryLow,
   Zap
 } from 'lucide-react';
-import { PowerMode, TimerState, ThemeType, SoundTheme, ExplorerFolder, APP_VERSION } from './types';
+import { PowerMode, TimerState, ThemeType, SoundTheme, ExplorerFolder, LabDevice, APP_VERSION } from './types';
 import { soundEngine, SOUND_THEMES } from './utils/soundEngine';
 import CommandCopier from './components/CommandCopier';
 import FavoritesManager from './components/FavoritesManager';
@@ -57,6 +57,7 @@ import AdvancedScheduler from './components/AdvancedScheduler';
 import CompactWidget, { CompactWidgetDesign } from './components/CompactWidget';
 import StartupTodayTasksModal from './components/StartupTodayTasksModal';
 import DesktopAppView from './components/DesktopAppView';
+import { LabNetworkFleetPanel, generate50LabPreset } from './components/LabNetworkFleetPanel';
 import { GitHubUpdateBanner } from './components/GitHubUpdateBanner';
 import BatteryHistoryChart from './components/BatteryHistoryChart';
 import {
@@ -431,6 +432,8 @@ export default function App() {
   const [historyIndex, setHistoryIndex] = useState<number>(0);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [currentTimeText, setCurrentTimeText] = useState<string>('');
+  const [labDevices, setLabDevices] = useState<LabDevice[]>(() => generate50LabPreset('192.168.10.', 101, 10));
+  const [selectedLabIps, setSelectedLabIps] = useState<string[]>(['192.168.10.101', '192.168.10.102', '192.168.10.103']);
 
   // Core Timer logic
   const [powerMode, setPowerMode] = useState<PowerMode>('shutdown');
@@ -1647,6 +1650,7 @@ export default function App() {
       switch (f) {
         case 'timer': return 'Time_Controller.exe';
         case 'scheduler': return 'Task_Scheduler.msc';
+        case 'network': return 'Network_Lab_50.exe';
         case 'packager': return 'Single_File_Packager.lnk';
         case 'command': return 'Terminal_CLI_Command.cmd';
         case 'favorites': return 'Favorites_Folder';
@@ -1656,6 +1660,7 @@ export default function App() {
     switch (f) {
       case 'timer': return '시간_제어기.exe';
       case 'scheduler': return '작업_스케줄러.msc';
+      case 'network': return '원격_50대_관제.exe';
       case 'packager': return '단일_파일_패키저.lnk';
       case 'command': return '터미널_CLI_명령.cmd';
       case 'favorites': return '즐겨찾기_폴더';
@@ -1668,6 +1673,7 @@ export default function App() {
       switch (f) {
         case 'timer': return 'Time Controller.exe';
         case 'scheduler': return 'Task Scheduler.msc';
+        case 'network': return 'Lab Fleet 50.exe';
         case 'packager': return 'EXE Portable Builder';
         case 'command': return 'Terminal CLI Console';
         case 'favorites': return 'Favorites Vault';
@@ -1677,6 +1683,7 @@ export default function App() {
       switch (f) {
         case 'timer': return '시간 제어기.exe';
         case 'scheduler': return '작업 스케줄러.msc';
+        case 'network': return '50대 원격 관제.exe';
         case 'packager': return 'EXE 단일 파일 빌더';
         case 'command': return '터미널 CLI 명령창';
         case 'favorites': return '즐겨찾기 보관함';
@@ -1689,6 +1696,7 @@ export default function App() {
   const sidebarItems: { id: ExplorerFolder; label: string; icon: any; isLink?: boolean }[] = [
     { id: 'timer', label: getSidebarItemLabel('timer'), icon: Cpu },
     { id: 'scheduler', label: getSidebarItemLabel('scheduler'), icon: Clock },
+    { id: 'network', label: getSidebarItemLabel('network'), icon: Network },
     { id: 'packager', label: getSidebarItemLabel('packager'), icon: Monitor },
     { id: 'command', label: getSidebarItemLabel('command'), icon: Terminal },
     { id: 'favorites', label: getSidebarItemLabel('favorites'), icon: Star },
@@ -1995,7 +2003,9 @@ Copyright (c) 2026 AhBiYout
               damping: 24,
               mass: 0.85
             }}
-            className={`w-full max-w-[485px] rounded-xl overflow-hidden shadow-2xl flex flex-col border transition-colors duration-300 ${currentThemeConfig.windowBg}`}
+            className={`w-full ${
+              activeFolder === 'network' ? 'max-w-[960px]' : 'max-w-[485px]'
+            } rounded-xl overflow-hidden shadow-2xl flex flex-col border transition-all duration-300 ${currentThemeConfig.windowBg}`}
             style={{ minHeight: '740px' }}
           >
             {/* GitHub Releases Real-time Live Update Notification */}
@@ -2108,10 +2118,10 @@ Copyright (c) 2026 AhBiYout
           </div>
 
           {/* 3. Tab Navigation Header Bar */}
-          <div className="grid grid-cols-3 gap-1 p-2 bg-black/10 border-b border-gray-500/10">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-1 p-2 bg-black/10 border-b border-gray-500/10">
             <button
               onClick={() => setActiveFolder('timer')}
-              className={`py-1.5 rounded text-[13.5px] font-bold transition-all cursor-pointer ${
+              className={`py-1.5 rounded text-[13px] font-bold transition-all cursor-pointer ${
                 activeFolder === 'timer' || activeFolder === 'favorites' || activeFolder === 'packager' || activeFolder === 'command'
                   ? 'bg-[#3b82f6] text-white shadow font-extrabold'
                   : theme === 'white'
@@ -2125,7 +2135,7 @@ Copyright (c) 2026 AhBiYout
             </button>
             <button
               onClick={() => setActiveFolder('scheduler')}
-              className={`py-1.5 rounded text-[13.5px] font-bold transition-all cursor-pointer ${
+              className={`py-1.5 rounded text-[13px] font-bold transition-all cursor-pointer ${
                 activeFolder === 'scheduler'
                   ? 'bg-[#3b82f6] text-white shadow font-extrabold'
                   : theme === 'white'
@@ -2138,8 +2148,22 @@ Copyright (c) 2026 AhBiYout
               📅 {lang === 'en' ? 'Scheduler' : '스케줄러'}
             </button>
             <button
+              onClick={() => setActiveFolder('network')}
+              className={`py-1.5 rounded text-[13px] font-bold transition-all cursor-pointer ${
+                activeFolder === 'network'
+                  ? 'bg-[#3b82f6] text-white shadow font-extrabold'
+                  : theme === 'white'
+                  ? 'bg-slate-100 hover:bg-slate-200 text-slate-800'
+                  : theme === 'beige'
+                  ? 'bg-[#ebe2d4] hover:bg-[#ded1c0] text-[#3d3222]'
+                  : 'bg-black/20 hover:bg-white/5 text-gray-200'
+              }`}
+            >
+              🌐 {lang === 'en' ? 'Lab Fleet 50' : '50대 관제'}
+            </button>
+            <button
               onClick={() => setActiveFolder('logs')}
-              className={`py-1.5 rounded text-[13.5px] font-bold transition-all cursor-pointer ${
+              className={`py-1.5 rounded text-[13px] font-bold transition-all cursor-pointer ${
                 activeFolder === 'logs'
                   ? 'bg-[#3b82f6] text-white shadow font-extrabold'
                   : theme === 'white'
@@ -2794,6 +2818,25 @@ Copyright (c) 2026 AhBiYout
                   playWarningTick={playWarningTick}
                   lang={lang}
                   theme={theme}
+                />
+              </div>
+            )}
+
+            {activeFolder === 'network' && (
+              <div className="flex-1 flex flex-col min-h-[540px]">
+                <LabNetworkFleetPanel
+                  lang={lang}
+                  theme={theme}
+                  devices={labDevices}
+                  onDevicesChange={setLabDevices}
+                  selectedIps={selectedLabIps}
+                  onSelectedIpsChange={setSelectedLabIps}
+                  onToast={(msg, type) => triggerNotification(msg, type || 'info')}
+                  onPlaySound={(kind) => {
+                    if (soundFeedbackEnabled || kind !== 'buttonClick') {
+                      soundEngine.play(soundTheme, kind);
+                    }
+                  }}
                 />
               </div>
             )}
