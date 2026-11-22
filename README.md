@@ -1,6 +1,6 @@
-# PowerController v2.9.1
-> **Windows 시스템 전원 자동 오프 제어기 & 사내망 원격 예약 관리 타워**  
-> **Smart PC Auto Power & Remote Shutdown Management Center**
+# PowerController v2.9.2
+> **Windows 시스템 전원 자동 오프 제어기 & 사내망 원격 예약·디바이스 제어 타워**  
+> **Smart PC Auto Power, Device Controller & Remote Shutdown Management Center**
 
 ---
 
@@ -22,16 +22,24 @@
    - `https://api.github.com/repos/AhBiYout-all/PowerController/releases/latest` API 실시간 폴링.
    - 신규 릴리스 배포 시 상단 알림 배너 및 업데이트 팝업창(`UpdateModal`) 자동 실행.
    - 원클릭 공식 인스톨러 다운로드, 깃허브 경로 확인, 버전 비교, 패치 내역 안내.
-2. **단일 출처 버전 동기화 (Single Source of Truth, SSOT)**:
-   - `package.json`의 버전을 기준으로 소스코드(`src/types.ts`, `main.py`), Inno Setup 스크립트, 패치노트(`docs/PATCHNOTES.md`), Git 커밋 및 태그가 100% 자동 동기화.
-3. **Inno Setup 6 공식 설치 마법사 (Windows Installer)**:
+2. **개별 디바이스 원격 제어판 (`DeviceController`) & 사내 커맨더 타워 (`PowerNetworkScheduler`)**:
+   - 사내망 탐지 디바이스(`NetBeaconEngine` UDP 9986)별로 **종료(Shutdown), 재시작(Restart), 절전(Sleep), 화면끔(Screen Off), 비상 알람(Alarm)**을 개별 또는 일괄 원격 즉시 실행 (TCP 9988).
+   - 10대 자주 쓰는 전원 시나리오 프리셋 및 실시간 실행 ACK 콘솔 탑재.
+3. **브라우저/OS 언어 자동 감지 & 동적 다국어 스크립트 생성**:
+   - 최초 진입 시 브라우저 언어(`KO`/`EN`)를 자동 감지(`auto` / `manual` 전환 및 `Auto Reset` 지원)하고, 웹 대시보드·데스크톱 네이티브 뷰 UI는 물론 생성되는 **Python/Inno Setup 스크립트 주석 및 레이블까지 동적 다국어 갱신** (`scriptGenerators.ts`).
+4. **4대 테마 고대비 가독성 & 5종 컴팩트 플로팅 위젯**:
+   - 다크(`dark`), 그레이(`gray`), 화이트(`white`), 베이지(`beige`) 4종 테마 전반(데스크톱 뷰, 컴팩트 위젯, 모달/차트)의 고대비 시인성 완벽 확보.
+   - `Standard Neon Ring`, `Cyber HUD`, `Minimal Slim Bar`(플로팅 설정 드로어 포함), `Retro LED`, `Clean Card` 5종 위젯 디자인 실시간 전환.
+5. **단일 출처 버전 동기화 (Single Source of Truth, SSOT)**:
+   - `package.json`의 버전을 기준으로 소스코드(`src/types.ts`, `main.py`, `network_scheduler.py`, `installer.py`), `index.html`, Inno Setup 스크립트(`PowerController.iss`), 패치노트(`docs/PATCHNOTES.md`), Windows 버전 리소스(`version_*.txt`)가 100% 자동 동기화 (`scripts/sync_version.py`).
+6. **Inno Setup 6 공식 설치 마법사 (Windows Installer)**:
    - **폴더 풀림(Unpacked Multi-File) 개별 파일 설치**: 깔끔한 모듈형 파일 트리 구조 설치, 불필요한 개발용 문서 및 포터블 파일 배포 원천 배제.
    - **기존 버전 감지 및 선택 대화상자**: 기존 설치 감지 시 사용자에게 완전 삭제 후 클린 설치(Clean Install) 또는 덮어쓰기(Overwrite/Upgrade) 선택 질의.
-   - **무인 설치(Silent Install) 완벽 지원**: `/SILENT`, `/VERYSILENT`, `/SUPPRESSMSGBOXES`, `/clean=1`.
+   - **무인 설치(Silent Install) 완벽 지원**: `/SILENT`, `/VERYSILENT`, `/SUPPRESSMSGBOXES`, `/CLEAN=1`.
    - **Windows Defender 방화벽 무음 사전 등록**:
-     - 기본 이름(`PowerController (Inbound/Outbound)`) 및 버전 명기 이름(`PowerController v2.9.1 (Inbound/Outbound)`) 동시 등록.
-     - 통신 포트(TCP 9988, UDP 9985, UDP 9986) 및 커맨더 앱 자동 등록.
-4. **오디오 엔진 & 헤더 음소거**:
+     - 기본 이름(`PowerController (Inbound/Outbound)`) 및 버전 명기 이름(`PowerController v2.9.2 (Inbound/Outbound)`) 동시 등록.
+     - 통신 포트(TCP 9988, UDP 9985, UDP 9986) 및 커맨더 앱(`PowerNetworkScheduler`) 자동 등록.
+7. **오디오 엔진 & 헤더 음소거**:
    - Pixabay 선별 7대 프리미엄 사운드 테마(`classic`, `marimba`, `crystal`, `scifi`, `westminster`, `urgent`, `bubble`).
    - 메인 헤더 및 데스크톱 툴바에 전용 **Mute All (음소거 0% / 원복)** 원클릭 토글 탑재.
 
@@ -59,7 +67,7 @@ npm run dev
 python scripts/build_packages.py
 ```
 * 빌드 결과물 (`release_assets/`):
-  * `PowerController_Setup_v2.9.1.exe`
+  * `PowerController_Setup_v2.9.2.exe`
 
 ---
 
@@ -73,7 +81,7 @@ push_to_github.bat
 
 * **파이프라인 동작 과정**:
   1. `package.json` (또는 `docs/PATCHNOTES.md`)에서 동적으로 앱 버전 `%APP_VER%` 추출.
-  2. 개인정보 및 개인 이메일 유출 사전 점검 (`AhBiYout-all <AhBiYout-all@users.noreply.github.com>` 규격 적용).
+  2. 개인정보 및 개인 이메일 유출 사전 점검 (`AhBiYout-all <ahbiyout-all@users.noreply.github.com>` 규격 적용).
   3. Git Add -> Commit (`Release v%APP_VER%`) -> Tag (`v%APP_VER%`) -> Remote Push (`main`).
   4. GitHub Actions가 트리거되어 Node.js 22 LTS 환경에서 Inno Setup 인스톨러를 빌드하고, GitHub Releases에 **오직 공식 설치 파일만 첨부**합니다.
 

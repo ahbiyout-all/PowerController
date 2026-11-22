@@ -59,6 +59,13 @@ import StartupTodayTasksModal from './components/StartupTodayTasksModal';
 import DesktopAppView from './components/DesktopAppView';
 import { GitHubUpdateBanner } from './components/GitHubUpdateBanner';
 import BatteryHistoryChart from './components/BatteryHistoryChart';
+import {
+  AppLang,
+  getInitialLanguage,
+  saveLanguagePreference,
+  clearLanguagePreference,
+  syncDocumentLanguage,
+} from './utils/i18n';
 
 interface DraftSettingsState {
   theme: ThemeType;
@@ -86,19 +93,32 @@ interface DraftSettingsState {
 export default function App() {
   const [viewMode, setViewMode] = useState<'desktop' | 'web'>('desktop');
 
-  const [lang, setLang] = useState<'ko' | 'en'>(() => {
-    try {
-      const saved = localStorage.getItem('power_lang');
-      return (saved === 'ko' || saved === 'en') ? saved : 'ko';
-    } catch {
-      return 'ko';
-    }
-  });
+  const [{ lang: initialLang, source: initialLangSource }] = useState(() => getInitialLanguage());
+  const [lang, setLang] = useState<AppLang>(initialLang);
+  const [langSource, setLangSource] = useState<'auto' | 'manual'>(initialLangSource);
 
-  const handleLangChange = (newLang: 'ko' | 'en') => {
+  useEffect(() => {
+    syncDocumentLanguage(lang, APP_VERSION);
+  }, [lang]);
+
+  const handleLangChange = (newLang: AppLang) => {
     setLang(newLang);
-    localStorage.setItem('power_lang', newLang);
-    addLog(newLang === 'en' ? 'Language changed to English.' : '언어가 한국어로 변경되었습니다.');
+    setLangSource('manual');
+    saveLanguagePreference(newLang);
+    setLicenseModalLang(newLang);
+    addLog(newLang === 'en' ? 'Language switched to English (Manual).' : '언어가 한국어(수동)로 변경되었습니다.');
+  };
+
+  const handleResetLangAuto = () => {
+    const detected = clearLanguagePreference();
+    setLang(detected);
+    setLangSource('auto');
+    setLicenseModalLang(detected);
+    addLog(
+      detected === 'en'
+        ? 'Language reset to browser auto-detection (English).'
+        : '브라우저 기본 언어 자동 감지(한국어)로 복원되었습니다.'
+    );
   };
 
   // Idle Auto-Lock Desktop Settings & State
@@ -256,9 +276,20 @@ export default function App() {
 
   // Compact Widget Customizer States
   const [widgetDesign, setWidgetDesign] = useState<CompactWidgetDesign>(() => {
+    const legacyMap: Record<string, CompactWidgetDesign> = {
+      standard: 'standard',
+      cyber: 'cyber_hud',
+      cyber_hud: 'cyber_hud',
+      slim: 'minimal_bar',
+      minimal_bar: 'minimal_bar',
+      retro: 'retro_led',
+      retro_led: 'retro_led',
+      minimal: 'clean_card',
+      clean_card: 'clean_card',
+    };
     try {
       const saved = localStorage.getItem('power_widget_design');
-      return (saved as CompactWidgetDesign) || 'standard';
+      return (saved && legacyMap[saved]) || 'standard';
     } catch {
       return 'standard';
     }
@@ -300,7 +331,7 @@ export default function App() {
   const [draftSettings, setDraftSettings] = useState<DraftSettingsState | null>(null);
   const [activeAccordion, setActiveAccordion] = useState<string>('theme'); // 'theme' | 'sound' | 'alwaysOnTop' | 'mainWindow'
   const [isLicenseOpen, setIsLicenseOpen] = useState<boolean>(false);
-  const [licenseModalLang, setLicenseModalLang] = useState<'ko' | 'en'>('ko');
+  const [licenseModalLang, setLicenseModalLang] = useState<AppLang>(initialLang);
 
   const handleSoundThemeChange = (newTheme: SoundTheme) => {
     setSoundTheme(newTheme);
@@ -1151,45 +1182,16 @@ export default function App() {
     }
   }, [inputH, inputM, inputS, timerState]);
 
-  // Handle countdown tick
+  // Handle countdown tick (pure state decrement; completion/audio handled cleanly outside updater)
+  const prevCountdownSecRef = useRef<number>(secondsRemaining);
   useEffect(() => {
     if (timerState === 'running') {
+      prevCountdownSecRef.current = secondsRemaining;
       timerRef.current = setInterval(() => {
-        setSecondsRemaining(prev => {
-          if (prev <= 1) {
-            clearInterval(timerRef.current!);
-            handleTimerComplete();
-            return 0;
-          }
-          
-          if (soundEnabled) {
-            const nextSec = prev - 1;
-            // graceSeconds 이하 연속 비프: warningTimes에 10이 있고, 다음 초가 graceSeconds 이하일 때 매초 비프(0초 제외)
-            if (nextSec <= graceSeconds && nextSec > 0 && warningTimes.includes(10)) {
-              playWarningTick();
-            } else if (warningTimes.includes(nextSec)) {
-              // 지정한 특정 초 전일 때 경고 멜로디 연주
-              playAlertChime();
-              if (lang === 'en') {
-                addLog(`🔔 [Warning] Scheduled action executes in ${formatKoreanTime(nextSec)}!`);
-              } else {
-                addLog(`🔔 [사전 경고 알림] 예정 동작 실행 ${formatKoreanTime(nextSec)} 전입니다!`);
-              }
-            }
-          }
-          
-          if (prev % 60 === 0 && prev > 0) {
-            if (lang === 'en') {
-              addLog(`Time remaining: ${Math.floor(prev / 60)} mins left...`);
-            } else {
-              addLog(`남은 대기 시간: ${Math.floor(prev / 60)}분 전...`);
-            }
-          }
-
-          return prev - 1;
-        });
+        setSecondsRemaining(prev => (prev <= 1 ? 0 : prev - 1));
       }, 1000);
     } else {
+      prevCountdownSecRef.current = secondsRemaining;
       if (timerRef.current) {
         clearInterval(timerRef.current);
       }
@@ -1200,10 +1202,10 @@ export default function App() {
         clearInterval(timerRef.current);
       }
     };
-  }, [timerState, soundEnabled, warningTimes, soundTheme, graceSeconds]);
+  }, [timerState]);
 
   const addLog = (msg: string) => {
-    const timestamp = new Date().toLocaleTimeString('ko-KR', { hour12: false });
+    const timestamp = new Date().toLocaleTimeString(lang === 'en' ? 'en-US' : 'ko-KR', { hour12: false });
     setLogs(prev => [`[${timestamp}] ${msg}`, ...prev.slice(0, 49)]);
   };
 
@@ -1281,6 +1283,46 @@ export default function App() {
     }
     setShowSimulator(true);
   };
+
+  useEffect(() => {
+    if (timerState !== 'running') {
+      prevCountdownSecRef.current = secondsRemaining;
+      return;
+    }
+
+    const prevSec = prevCountdownSecRef.current;
+    if (secondsRemaining === prevSec) return;
+    prevCountdownSecRef.current = secondsRemaining;
+
+    if (secondsRemaining <= 0) {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+      handleTimerComplete();
+      return;
+    }
+
+    if (soundEnabled) {
+      if (secondsRemaining <= graceSeconds && warningTimes.includes(10)) {
+        playWarningTick();
+      } else if (warningTimes.includes(secondsRemaining)) {
+        playAlertChime();
+        if (lang === 'en') {
+          addLog(`🔔 [Warning] Scheduled action executes in ${formatKoreanTime(secondsRemaining)}!`);
+        } else {
+          addLog(`🔔 [사전 경고 알림] 예정 동작 실행 ${formatKoreanTime(secondsRemaining)} 전입니다!`);
+        }
+      }
+    }
+
+    if (prevSec % 60 === 0 && prevSec > 0) {
+      if (lang === 'en') {
+        addLog(`Time remaining: ${Math.floor(prevSec / 60)} mins left...`);
+      } else {
+        addLog(`남은 대기 시간: ${Math.floor(prevSec / 60)}분 전...`);
+      }
+    }
+  }, [timerState, secondsRemaining, soundEnabled, warningTimes, soundTheme, graceSeconds, lang, powerMode]);
 
   const handleQuickPreset = (minutes: number) => {
     const sec = minutes * 60;
@@ -1645,12 +1687,12 @@ export default function App() {
 
   // Sidebar tree folder lists
   const sidebarItems: { id: ExplorerFolder; label: string; icon: any; isLink?: boolean }[] = [
-    { id: 'timer', label: '시간 제어기.exe', icon: Cpu },
-    { id: 'scheduler', label: '작업 스케줄러.msc', icon: Clock },
-    { id: 'packager', label: 'EXE 단일 파일 빌더', icon: Monitor },
-    { id: 'command', label: '터미널 CLI 명령창', icon: Terminal },
-    { id: 'favorites', label: '즐겨찾기 보관함', icon: Star },
-    { id: 'logs', label: 'notepad_logs.txt', icon: FileText }
+    { id: 'timer', label: getSidebarItemLabel('timer'), icon: Cpu },
+    { id: 'scheduler', label: getSidebarItemLabel('scheduler'), icon: Clock },
+    { id: 'packager', label: getSidebarItemLabel('packager'), icon: Monitor },
+    { id: 'command', label: getSidebarItemLabel('command'), icon: Terminal },
+    { id: 'favorites', label: getSidebarItemLabel('favorites'), icon: Star },
+    { id: 'logs', label: getSidebarItemLabel('logs'), icon: FileText }
   ];
 
   // Helper filter for file search
@@ -1670,7 +1712,10 @@ export default function App() {
       <div className={selectedFont}>
         <DesktopAppView
           onSwitchToWeb={() => setViewMode('web')}
-          onOpenLicense={() => setIsLicenseOpen(true)}
+          onOpenLicense={() => {
+            setLicenseModalLang(lang);
+            setIsLicenseOpen(true);
+          }}
           isWebAvailable={true}
           battery={systemStatus?.battery}
           isPowerSavingActive={isPowerSavingActive}
@@ -1684,6 +1729,10 @@ export default function App() {
           onSoundFeedbackChange={setSoundFeedbackEnabled}
           theme={theme}
           onThemeChange={handleThemeChange}
+          lang={lang}
+          onLangChange={handleLangChange}
+          langSource={langSource}
+          onResetLangAuto={handleResetLangAuto}
         />
 
         {/* License Modal Portal */}
@@ -1798,18 +1847,60 @@ Copyright (c) 2026 AhBiYout
     <div id="explorer-main-container" className={`min-h-screen p-3 md:p-6 flex flex-col items-center justify-center gap-5 transition-colors duration-300 ${currentThemeConfig.bg} ${selectedFont}`}>
       
       {/* Top Banner to switch to Desktop Native View */}
-      <div className="w-full max-w-4xl bg-slate-900 border border-slate-700/80 rounded-xl px-4 py-2.5 flex items-center justify-between shadow-lg text-xs">
-        <div className="flex items-center gap-2">
-          <span className="px-2 py-0.5 bg-indigo-600/30 border border-indigo-500/40 text-indigo-300 font-bold rounded">웹 대시보드 뷰</span>
-          <span className="text-slate-400 hidden sm:inline">실제 Windows 데스크톱 앱(Tkinter GUI) 화면으로 전환할 수 있습니다.</span>
+      <div className="w-full max-w-4xl bg-slate-900 border border-slate-700/80 rounded-xl px-4 py-2.5 flex items-center justify-between gap-2 shadow-lg text-xs">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="px-2 py-0.5 bg-indigo-600/30 border border-indigo-500/40 text-indigo-300 font-bold rounded whitespace-nowrap shrink-0">
+            {lang === 'en' ? 'Web Dashboard View' : '웹 대시보드 뷰'}
+          </span>
+          <span className="text-slate-400 hidden sm:inline truncate">
+            {lang === 'en'
+              ? 'Switch back to the Windows Desktop App (Tkinter GUI) simulation view.'
+              : '실제 Windows 데스크톱 앱(Tkinter GUI) 화면으로 전환할 수 있습니다.'}
+          </span>
         </div>
-        <button
-          onClick={() => setViewMode('desktop')}
-          className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg shadow transition-colors flex items-center gap-1.5 cursor-pointer"
-        >
-          <Monitor className="w-3.5 h-3.5" />
-          <span>🖥️ 데스크톱 앱 화면으로 전환</span>
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center bg-slate-800 border border-slate-700 rounded-md p-0.5 text-[11px]">
+            <button
+              type="button"
+              onClick={() => handleLangChange('ko')}
+              className={`px-2 py-0.5 rounded font-bold cursor-pointer whitespace-nowrap ${
+                lang === 'ko' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              KO
+            </button>
+            <button
+              type="button"
+              onClick={() => handleLangChange('en')}
+              className={`px-2 py-0.5 rounded font-bold cursor-pointer whitespace-nowrap ${
+                lang === 'en' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              EN
+            </button>
+            <button
+              type="button"
+              onClick={handleResetLangAuto}
+              title={
+                lang === 'en'
+                  ? 'Reset to browser auto-detected language'
+                  : '브라우저 자동 감지 언어로 복원'
+              }
+              className="px-1.5 py-0.5 text-[10px] font-semibold text-slate-300 hover:text-white cursor-pointer whitespace-nowrap border-l border-slate-700 ml-0.5 pl-1.5"
+            >
+              {langSource === 'auto'
+                ? (lang === 'en' ? 'Auto' : '자동')
+                : (lang === 'en' ? 'Manual' : '수동')}
+            </button>
+          </div>
+          <button
+            onClick={() => setViewMode('desktop')}
+            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg shadow transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
+          >
+            <Monitor className="w-3.5 h-3.5" />
+            <span>{lang === 'en' ? '🖥️ Desktop App View' : '🖥️ 데스크톱 앱 화면으로 전환'}</span>
+          </button>
+        </div>
       </div>
 
       {/* Simulation Engine Overlay Portal */}
@@ -1977,11 +2068,16 @@ Copyright (c) 2026 AhBiYout
               </button>
               <button
                 onClick={() => {
-                  const c = confirm(lang === 'en' ? 'Ignore virtual program instance?' : '프로그램 가상 인스턴스를 무시하시겠습니까?');
-                  if (c) addLog(lang === 'en' ? 'Shutdown event received.' : '종료 이벤트 수신 완료.');
+                  triggerNotification(
+                    lang === 'en'
+                      ? 'Minimized to virtual system tray (background monitor stays active).'
+                      : '가상 시스템 트레이로 최소화되었습니다 (백그라운드 감시 유지).',
+                    'info'
+                  );
+                  addLog(lang === 'en' ? 'Window hidden to virtual system tray.' : '창을 가상 시스템 트레이로 최소화했습니다.');
                 }}
                 className="p-1 px-1.5 rounded hover:bg-rose-600 hover:text-white transition-colors text-gray-400"
-                title={lang === 'en' ? 'Close' : '닫기'}
+                title={lang === 'en' ? 'Close to Tray' : '트레이로 최소화'}
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -3100,6 +3196,51 @@ Copyright (c) 2026 AhBiYout
 
               {/* Body */}
               <div className="flex flex-col gap-3 max-h-[460px] overflow-y-auto pr-1">
+                {/* 0. Language Auto-Detection & Manual Override */}
+                <div className="flex flex-col gap-1.5 p-3 bg-black/10 dark:bg-white/5 rounded-xl border border-gray-500/10">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[13.5px] font-bold text-blue-400 flex items-center gap-1">
+                      🌐 {lang === 'en' ? 'Display & Script Language' : '화면 및 생성 스크립트 언어'}
+                    </span>
+                    <span className="text-[10.5px] px-2 py-0.5 rounded bg-blue-500/15 text-blue-400 border border-blue-500/30 font-mono">
+                      {langSource === 'auto'
+                        ? (lang === 'en' ? 'Auto-Detected' : '브라우저 자동 감지')
+                        : (lang === 'en' ? 'Manual Selection' : '사용자 수동 설정')}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <button
+                      type="button"
+                      onClick={() => handleLangChange('ko')}
+                      className={`flex-1 py-1.5 rounded-lg text-xs font-bold border transition-colors cursor-pointer whitespace-nowrap ${
+                        lang === 'ko'
+                          ? 'bg-blue-600 text-white border-blue-500'
+                          : 'bg-gray-800/80 text-gray-300 border-gray-700 hover:bg-gray-700'
+                      }`}
+                    >
+                      🇰🇷 한국어 (Korean)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleLangChange('en')}
+                      className={`flex-1 py-1.5 rounded-lg text-xs font-bold border transition-colors cursor-pointer whitespace-nowrap ${
+                        lang === 'en'
+                          ? 'bg-blue-600 text-white border-blue-500'
+                          : 'bg-gray-800/80 text-gray-300 border-gray-700 hover:bg-gray-700'
+                      }`}
+                    >
+                      🇺🇸 English (Global)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleResetLangAuto}
+                      className="px-2.5 py-1.5 rounded-lg text-[11px] font-semibold bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700 cursor-pointer whitespace-nowrap shrink-0"
+                    >
+                      {lang === 'en' ? 'Auto Reset' : '자동 감지'}
+                    </button>
+                  </div>
+                </div>
+
                 {/* 1. Theme Selection */}
                 <div className="flex flex-col gap-1.5 p-3 bg-black/10 dark:bg-white/5 rounded-xl border border-gray-500/10">
                   <span className="text-[13.5px] font-bold text-blue-400 flex items-center gap-1">🎨 {lang === 'en' ? 'Theme Style (Pull-down)' : '테마 스타일 (풀다운)'}</span>
@@ -3357,10 +3498,10 @@ Copyright (c) 2026 AhBiYout
                         className="w-full bg-gray-800/90 border border-gray-700 hover:border-indigo-500/70 rounded-lg px-3 py-2 text-xs font-bold text-gray-200 appearance-none focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer pr-8 shadow-inner"
                       >
                         <option value="standard" className="bg-gray-900">💍 {lang === 'en' ? 'Neon Ring (Circular Indicator)' : '네온 링 (Neon Ring - 미려한 원형 인디케이터)'}</option>
-                        <option value="cyber" className="bg-gray-900">🤖 {lang === 'en' ? 'Cyber HUD (Futuristic Terminal)' : '사이버 HUD (Cyber HUD - 네온 사이버펑크 디스플레이)'}</option>
-                        <option value="slim" className="bg-gray-900">📏 {lang === 'en' ? 'Slim Bar (Ultra Compact)' : '슬림 바 (Slim Bar - 공간 절약형 미니멀 바)'}</option>
-                        <option value="retro" className="bg-gray-900">📟 {lang === 'en' ? 'Retro LED (Digital Clock)' : '레트로 LED (Retro LED - 클래식 디지털 세그먼트)'}</option>
-                        <option value="minimal" className="bg-gray-900">🃏 {lang === 'en' ? 'Clean Card (Flat Simple)' : '클린 카드 (Clean Card - 정돈된 미니멀 플랫 카드)'}</option>
+                        <option value="cyber_hud" className="bg-gray-900">🤖 {lang === 'en' ? 'Cyber HUD (Futuristic Terminal)' : '사이버 HUD (Cyber HUD - 네온 사이버펑크 디스플레이)'}</option>
+                        <option value="minimal_bar" className="bg-gray-900">📏 {lang === 'en' ? 'Slim Bar (Ultra Compact)' : '슬림 바 (Slim Bar - 공간 절약형 미니멀 바)'}</option>
+                        <option value="retro_led" className="bg-gray-900">📟 {lang === 'en' ? 'Retro LED (Digital Clock)' : '레트로 LED (Retro LED - 클래식 디지털 세그먼트)'}</option>
+                        <option value="clean_card" className="bg-gray-900">🃏 {lang === 'en' ? 'Clean Card (Flat Simple)' : '클린 카드 (Clean Card - 정돈된 미니멀 플랫 카드)'}</option>
                       </select>
                       <ChevronDown className="w-3.5 h-3.5 text-gray-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                     </div>

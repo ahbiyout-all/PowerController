@@ -5,26 +5,29 @@
 
 ---
 
-## [v2.9.2] - 2026-10-17 (4대 테마 고대비 가독성, 인스톨러 클린설치/덮어쓰기 분기, 방화벽 사전 무음 등록)
+## [v2.9.2] - 2026-10-17 (개별 디바이스 제어판, 자동 언어 감지, 4대 테마 고대비 및 전수 감사 픽스)
 
-### 🎨 1. 4대 테마(다크, 그레이, 화이트, 베이지) 완벽 연동 및 라이트 모드 고대비 가독성 개편
-- **전체 컴포넌트 테마 동기화**: `DesktopAppView`, `AdvancedScheduler`, `CommandCopier`, `FavoritesManager`, `StartupTodayTasksModal`, `SmartAdvisorModal` 전반에 화이트(`white`) 및 베이지(`beige`) 테마 정밀 매핑.
-- **고대비 시인성 극대화**: 밝은 테마 환경에서 회색/흰색 글씨가 묻히는 문제를 해결하고 고대비 텍스트 컬러(`text-[#0f172a]`, `text-[#2c2217]`) 및 테두리/버튼 호버 스타일 전면 보정.
-- **테마 설정 일원화**: 로컬스토리지 `power_theme` 키와 데스크톱 설정 모달의 테마 셀렉터 리스트 완벽 일치.
+### 🖥️ 1. 개별 디바이스 원격 제어판 (`DeviceController`) & 사내 커맨더 타워 확장
+- **개별 PC 즉시 원격 제어 패널 신설**: 웹 사이드바/뷰 및 데스크톱 네이티브 뷰(`DeviceController.exe`)에서 사내망 탐지 PC별로 **종료(Shutdown), 재시작(Restart), 절전(Sleep), 화면끔(Screen Off), 비상 알람(Alarm)**을 개별 또는 다중 선택하여 즉시 송출.
+- **실시간 원격 실행 ACK 콘솔**: TCP 9988 직결 제어 명령 전송 결과를 실시간 타임스탬프 콘솔로 모니터링.
 
-### 📦 2. Inno Setup 6 인스톨러 폴더 풀림(Unpacked Multi-File) 패키징 및 클린 설치/덮어쓰기 분기
-- **폴더 풀림(Unpacked Multi-File) 설치 구현**: PyInstaller `--onedir` 빌드 디렉터리(`dist\PowerController\*`) 트리 및 필수 네이티브 C/C++ DLL들을 개별 파일 구조로 깔끔하게 전개.
-- **기존 설치 감지 시 사용자 선택 다이얼로그**:
-  - `[예 (Yes)]`: 기존 버전 완전 삭제 후 클린 설치 (Clean Install, 권장)
-  - `[아니오 (No)]`: 기존 설정 및 파일 위에 덮어쓰기 (Overwrite / Upgrade)
-  - `[취소 (Cancel)]`: 설치 마법사 종료
-- **무인 설치(Silent Install) 스위치 고도화**: `/SILENT`, `/VERYSILENT`, `/NORESTART` 완전 지원 및 무인 모드 전용 `/CLEAN=1` 스위치 제공.
-- **불필요 파일 배포 제외**: 개발용 마크다운, 스크래치 파일 배포 원천 차단 및 필수 라이선스/에셋만 설치.
+### 🌐 2. 브라우저/OS 기본 언어 자동 감지 & 동적 다국어 스크립트 생성
+- **자동 감지 및 수동 토글 공존 (`src/utils/i18n.ts`)**: 최초 방문 시 `navigator.language` 기반 한국어/영어(`KO`/`EN`) 자동 감지(`auto`), 수동 전환(`manual`) 및 `Auto Reset` 복원 기능 지원.
+- **UI & 생성 스크립트 전 영역 실시간 다국어 연동**: 웹 대시보드, 데스크톱 네이티브 뷰뿐만 아니라 `scriptGenerators.ts`에서 생성되는 **Python 제어기 및 Inno Setup 스크립트의 주석과 UI 레이블까지 동적 다국어 갱신**.
 
-### 🛡️ 3. Windows Defender Firewall 사전 무음 등록 (기본 이름 + 버전 표기 이름)
-- **인바운드/아웃바운드 및 전용 포트 사전 등록**: 메인(`PowerController.exe`), 커맨더(`PowerNetworkScheduler.exe`), 원격 통신 포트(TCP 9988, UDP 9985, UDP 9986)를 설치 직후(`ssPostInstall`) 무음 자동 등록.
-- **버전 표기 명칭 동시 등록**: 기본 이름(`PowerController`)과 버전 정보가 포함된 이름(`PowerController v2.9.2`)을 동시에 등록하여 공용 네트워크 보안 경고창 원천 차단.
-- **언인스톨 클린 정리**: 프로그램 제거 시(`usPostUninstall`) 등록된 모든 방화벽 규칙을 자동 소거.
+### 🎨 3. 4대 테마(다크, 그레이, 화이트, 베이지) 완벽 연동 및 컴팩트 위젯 고대비 개편
+- **전체 컴포넌트 테마 동기화**: `DesktopAppView`, `CompactWidget`, `AdvancedScheduler`, `CommandCopier`, `FavoritesManager`, `StartupTodayTasksModal`, `SmartAdvisorModal` 전반에 화이트(`white`) 및 베이지(`beige`) 테마 정밀 매핑.
+- **고대비 시인성 극대화**: 밝은 테마 환경에서 하드코딩된 어두운 카드/텍스트(`bg-[#18181b]`, `text-slate-200` 등)가 묻히거나 반전되는 문제를 전면 교정하고 고대비 텍스트 컬러(`text-[#0f172a]`, `text-[#2c2217]`) 및 패널/입력창 토큰 적용.
+- **`CompactWidget` 슬림 바(`minimal_bar`) 설정 드로어 복구**: 슬림 바 위젯에서도 설정 버튼 클릭 시 플로팅 설정 드로어가 정상 렌더링되도록 수정하고 `App.tsx`의 위젯 디자인 식별자(`cyber_hud`, `minimal_bar`, `retro_led`, `clean_card`) 및 레거시 마이그레이션 일원화.
+
+### 🐛 4. 전 영역 자아성찰(Deep Audit) 버그 수정 및 안정화
+- **타이머 카운트다운 및 정시 예약 정확도 개선**: `App.tsx`와 `DesktopAppView.tsx`의 카운트다운 완료·경고음 호출을 React 상태 업데이터 밖의 `useEffect`로 분리하여 StrictMode 이중 실행 방지, `DesktopAppView` 특정 시각 예약(`schedule`) 24시간 롤오버 계산 및 시작 로그 표기 보정.
+- **iFrame 안전 UX & UI 다듬기**: 웹 뷰의 네이티브 `confirm()` 호출 제거 및 인앱 토스트 교체, `FavoritesManager` 6모드 그리드 2행 고아 버튼 정렬(`grid-cols-3 sm:grid-cols-6`), `BatteryHistoryChart` 및 `StartupTodayTasksModal` 누락 다국어 문구 현지화.
+- **버전 동기화(`sync_version.py`) 및 GitHub 저장소 경로 일원화**: `main.py`의 `GITHUB_REPO_OWNER`를 `AhBiYout-all`로 수정, `sync_version.py`의 `network_scheduler.py`(`APP_VERSION`) 및 `index.html`(`og:title`) 정규식 교정, 배포 스크립트 및 워크플로 버전 기본값을 `v2.9.2`로 통합.
+
+### 📦 5. Inno Setup 6 인스톨러 폴더 풀림(Unpacked Multi-File) & 방화벽 사전 무음 등록
+- **폴더 풀림(Unpacked Multi-File) 설치 구현**: PyInstaller `--onedir` 빌드 디렉터리(`dist\PowerController\*`) 트리 및 필수 네이티브 C/C++ DLL들을 개별 파일 구조로 전개, 기존 설치 감지 시 클린 설치(`Clean Install`) / 덮어쓰기 선택 다이얼로그 및 `/SILENT`, `/VERYSILENT`, `/CLEAN=1` 지원.
+- **Windows Defender Firewall 사전 무음 등록**: 메인(`PowerController.exe`), 커맨더(`PowerNetworkScheduler.exe`), 전용 포트(TCP 9988, UDP 9985, UDP 9986) 및 버전 표기 명칭(`PowerController v2.9.2`) 동시 등록 및 제거 시 자동 정리.
 
 ---
 

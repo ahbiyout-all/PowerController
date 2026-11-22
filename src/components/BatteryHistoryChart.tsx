@@ -73,7 +73,7 @@ export const BatteryHistoryChart: React.FC<BatteryHistoryChartProps> = ({
     // Generate 12 historical points spaced by 5 mins (covering past 60 mins)
     for (let i = 12; i >= 0; i--) {
       const pastTime = new Date(now - i * 5 * 60 * 1000);
-      const timeStr = pastTime.toLocaleTimeString('ko-KR', { hour12: false, hour: '2-digit', minute: '2-digit' });
+      const timeStr = pastTime.toLocaleTimeString(lang === 'en' ? 'en-US' : 'ko-KR', { hour12: false, hour: '2-digit', minute: '2-digit' });
       
       let simulatedLevel: number;
       if (isChg) {
@@ -101,7 +101,7 @@ export const BatteryHistoryChart: React.FC<BatteryHistoryChartProps> = ({
     if (!currentBattery) return;
 
     const now = new Date();
-    const timeLabel = now.toLocaleTimeString('ko-KR', { hour12: false, hour: '2-digit', minute: '2-digit' });
+    const timeLabel = now.toLocaleTimeString(lang === 'en' ? 'en-US' : 'ko-KR', { hour12: false, hour: '2-digit', minute: '2-digit' });
     const currentPoint: BatterySnapshot = {
       timestamp: now.getTime(),
       timeLabel,

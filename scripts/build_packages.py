@@ -22,9 +22,9 @@ def get_app_version():
     try:
         with open("package.json", "r", encoding="utf-8") as f:
             data = json.load(f)
-            return data.get("version", "2.9.1").strip()
+            return data.get("version", "2.9.2").strip()
     except Exception:
-        return "2.9.1"
+        return "2.9.2"
 
 APP_VER = get_app_version()
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

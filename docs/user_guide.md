@@ -1,6 +1,6 @@
 # PowerController 사용자 가이드 (User Manual)
 
-본 문서는 **PowerController v2.9.1** 전원 자동 오프 제어기의 다양한 핵심 기능을 일반 사용자의 관점에서 친숙하고 자세하게 설명하는 통합 가이드북입니다.
+본 문서는 **PowerController v2.9.2** 전원 자동 오프 제어기의 다양한 핵심 기능을 일반 사용자의 관점에서 친숙하고 자세하게 설명하는 통합 가이드북입니다.
 
 ---
 
@@ -132,7 +132,7 @@ PowerController는 단순한 종료 예약기를 넘어 데스크톱의 편리�
 *   **모바일 역할 (스마트 원격 리모컨)**: 스마트폰에서 집이나 사무실의 PC들을 원격으로 전원 종료, 재부팅, 절전, WOL 원격 부팅시키는 강력한 파워 리모컨 역할을 수행합니다.
 *   **Android 전용 터치 앱 (`.apk`)**: APK 파일을 안드로이드 폰으로 전송 후 터치하여 즉시 설치할 수 있습니다.
 *   **iPhone iOS IPA & Safari 무설치 PWA**:
-    *   **AltStore / Sideloadly**: `PowerController-v2.9.1.ipa` 패키지를 사이드로딩 설치.
+    *   **AltStore / Sideloadly**: `PowerController-v2.9.2.ipa` 패키지를 사이드로딩 설치.
     *   **Safari 홈 화면 추가 (무설치 원터치 ⭐)**: 아이폰 Safari에서 접속 후 하단 **[공유] ➔ [홈 화면에 추가]**를 누르면, 앱스토어 앱과 동일하게 고화질 아이콘이 생성되며 브라우저 주소창 없는 전체화면 독립 앱으로 작동합니다.
 
 ### 24. 📉 기능 보존 무손실 파일 용량 최적화 (v2.9.1)
@@ -157,6 +157,18 @@ PowerController는 단순한 종료 예약기를 넘어 데스크톱의 편리�
 ### 28. 🛠️ 11대 순수 창작 C/C++ 네이티브 DLL 시스템 (v2.9.1+)
 *   **PowerCoreNative, NetBeaconEngine, FirewallNative, SysPowerHook, ScheduleCrypto, DiskFlushNative, AudioDimmerNative, DisplayDdcNative, LowLevelInputIdleNative, CommanderTcpDispatcherNative, CommanderPingScannerNative** 등 11개 순수 C/C++ 네이티브 DLL이 탑재되어, 외부 라이브러리 설치 없이 초고속(0.0001초~0.05초) 시스템 제어를 수행합니다.
 *   자세한 아키텍처 및 C ABI 명세는 [`pure_custom_dll_architecture.md`](./pure_custom_dll_architecture.md) 및 [`dll_specification.md`](./dll_specification.md) 문서를 참고하십시오.
+
+### 29. 🎛️ 개별 디바이스 원격 제어판 (`DeviceController`) (v2.9.2)
+*   웹 대시보드 사이드바/모달 및 데스크톱 시뮬레이터 4번째 창(`DeviceController.exe`)에서 동일 LAN 상에 스캔된 PC들을 디바이스 카드 단위로 한눈에 확인할 수 있습니다.
+*   각 디바이스마다 개별 **⚡ 즉시 종료(Shutdown)**, **🔄 즉시 재시작(Restart)**, **🌙 즉시 절전(Sleep)** 버튼을 원클릭으로 실행할 수 있으며, 브로드캐스트 공유 기능과 함께 안전하게 동작합니다.
+
+### 30. 🌐 브라우저/OS 언어 자동 감지(`KO`/`EN`) 및 동적 다국어 스크립트 생성 (v2.9.2)
+*   최초 접속 시 사용자의 브라우저 및 OS 기본 언어(`navigator.language`)를 자동 감지하여 한국어(`KO`) 또는 영어(`EN`)로 UI 전체를 즉시 표시합니다.
+*   상단 언어 토글로 언제든 수동 전환할 수 있으며, **`Auto Reset`** 버튼을 누르면 수동 고정(`Manual`)을 해제하고 브라우저 자동 감지 상태로 복원됩니다.
+*   선택된 언어에 따라 웹 대시보드·데스크톱 네이티브 뷰 레이블뿐만 아니라, 내장 **Python 및 Inno Setup 스크립트 생성기**가 출력하는 코드 주석까지 실시간 번역됩니다.
+
+### 31. 🎨 4대 테마 라이트 모드(`White`/`Beige`) 고대비 가독성 최적화 (v2.9.2)
+*   밝은 테마(화이트·베이지) 사용 시 웹 상단 고정 컴팩트 위젯(`CompactWidget`)과 데스크톱 네이티브 4개 창·환경설정 모달의 모든 텍스트·입력창·배지가 고대비 팔레트로 자동 전환되어 선명한 가독성을 제공합니다.
 
 ---
 

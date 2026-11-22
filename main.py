@@ -78,13 +78,13 @@ def get_data_filepath(filename):
             return script_path
 
 APP_VERSION = "2.9.2"
-GITHUB_REPO_OWNER = "AhBiYout"
+GITHUB_REPO_OWNER = "AhBiYout-all"
 GITHUB_REPO_NAME = "PowerController"
 GITHUB_RELEASES_API = f"https://api.github.com/repos/{GITHUB_REPO_OWNER}/{GITHUB_REPO_NAME}/releases/latest"
 GITHUB_RELEASES_URL = f"https://github.com/{GITHUB_REPO_OWNER}/{GITHUB_REPO_NAME}/releases"
 
 def parse_semver(ver_str):
-    """v2.9.1 또는 2.9.1 형태의 문자열을 (2, 9, 1) 튜플로 파싱하여 대소 비교합니다."""
+    """v2.9.2 또는 2.9.2 형태의 문자열을 (2, 9, 2) 튜플로 파싱하여 대소 비교합니다."""
     clean = str(ver_str).strip().lstrip("vV")
     parts = []
     for p in clean.split("."):
@@ -270,6 +270,26 @@ THEMES = {
         "name_en": "Beige"
     }
 }
+
+def detect_system_language():
+    """운영체제/사용자 기본 로케일을 자동 감지하여 'ko' 또는 'en'을 반환합니다."""
+    try:
+        if os.name == "nt":
+            import ctypes
+            lang_id = ctypes.windll.kernel32.GetUserDefaultUILanguage()
+            if (lang_id & 0x3FF) == 0x12:
+                return "ko"
+            return "en"
+    except Exception:
+        pass
+    try:
+        import locale
+        loc = locale.getlocale()[0] or locale.getdefaultlocale()[0] or os.getenv("LANG", "")
+        if loc and str(loc).lower().startswith("ko"):
+            return "ko"
+    except Exception:
+        pass
+    return "en"
 
 def load_startup_theme():
     try:
@@ -590,8 +610,8 @@ class PowerTimerApp:
     def __init__(self, root, start_hidden=False):
         self.root = root
         self.start_hidden = start_hidden
-        self.lang = "ko"
-        self.root.title("전원 종료/재시작 타이머")
+        self.lang = detect_system_language()
+        self.root.title("전원 종료/재시작 타이머" if self.lang == "ko" else "Power Shut Down/Restart Timer")
         
         # 시작 시 메인창이 화면에 깜빡이거나 번쩍이지 않도록 시작 숨김 모드이면 즉각 withdraw 유지
         if self.start_hidden:
@@ -6693,7 +6713,8 @@ if __name__ == "__main__":
             self.network_receive_enabled.set(False)
         self.grace_seconds_setting.set(10)
         self.grace_seconds_label.set("10초 (10 seconds)")
-        self.lang = "ko"
+        default_lang = detect_system_language()
+        self.lang = default_lang
         self.sound_theme = "classic"
         
         if os.path.exists(SETTINGS_FILE):
@@ -6737,7 +6758,8 @@ if __name__ == "__main__":
                         self.idle_lock_label.set(f"{mins}분 ({mins} minutes)")
                     self.grace_seconds_setting.set(data.get("grace_seconds", 10))
                     self.grace_seconds_label.set(self.get_grace_label_by_seconds(self.grace_seconds_setting.get()))
-                    self.lang = data.get("lang", "ko")
+                    saved_lang = data.get("lang")
+                    self.lang = saved_lang if saved_lang in ("ko", "en") else default_lang
                     self.sound_theme = data.get("sound_theme", "classic")
                     self.sound_volume = data.get("sound_volume", 80)
                     if hasattr(self, "sound_feedback_enabled"):
@@ -7620,7 +7642,7 @@ if __name__ == "__main__":
 
         lbl_prev_sample = tk.Label(
             f_prev,
-            text="PowerController 2.9.1 / 12:34:56\n스마트 전원 및 자동 종료 예약 제어기",
+            text=f"PowerController {APP_VERSION} / 12:34:56\n스마트 전원 및 자동 종료 예약 제어기",
             font=("Arial", 11),
             fg=TEXT_COLOR,
             bg=DARK_CARD,
@@ -7637,7 +7659,7 @@ if __name__ == "__main__":
             if sel:
                 chosen = font_listbox.get(sel[0])
                 try:
-                    lbl_prev_sample.config(font=(chosen, 11), text=f"[{chosen}]\nPowerController 2.9.1 / 12:34:56\n스마트 전원 및 자동 종료 제어기 (Smart Power Agent)")
+                    lbl_prev_sample.config(font=(chosen, 11), text=f"[{chosen}]\nPowerController {APP_VERSION} / 12:34:56\n스마트 전원 및 자동 종료 제어기 (Smart Power Agent)")
                 except Exception:
                     pass
 

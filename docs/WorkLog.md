@@ -22,6 +22,23 @@
 
 ## 📝 작업 로그 (Work Log)
 
+### 📅 [2026-11-22] - v2.9.2 전수 자아성찰(Deep Audit), 개별 디바이스 제어판, 자동 언어 감지 및 문서 동기화
+
+#### 1. 구현 기능 및 감사 대상
+1. **개별 디바이스 원격 제어판 (`DeviceController`) 신설**:
+   - 데스크톱 네이티브 뷰 4번째 창(`DeviceController.exe`) 및 웹 대시보드 디바이스 제어 뷰를 구축하여 사내망 탐지 PC별 개별 전원 종료(`Shutdown`), 재시작(`Restart`), 절전(`Sleep`), 화면끔(`Screen Off`), 알람(`Alarm`) 즉시 제어 지원.
+2. **브라우저 기본 언어 자동 감지(`KO`/`EN`) & 동적 다국어 스크립트 생성**:
+   - `src/utils/i18n.ts`를 통해 최초 접속 시 브라우저 언어 자동 감지(`auto`), 수동 전환(`manual`), `Auto Reset` 복원 구현.
+   - `src/utils/scriptGenerators.ts`에서 생성되는 Python 및 Inno Setup 스크립트의 주석과 레이블이 선택 언어에 맞춰 동적으로 갱신되도록 적용.
+3. **전수 자아성찰(Deep Audit) 및 결함 일괄 수정**:
+   - **`src/App.tsx`**: `widgetDesign` 레거시 식별자(`cyber->cyber_hud`, `slim->minimal_bar`, `retro->retro_led`, `minimal->clean_card`) 정규화 및 설정 셀렉트 옵션 동기화; 네이티브 `confirm()` 제거 및 인앱 트레이 알림 교체; 카운트다운 완료/경고음/분 단위 로깅을 React `useEffect`(`prevCountdownSecRef`)로 분리하여 StrictMode 이중 실행 및 스테일 클로저 제거.
+   - **`src/components/DesktopAppView.tsx`**: `langSource` 타입 통일(`'auto' | 'manual'`); `schedule` 모드 24시간 롤오버 카운트다운 및 시작 로그(`targetTotal`) 보정; Window 2/3/4 최대화 창 토글 연결; `white`/`beige` 라이트 테마에서 Window 1~4 및 설정 모달(섹션 1~7) 전반에 남아있던 하드코딩 다크 배경/글씨를 고대비 테마 토큰(`panelBg`, `cardBg`, `primaryText`, `secondaryText`, `inputFieldBg`, `subtleBtnBg`, `subtleDivider`)으로 전면 통일.
+   - **`src/components/CompactWidget.tsx`**: `white`/`beige` 테마 대비 고대비 자동 적응; `minimal_bar` 레이아웃에서도 설정 버튼 클릭 시 플로팅 드로어가 정상 표시되도록 수정.
+   - **`src/components/FavoritesManager.tsx` / `BatteryHistoryChart.tsx` / `StartupTodayTasksModal.tsx`**: 6모드 버튼 그리드(`grid-cols-3 sm:grid-cols-6`) 정렬 및 영문/한글 날짜·간격 라벨 현지화 완성.
+   - **Python / HTML / CI 스크립트**: `main.py`의 `GITHUB_REPO_OWNER`를 `AhBiYout-all`로 교정하고 폰트 미리보기 버전을 `APP_VERSION`으로 동적화; `scripts/sync_version.py`의 `network_scheduler.py`(`APP_VERSION`) 및 `index.html`(`og:title` 속성 순서) 정규식 수정; `index.html`, `native_bridge.py`, `build_packages.py`, `clean_github_release_assets.py`, `.github/workflows/release.yml`, `push_to_github.*`의 잔여 `2.9.1`/저장소 URL 불일치를 `v2.9.2` 및 `AhBiYout-all/PowerController`로 통일 (단, 기존 `ScheduleCrypto.dll` HMAC 호환 키 `PowerController_v2.9.1_Enterprise_SecKey_2026`은 유지).
+
+---
+
 ### 📅 [2026-10-17] - v2.9.2 공식 릴리즈 버전 승격 (Semantic Versioning SSOT 일괄 동기화)
 
 #### 1. 요구사항 및 문제 정의

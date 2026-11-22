@@ -1,6 +1,6 @@
 # PowerController 개발 가이드 (Development Documentation)
 
-이 문서는 **PowerController v2.9.1**의 프로젝트 아키텍처, 구성 요소, 네트워크 보안 파이프라인 및 주요 개발 환경 구축 방법을 안내하는 기술 문서입니다. 
+이 문서는 **PowerController v2.9.2**의 프로젝트 아키텍처, 구성 요소, 네트워크 보안 파이프라인 및 주요 개발 환경 구축 방법을 안내하는 기술 문서입니다. 
 
 ---
 
@@ -22,23 +22,30 @@ PowerController는 데스크톱 환경에서 컴퓨터의 전원(종료, 재시�
 ```text
 ├── src/                          # React + TypeScript 프론트엔드 소스코드
 │   ├── components/               # 공통 재사용 컴포넌트 폴더
-│   │   ├── CompactWidget.tsx     # 5종 디자인 테마 및 반응형 치수를 지원하는 상단고정 위젯
+│   │   ├── CompactWidget.tsx     # 5종 디자인 테마 및 라이트 모드 고대비 치수를 지원하는 상단고정 위젯
+│   │   ├── DesktopAppView.tsx    # 네이티브 4창 시뮬레이터 (메인·원격스케줄러·공유주입기·DeviceController)
+│   │   ├── DeviceControllerModal.tsx # 웹 전용 개별 네트워크 디바이스 원격 제어판 모달
 │   │   ├── StartupTodayTasksModal.tsx # 부팅/시작 시 오늘 예약 작업 브리핑 팝업 모달
 │   │   ├── PowerSimulator.tsx    # 가상 전원 제어 시뮬레이터 (강제 종료 /f 배지 연동)
 │   │   ├── Scheduler.tsx         # 고급 다중 규칙 스케줄러 컴포넌트 (10대 프리셋 연동)
 │   │   ├── FavoritesManager.tsx  # 사용자 정의 프리셋 즐겨찾기 매니저
 │   │   ├── PowerModeSelector.tsx # 전원 동작(종료/재시작/절전/화면끄기/로그아웃/알람) 선택기
 │   │   └── ...
+│   ├── utils/                    # 공통 프론트엔드 유틸리티 모듈
+│   │   ├── i18n.ts               # 브라우저/OS 언어 자동 감지 및 KO/EN 사전 번역 엔진
+│   │   ├── scriptGenerators.ts   # 언어별 동적 주석이 반영된 Python/Inno Setup 스크립트 생성기
+│   │   └── ...
 │   ├── types.ts                  # 전체 앱 공용 TypeScript 타입 정의 (DraftSettingsState 등)
 │   ├── App.tsx                   # 메인 애플리케이션 상태 관리 및 뷰 조합
 │   └── index.css                 # Tailwind CSS 글로벌 스타일시트 및 폰트 정의
 ├── assets/                       # 프로젝트 정적 자산 및 아이콘 이미지
-├── native/                       # 5대 순수 창작 저수준 C/C++ 네이티브 DLL 소스
+├── native/                       # 11대 순수 창작 저수준 C/C++ 네이티브 DLL 소스
 │   ├── power_core_native.c       # PowerCoreNative.dll (초정밀 타이머, 절전방지락, 무음프로세스킬러)
 │   ├── net_beacon_engine.c       # NetBeaconEngine.dll (Winsock2 논블로킹 UDP 비콘 & 512 슬롯 링버퍼)
 │   ├── firewall_native.cpp       # FirewallNative.dll (Windows 방화벽 COM 직결 0.05초 일괄 트랜잭션)
 │   ├── sys_power_hook.c          # SysPowerHook.dll (세션 알림 감지, 배터리/UPS 위험 감시, 초고속 락)
 │   └── schedule_crypto.c         # ScheduleCrypto.dll (C99 SHA-256, HMAC 디지털 서명, Salt 암호화 봉투)
+│   └── ... (DiskFlushNative, AudioDimmerNative, DisplayDdcNative, LowLevelInputIdleNative 등)
 ├── docs/                         # 공식 기술 및 사용자 문서 폴더 (SemVer 체계)
 │   ├── README.md                 # 문서 허브 및 인덱스 가이드
 │   ├── patch_notes.md            # 버전별 상세 패치 내역 및 릴리즈 노트
@@ -114,7 +121,8 @@ export interface DraftSettingsState {
 *   `handleCancelSettings` 호출 시 버퍼를 폐기하여 이전 설정을 100% 안전하게 보존합니다.
 
 ### B. 상단 고정 컴팩트 위젯 렌더러 (`CompactWidget.tsx`)
-*   `widgetDesign` 속성에 따라 `standard`(네온 링), `cyber`(사이버 HUD), `slim`(슬림 바), `retro`(레트로 LED), `minimal`(클린 카드) 5종의 서로 다른 렌더링 파이프라인을 분기 실행합니다.
+*   `widgetDesign` 속성에 따라 `standard`(네온 링), `cyber_hud`(사이버 HUD), `minimal_bar`(슬림 바), `retro_led`(레트로 LED), `clean_card`(클린 카드) 5종의 서로 다른 렌더링 파이프라인을 분기 실행합니다(구버전 ID 입력 시 자동 정규화 포함).
+*   `white` / `beige` 라이트 테마 활성 시 고대비 텍스트/배지 팔레트로 동적 전환되며, 모든 디자인에서 설정 드로어(`renderConfigDrawer`)가 정상 개폐됩니다.
 *   인라인 스타일을 통해 `widgetWidth`, `clockFontSize`, `timerFontSize`를 실시간으로 가변 바인딩하여 픽셀 단위 렌더링 왜곡 없는 최적의 타이포그래피 비율을 유지합니다.
 
 ### C. 사운드 합성 엔진 (Web Audio API & Hourly Chime)
@@ -138,7 +146,11 @@ export interface DraftSettingsState {
 *   `package.json`의 `"version"`을 유일한 기준 버전으로 삼아 `main.py`, `installer.py`, `network_scheduler.py`, `index.html`, `PowerController.iss`의 버전을 일괄 정합 동기화.
 
 ### H. GitHub Releases 실시간 업데이트 배너 (`GitHubUpdateBanner.tsx`)
-*   GitHub REST API(`https://api.github.com/repos/AhBiYout/PowerController/releases/latest`)를 비동기 호출하여 신규 릴리즈 발견 시 상단 알림 바 및 다운로드 모달 렌더링.
+*   GitHub REST API(`https://api.github.com/repos/AhBiYout-all/PowerController/releases/latest`)를 비동기 호출하여 신규 릴리즈 발견 시 상단 알림 바 및 다운로드 모달 렌더링.
+
+### I. 브라우저 언어 자동 감지 & 동적 스크립트 주석 생성 (`i18n.ts` + `scriptGenerators.ts`)
+*   최초 진입 시 `navigator.language`를 검사해 `ko`/`en` 기본 언어를 자동 선택하며(`source: 'auto'`), 사용자가 수동 전환(`'manual'`)하거나 `Auto Reset`으로 자동 감지 상태로 되돌릴 수 있습니다.
+*   선택된 언어는 Web Dashboard, Desktop Native 4창 뷰, 그리고 `generatePythonMainScript`·`generateInnoSetupScript` 등 다운로드·복사용 스크립트 주석 및 로그 메시지까지 실시간 동기화됩니다.
 
 ---
 
@@ -159,7 +171,8 @@ python scripts/build_packages.py
 build.bat
 
 # 5. GitHub Releases 원클릭 자동 업로드 및 태깅 푸시
-push_to_github.bat      # Windows
+.\push_to_github.ps1    # Windows PowerShell
+./push_to_github.sh     # macOS / Linux
 python github_sync.py   # Python 크로스플랫폼
 ```
 

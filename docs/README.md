@@ -1,6 +1,6 @@
 # PowerController 공식 문서 저장소 (Documentation Hub)
 
-본 디렉토리(`docs/`)는 **PowerController v2.9.1**의 시스템 아키텍처, 사용자 매뉴얼, 설치 및 패키징 가이드, GitHub CI/CD 자동 배포 가이드, 3단계 버전 관리 정책(SemVer), 보안 지침 및 상세 패치 노트를 보관하는 종합 기술 문서 저장소입니다.
+본 디렉토리(`docs/`)는 **PowerController v2.9.2**의 시스템 아키텍처, 사용자 매뉴얼, 설치 및 패키징 가이드, GitHub CI/CD 자동 배포 가이드, 3단계 버전 관리 정책(SemVer), 보안 지침 및 상세 패치 노트를 보관하는 종합 기술 문서 저장소입니다.
 
 ---
 
@@ -43,16 +43,16 @@ $$\mathbf{MAJOR}.\mathbf{MINOR}.\mathbf{PATCH}$$
 
 | 플랫폼 | 배포 파일 형태 | 구성 내용 |
 | :--- | :--- | :--- |
-| 💻 **PC (Windows)** | `PowerController-v2.9.1-Windows.zip` / `.exe` 인스톨러 | Inno Setup 인스톨러 빌드 소스(`.iss`), Python 네이티브 백그라운드 엔진, 웹 대시보드 산출물, 5대 네이티브 DLL 및 방화벽 설정 스크립트 |
+| 💻 **PC (Windows)** | `PowerController_Setup_v2.9.2.exe` 공식 인스톨러 | Inno Setup 6 Unpacked Multi-File 인스톨러(`.iss`), Python 네이티브 백그라운드 엔진, 웹 대시보드 산출물, 11대 순수 창작 C/C++ 네이티브 DLL 및 방화벽 설정 스크립트 |
 
 * 모바일(스마트폰/태블릿)에서는 웹 브라우저를 통해 실시간 원격 제어 대시보드(PWA)로 접속하여 침대나 외부에서 내 PC를 원격으로 켜고(WOL) 끌 수 있습니다.
 
 ---
 
 ## 🌐 공식 프로젝트 정보
-* **GitHub 원격 저장소**: [https://github.com/AhBiYout/PowerController.git](https://github.com/AhBiYout/PowerController.git)
-* **GitHub 계정 (Owner)**: `AhBiYout`
+* **GitHub 원격 저장소**: [https://github.com/AhBiYout-all/PowerController.git](https://github.com/AhBiYout-all/PowerController.git)
+* **GitHub 계정 (Owner)**: `AhBiYout-all`
 * **공식 사용자 표시명 (Git Author)**: `AhBiYout-all`
-* **보안 전용 이메일**: `AhBiYout@users.noreply.github.com`
+* **보안 전용 이메일**: `ahbiyout-all@users.noreply.github.com`
 * **공식 블로그**: [https://ahbiyoutvibe.blogspot.com/](https://ahbiyoutvibe.blogspot.com/)
 * **공식 게시자**: cisnet.co.kr | 저작권자: AhBiYout

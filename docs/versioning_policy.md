@@ -12,7 +12,7 @@
 $$\text{Version} = \mathbf{MAJOR}.\mathbf{MINOR}.\mathbf{PATCH}$$
 
 ```
-   v 2 . 9 . 1
+   v 2 . 9 . 2
      │   │   └─── PATCH : 하위 호환 버그 수정, 핫픽스, 스타일 교정, 경량 최적화
      │   └─────── MINOR : 하위 호환 신규 기능 추가, UI 컴포넌트 확장, 시스템 모듈 신설
      └─────────── MAJOR : 하위 호환성이 깨지는 대규모 아키텍처 개편, 파괴적 변경
@@ -96,6 +96,7 @@ $$\text{Version} = \mathbf{MAJOR}.\mathbf{MINOR}.\mathbf{PATCH}$$
 
 | 버전 | 분류 (Tier) | 릴리즈 일자 | 핵심 변경 요약 |
 | :--- | :--- | :--- | :--- |
+| **v2.9.2** | **PATCH** | 2026-10-17 | 개별 디바이스 원격 제어판(`DeviceController`) 신설, 브라우저/OS 언어 자동 감지(`KO`/`EN`) 및 동적 다국어 스크립트 주석 생성, 4대 테마 라이트 모드 고대비 전면 보정, Inno Setup Unpacked Multi-File & 방화벽 무음 등록, 전수 코드 감사(Deep Audit) 안정화 |
 | **v2.9.1** | **PATCH** | 2026-09-26 | 원격 무인 설치 시 프로세스 미종료 및 파일 락 멈춤 완벽 해결(다계층 강제 종료 및 `.old_XXXX` 파일 락 우회), 한/영 라이선스 2종 분리, GitHub Actions 자동 빌드 및 릴리즈 파이프라인 완성 |
 | **v2.9.0** | **MINOR** | 2026-09-22 | 독립형 원격 스케줄러 `PowerNetworkScheduler.exe` 기능적 업그레이드(원격 대상 PC 즉시 종료/재시작 제어 명령 도입), 10대 인기 스케줄 프리셋 통합 및 스마트 자동 채우기 |
 | **v2.8.0** | **MINOR** | 2026-09-16 | Windows 공식 표준 Inno Setup 6 인스톨러 배포 엔진 전환(`PowerController.iss`), LZMA2 솔리드 고압축, 한/영 다국어 마법사, 제어판 언인스톨러 정식 연동 |

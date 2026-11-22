@@ -220,7 +220,11 @@ export default function StartupTodayTasksModal({
                       <span>{getModeName(task.mode)}</span>
                       <span>•</span>
                       <span className={`font-mono font-semibold ${currentModalTheme.highlightText}`}>
-                        {task.time ? `🕒 ${task.time}` : `⏱️ ${task.intervalMinutes}분 간격`}
+                        {task.time
+                          ? `🕒 ${task.time}`
+                          : lang === 'en'
+                          ? `⏱️ Every ${task.intervalMinutes}m`
+                          : `⏱️ ${task.intervalMinutes}분 간격`}
                       </span>
                     </div>
                   </div>

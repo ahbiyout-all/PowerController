@@ -54,119 +54,138 @@ export default function CommandCopier({ mode, durationSeconds, lang = 'ko', them
 
   const getCommands = () => {
     const fFlag = forceClose ? ' /f' : '';
+    const isEn = lang === 'en';
     
     switch (mode) {
       case 'shutdown':
         return [
           {
             id: 'cmd',
-            name: lang === 'en' ? 'Windows CMD (Command Prompt)' : 'Windows CMD (명령 프롬프트)',
-            code: secondsToUse === 0 ? `shutdown /s${fFlag} /t 0` : `shutdown /s${fFlag} /t ${secondsToUse}`,
-            desc: lang === 'en' ? `Forces system shutdown after designated ${secondsToUse}s.` : `지정 시간(${secondsToUse}초) 후 시스템 강제 종료.`
+            name: isEn ? 'Windows CMD (Command Prompt)' : 'Windows CMD (명령 프롬프트)',
+            code: secondsToUse === 0
+              ? `REM ${isEn ? 'Immediate Windows shutdown' : 'Windows 즉시 전원 종료'}\nshutdown /s${fFlag} /t 0`
+              : `REM ${isEn ? `Scheduled Windows shutdown after ${secondsToUse}s` : `${secondsToUse}초 후 Windows 예약 전원 종료`}\nshutdown /s${fFlag} /t ${secondsToUse}`,
+            desc: isEn ? `Forces system shutdown after designated ${secondsToUse}s.` : `지정 시간(${secondsToUse}초) 후 시스템 강제 종료.`
           },
           {
             id: 'ps',
             name: 'PowerShell (Admin)',
-            code: `Start-Process shutdown -ArgumentList "/s"${forceClose ? ', "/f"' : ''}, "/t", "${secondsToUse}" -Verb RunAs`,
-            desc: lang === 'en' ? 'Forces system shutdown safely with administrator privilege configuration.' : '어드민 권한으로 셰이핑하여 안전한 시스템 전원 다운.'
+            code: `# ${isEn ? 'Run elevated shutdown command via Windows PowerShell' : '관리자 권한 PowerShell을 통한 안전한 시스템 종료'}\nStart-Process shutdown -ArgumentList "/s"${forceClose ? ', "/f"' : ''}, "/t", "${secondsToUse}" -Verb RunAs`,
+            desc: isEn ? 'Forces system shutdown safely with administrator privilege configuration.' : '관리자 권한으로 안전하게 시스템 전원을 종료합니다.'
           },
           {
             id: 'bash',
             name: 'macOS / Linux Terminal',
-            code: secondsToUse === 0 ? 'sudo shutdown -h now' : `sudo shutdown -h +${minutes}`,
-            desc: lang === 'en' ? `Unix-like shell delayed shutdown script (after ${minutes}m).` : `유닉스 계열 지연 종료 스크립트 (${minutes}분 후).`
+            code: secondsToUse === 0
+              ? `# ${isEn ? 'Immediate Unix system halt' : 'macOS / Linux 즉시 시스템 종료'}\nsudo shutdown -h now`
+              : `# ${isEn ? `Scheduled Unix shutdown in ${minutes} minute(s)` : `${minutes}분 후 macOS / Linux 예약 종료`}\nsudo shutdown -h +${minutes}`,
+            desc: isEn ? `Unix-like shell delayed shutdown script (after ${minutes}m).` : `유닉스 계열 지연 종료 스크립트 (${minutes}분 후).`
           }
         ];
       case 'restart':
         return [
           {
             id: 'cmd',
-            name: lang === 'en' ? 'Windows CMD (Command Prompt)' : 'Windows CMD (명령 프롬프트)',
-            code: secondsToUse === 0 ? `shutdown /r${fFlag} /t 0` : `shutdown /r${fFlag} /t ${secondsToUse}`,
-            desc: lang === 'en' ? `Forces system reboot cycle after scheduled ${secondsToUse}s.` : `지정 시간(${secondsToUse}초) 후 시스템 안정 재기동.`
+            name: isEn ? 'Windows CMD (Command Prompt)' : 'Windows CMD (명령 프롬프트)',
+            code: secondsToUse === 0
+              ? `REM ${isEn ? 'Immediate Windows reboot' : 'Windows 즉시 시스템 재시작'}\nshutdown /r${fFlag} /t 0`
+              : `REM ${isEn ? `Scheduled Windows reboot after ${secondsToUse}s` : `${secondsToUse}초 후 Windows 예약 재시작`}\nshutdown /r${fFlag} /t ${secondsToUse}`,
+            desc: isEn ? `Forces system reboot cycle after scheduled ${secondsToUse}s.` : `지정 시간(${secondsToUse}초) 후 시스템 안정 재기동.`
           },
           {
             id: 'ps',
             name: 'PowerShell (Admin)',
-            code: `Start-Process shutdown -ArgumentList "/r"${forceClose ? ', "/f"' : ''}, "/t", "${secondsToUse}" -Verb RunAs`,
-            desc: lang === 'en' ? 'Forces system reboot safely backed by administrator execution policies.' : '안정적인 윈도우 마운트 지연 재부팅 커맨드.'
+            code: `# ${isEn ? 'Execute elevated system reboot via PowerShell' : '관리자 권한 PowerShell을 통한 시스템 재부팅'}\nStart-Process shutdown -ArgumentList "/r"${forceClose ? ', "/f"' : ''}, "/t", "${secondsToUse}" -Verb RunAs`,
+            desc: isEn ? 'Forces system reboot safely backed by administrator execution policies.' : '안정적인 윈도우 지연 재부팅 커맨드.'
           },
           {
             id: 'bash',
             name: 'macOS / Linux Terminal',
-            code: secondsToUse === 0 ? 'sudo shutdown -r now' : `sudo shutdown -r +${minutes}`,
-            desc: lang === 'en' ? `Unix-like shell delayed warm reboot script (after ${minutes}m).` : `유닉스 지延迟 계열 시스템 안전 재부팅 (${minutes}분 후).`
+            code: secondsToUse === 0
+              ? `# ${isEn ? 'Immediate Unix system reboot' : 'macOS / Linux 즉시 시스템 재부팅'}\nsudo shutdown -r now`
+              : `# ${isEn ? `Scheduled Unix reboot in ${minutes} minute(s)` : `${minutes}분 후 macOS / Linux 예약 재부팅`}\nsudo shutdown -r +${minutes}`,
+            desc: isEn ? `Unix-like shell delayed warm reboot script (after ${minutes}m).` : `유닉스 지연 계열 시스템 안전 재부팅 (${minutes}분 후).`
           }
         ];
       case 'sleep':
         return [
           {
             id: 'cmd',
-            name: lang === 'en' ? 'Windows CMD (Command Prompt)' : 'Windows CMD (명령 프롬프트)',
-            code: secondsToUse === 0 
-              ? `rundll32.exe powrprof.dll,SetSuspendState 0,1,0` 
-              : `timeout /t ${secondsToUse} && rundll32.exe powrprof.dll,SetSuspendState 0,1,0`,
-            desc: lang === 'en' ? 'Enters low-power Sleep mode (Suspend) after delay timer.' : '대기 타이밍 이후 저전력 절전 모드(Suspend) 진입.'
+            name: isEn ? 'Windows CMD (Command Prompt)' : 'Windows CMD (명령 프롬프트)',
+            code: secondsToUse === 0
+              ? `REM ${isEn ? 'Enter Windows standby sleep state immediately' : 'Windows 즉시 절전 모드 진입'}\nrundll32.exe powrprof.dll,SetSuspendState 0,1,0`
+              : `REM ${isEn ? `Wait ${secondsToUse}s then enter sleep mode` : `${secondsToUse}초 대기 후 Windows 절전 모드 전환`}\ntimeout /t ${secondsToUse} && rundll32.exe powrprof.dll,SetSuspendState 0,1,0`,
+            desc: isEn ? 'Enters low-power Sleep mode (Suspend) after delay timer.' : '대기 타이밍 이후 저전력 절전 모드(Suspend) 진입.'
           },
           {
             id: 'ps',
             name: 'PowerShell (Admin)',
             code: secondsToUse === 0
-              ? `Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Application]::SetSuspendState('Suspend', $false, $false)`
-              : `Start-Sleep -Seconds ${secondsToUse}; Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Application]::SetSuspendState('Suspend', $false, $false)`,
-            desc: lang === 'en' ? 'Calls Windows Forms API directly to invoke system standby sleep.' : '윈도우 폼 API를 다이렉트로 호출하여 절전으로 즉시 전환.'
+              ? `# ${isEn ? 'Invoke .NET SuspendState API immediately' : '.NET WinForms API로 즉시 절전 모드 호출'}\nAdd-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Application]::SetSuspendState('Suspend', $false, $false)`
+              : `# ${isEn ? `Sleep ${secondsToUse}s then suspend workstation` : `${secondsToUse}초 대기 후 절전 모드 실행`}\nStart-Sleep -Seconds ${secondsToUse}; Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Application]::SetSuspendState('Suspend', $false, $false)`,
+            desc: isEn ? 'Calls Windows Forms API directly to invoke system standby sleep.' : '윈도우 폼 API를 다이렉트로 호출하여 절전으로 즉시 전환.'
           },
           {
             id: 'bash',
             name: 'macOS / Linux Terminal',
-            code: secondsToUse === 0 ? 'pmset sleepnow' : `sleep ${secondsToUse} && pmset sleepnow`,
-            desc: lang === 'en' ? 'Controls low-power sleep state under Unix/Mac power manager.' : '시스템 슬립 파워 매니저 제어 명령.'
+            code: secondsToUse === 0
+              ? `# ${isEn ? 'Trigger macOS immediate sleep' : 'macOS 즉시 절전 모드 진입'}\npmset sleepnow`
+              : `# ${isEn ? `Wait ${secondsToUse}s then trigger macOS sleep` : `${secondsToUse}초 대기 후 macOS 절전 실행`}\nsleep ${secondsToUse} && pmset sleepnow`,
+            desc: isEn ? 'Controls low-power sleep state under Unix/Mac power manager.' : '시스템 슬립 파워 매니저 제어 명령.'
           }
         ];
       case 'screenoff':
         return [
           {
             id: 'cmd',
-            name: lang === 'en' ? 'Windows CMD (Command Prompt)' : 'Windows CMD (명령 프롬프트)',
+            name: isEn ? 'Windows CMD (Command Prompt)' : 'Windows CMD (명령 프롬프트)',
             code: secondsToUse === 0
-              ? `powershell -Command "(Add-Type '[DllImport(\\"user32.dll\\")]public static extern int SendMessage(int hWnd, int hMsg, int wParam, int lParam);' -Name a -PassThru)::SendMessage(-1,0x0112,0xF170,2)"`
-              : `timeout /t ${secondsToUse} && powershell -Command "(Add-Type '[DllImport(\\"user32.dll\\")]public static extern int SendMessage(int hWnd, int hMsg, int wParam, int lParam);' -Name a -PassThru)::SendMessage(-1,0x0112,0xF170,2)"`,
-            desc: lang === 'en' ? 'Transmits monitor hardware backlight cutoff signals (Screen Off).' : '디스플레이 하드웨어 비활성화 신호 전송 (화면 끄기).'
+              ? `REM ${isEn ? 'Turn off monitor display via Win32 SendMessage' : 'Win32 SendMessage API로 모니터 화면 즉시 끄기'}\npowershell -Command "(Add-Type '[DllImport(\\"user32.dll\\")]public static extern int SendMessage(int hWnd, int hMsg, int wParam, int lParam);' -Name a -PassThru)::SendMessage(-1,0x0112,0xF170,2)"`
+              : `REM ${isEn ? `Wait ${secondsToUse}s then turn off monitor display` : `${secondsToUse}초 후 모니터 화면 끄기 실행`}\ntimeout /t ${secondsToUse} && powershell -Command "(Add-Type '[DllImport(\\"user32.dll\\")]public static extern int SendMessage(int hWnd, int hMsg, int wParam, int lParam);' -Name a -PassThru)::SendMessage(-1,0x0112,0xF170,2)"`,
+            desc: isEn ? 'Transmits monitor hardware backlight cutoff signals (Screen Off).' : '디스플레이 하드웨어 비활성화 신호 전송 (화면 끄기).'
           },
           {
             id: 'ps',
             name: 'PowerShell (Admin)',
             code: secondsToUse === 0
-              ? `(Add-Type '[DllImport("user32.dll")]public static extern int SendMessage(int hWnd, int hMsg, int wParam, int lParam);' -Name a -PassThru)::SendMessage(-1,0x0112,0xF170,2)`
-              : `Start-Sleep -Seconds ${secondsToUse}; (Add-Type '[DllImport("user32.dll")]public static extern int SendMessage(int hWnd, int hMsg, int wParam, int lParam);' -Name a -PassThru)::SendMessage(-1,0x0112,0xF170,2)`,
-            desc: lang === 'en' ? 'Loads user32 WinApi module to execute display screen hardware sleep.' : 'SendMessage API 헤더를 로드하여 모니터 정전식 전원 Off.'
+              ? `# ${isEn ? 'Broadcast WM_SYSCOMMAND SC_MONITORPOWER off' : '모니터 전원 차단(WM_SYSCOMMAND) 메시지 브로드캐스트'}\n(Add-Type '[DllImport("user32.dll")]public static extern int SendMessage(int hWnd, int hMsg, int wParam, int lParam);' -Name a -PassThru)::SendMessage(-1,0x0112,0xF170,2)`
+              : `# ${isEn ? `Delay ${secondsToUse}s then power down display backlight` : `${secondsToUse}초 대기 후 디스플레이 백라이트 차단`}\nStart-Sleep -Seconds ${secondsToUse}; (Add-Type '[DllImport("user32.dll")]public static extern int SendMessage(int hWnd, int hMsg, int wParam, int lParam);' -Name a -PassThru)::SendMessage(-1,0x0112,0xF170,2)`,
+            desc: isEn ? 'Loads user32 WinApi module to execute display screen hardware sleep.' : 'SendMessage API 헤더를 로드하여 모니터 전원 Off.'
           },
           {
             id: 'bash',
             name: 'macOS / Linux Terminal',
-            code: secondsToUse === 0 ? 'pmset displaysleepnow' : `sleep ${secondsToUse} && pmset displaysleepnow`,
-            desc: lang === 'en' ? 'Triggers display sleep via power manager on macOS.' : 'macOS 환경 가변 모니터 전원 분리 명령.'
+            code: secondsToUse === 0
+              ? `# ${isEn ? 'Put macOS display to sleep immediately' : 'macOS 모니터 디스플레이 즉시 절전'}\npmset displaysleepnow`
+              : `# ${isEn ? `Delay ${secondsToUse}s then sleep macOS display` : `${secondsToUse}초 대기 후 macOS 화면 끄기`}\nsleep ${secondsToUse} && pmset displaysleepnow`,
+            desc: isEn ? 'Triggers display sleep via power manager on macOS.' : 'macOS 환경 모니터 전원 분리 명령.'
           }
         ];
       case 'logout':
         return [
           {
             id: 'cmd',
-            name: lang === 'en' ? 'Windows CMD (Command Prompt)' : 'Windows CMD (명령 프롬프트)',
-            code: secondsToUse === 0 ? `shutdown /l` : `timeout /t ${secondsToUse} && shutdown /l`,
-            desc: lang === 'en' ? 'Safely terminates interactive user workspace session profiles.' : '현재 로그인된 유저 세션을 디태치하고 잠금 화면으로 아웃.'
+            name: isEn ? 'Windows CMD (Command Prompt)' : 'Windows CMD (명령 프롬프트)',
+            code: secondsToUse === 0
+              ? `REM ${isEn ? 'Log off current Windows user session' : '현재 Windows 사용자 세션 즉시 로그아웃'}\nshutdown /l`
+              : `REM ${isEn ? `Delay ${secondsToUse}s then log off session` : `${secondsToUse}초 후 Windows 사용자 세션 로그아웃`}\ntimeout /t ${secondsToUse} && shutdown /l`,
+            desc: isEn ? 'Safely terminates interactive user workspace session profiles.' : '현재 로그인된 유저 세션을 종료하고 잠금 화면으로 이동.'
           },
           {
             id: 'ps',
             name: 'PowerShell (Admin)',
-            code: secondsToUse === 0 ? `shutdown -l` : `Start-Sleep -Seconds ${secondsToUse}; shutdown -l`,
-            desc: lang === 'en' ? 'Sends session logoff signals suitable for corporate compliance models.' : '오피스/회사 등 보안 필수 환경에서 세션 로그오프 지정.'
+            code: secondsToUse === 0
+              ? `# ${isEn ? 'Terminate current Windows user session' : '현재 Windows 사용자 세션 로그오프'}\nshutdown -l`
+              : `# ${isEn ? `Wait ${secondsToUse}s then log off user` : `${secondsToUse}초 후 세션 로그오프 실행`}\nStart-Sleep -Seconds ${secondsToUse}; shutdown -l`,
+            desc: isEn ? 'Sends session logoff signals suitable for corporate compliance models.' : '보안 환경에서 세션 로그오프 지정.'
           },
           {
             id: 'bash',
             name: 'macOS Terminal / Logout',
-            code: secondsToUse === 0 ? 'pkill -u $USER' : `sleep ${secondsToUse} && pkill -u $USER`,
-            desc: lang === 'en' ? 'Safely terminates workspace processes linked to target user ID.' : '현재 디바이스의 특정 유비쿼터스 유저 강제 세션 해체.'
+            code: secondsToUse === 0
+              ? `# ${isEn ? 'Terminate all processes for current Unix user' : '현재 사용자 계정의 세션 프로세스 즉시 종료'}\npkill -u $USER`
+              : `# ${isEn ? `Wait ${secondsToUse}s then end Unix user session` : `${secondsToUse}초 후 사용자 계정 세션 종료`}\nsleep ${secondsToUse} && pkill -u $USER`,
+            desc: isEn ? 'Safely terminates workspace processes linked to target user ID.' : '현재 계정의 세션 프로세스 안전 종료.'
           }
         ];
       default:

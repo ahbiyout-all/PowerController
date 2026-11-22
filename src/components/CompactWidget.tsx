@@ -94,6 +94,10 @@ export default function CompactWidget({
 }: CompactWidgetProps) {
   const [showConfigDrawer, setShowConfigDrawer] = useState<boolean>(false);
 
+  const isLightTheme =
+    Boolean(currentThemeConfig?.text?.includes('#0f172a')) ||
+    Boolean(currentThemeConfig?.text?.includes('#2c2217'));
+
   // When power saving mode is active (battery <= 20%), automatically reduce opacity and dim background/animations
   const effectiveOpacity = isPowerSavingActive ? Math.min(widgetOpacity * 0.65, 45) : widgetOpacity;
 
@@ -129,18 +133,24 @@ export default function CompactWidget({
   ];
 
   // Drawer for quick size & font customizer
-  const renderConfigDrawer = () => (
+  const renderConfigDrawer = (forceDark = false) => {
+    const lightDrawer = isLightTheme && !forceDark;
+    return (
     <AnimatePresence>
       {showConfigDrawer && (
         <motion.div
           initial={{ opacity: 0, height: 0 }}
           animate={{ opacity: 1, height: 'auto' }}
           exit={{ opacity: 0, height: 0 }}
-          className="border-t border-gray-500/15 bg-black/40 p-3 text-[13.5px] space-y-2.5 overflow-hidden"
+          className={`border-t p-3 text-[13.5px] space-y-2.5 overflow-hidden ${
+            lightDrawer
+              ? 'border-black/10 bg-black/5 text-slate-800'
+              : 'border-gray-500/15 bg-black/40 text-gray-200'
+          }`}
         >
           {/* Design Style Selector */}
           <div>
-            <span className="block font-bold text-gray-400 mb-1">
+            <span className={`block font-bold mb-1 ${lightDrawer ? 'text-slate-600' : 'text-gray-400'}`}>
               🎨 {lang === 'en' ? 'Widget Design' : '창 디자인 스타일'}
             </span>
             <div className="grid grid-cols-5 gap-1">
@@ -151,12 +161,16 @@ export default function CompactWidget({
                   <button
                     key={opt.id}
                     onClick={() => setWidgetDesign(opt.id)}
-                    className={`py-1 rounded text-center font-bold flex flex-col items-center gap-0.5 transition-colors ${
-                      active ? 'bg-blue-600 text-white shadow' : 'bg-gray-800/80 hover:bg-gray-700 text-gray-400'
+                    className={`py-1 rounded text-center font-bold flex flex-col items-center gap-0.5 transition-colors cursor-pointer ${
+                      active
+                        ? 'bg-blue-600 text-white shadow'
+                        : lightDrawer
+                        ? 'bg-white/80 hover:bg-white text-slate-700 border border-black/10'
+                        : 'bg-gray-800/80 hover:bg-gray-700 text-gray-400'
                     }`}
                   >
                     <Icon className="w-3 h-3" />
-                    <span className="text-[13.5px] truncate">{lang === 'en' ? opt.labelEn : opt.labelKo}</span>
+                    <span className="text-[11px] truncate max-w-full px-0.5">{lang === 'en' ? opt.labelEn : opt.labelKo}</span>
                   </button>
                 );
               })}
@@ -219,9 +233,9 @@ export default function CompactWidget({
           </div>
 
           {/* Opacity & Current Time Toggle */}
-          <div className="flex items-center justify-between pt-1 border-t border-gray-700/50">
-            <div className="flex items-center gap-1.5 text-gray-400">
-              <Eye className="w-3 h-3 text-blue-400" />
+          <div className={`flex items-center justify-between pt-1 border-t ${lightDrawer ? 'border-black/10' : 'border-gray-700/50'}`}>
+            <div className={`flex items-center gap-1.5 ${lightDrawer ? 'text-slate-600' : 'text-gray-400'}`}>
+              <Eye className="w-3 h-3 text-blue-500" />
               <span>{widgetOpacity}%</span>
               <input
                 type="range"
@@ -234,7 +248,7 @@ export default function CompactWidget({
               />
             </div>
 
-            <label className="flex items-center gap-1.5 cursor-pointer text-gray-300">
+            <label className={`flex items-center gap-1.5 cursor-pointer ${lightDrawer ? 'text-slate-700' : 'text-gray-300'}`}>
               <input
                 type="checkbox"
                 checked={showCurrentTimeCompact}
@@ -247,7 +261,8 @@ export default function CompactWidget({
         </motion.div>
       )}
     </AnimatePresence>
-  );
+    );
+  };
 
   // Common Action Controls (Start/Pause/Reset)
   const renderControlButtons = () => (
@@ -299,47 +314,59 @@ export default function CompactWidget({
   );
 
   // Time dialing input for idle state
-  const renderDialerInput = () => (
-    timerState === 'idle' && (
-      <div className="flex items-center justify-center gap-1.5 text-white my-1">
-        <input
-          type="number"
-          min={0}
-          max={23}
-          value={inputH}
-          onChange={(e) => setInputH(Math.min(23, Math.max(0, parseInt(e.target.value) || 0)))}
-          className="w-10 text-center text-[13.5px] p-1 rounded border border-gray-600 bg-black/40 font-mono font-semibold"
-        />
-        <span>:</span>
-        <input
-          type="number"
-          min={0}
-          max={59}
-          value={inputM}
-          onChange={(e) => setInputM(Math.min(59, Math.max(0, parseInt(e.target.value) || 0)))}
-          className="w-10 text-center text-[13.5px] p-1 rounded border border-gray-600 bg-black/40 font-mono font-semibold"
-        />
-        <span>:</span>
-        <input
-          type="number"
-          min={0}
-          max={59}
-          value={inputS}
-          onChange={(e) => setInputS(Math.min(59, Math.max(0, parseInt(e.target.value) || 0)))}
-          className="w-10 text-center text-[13.5px] p-1 rounded border border-gray-600 bg-black/40 font-mono font-semibold"
-        />
-      </div>
-    )
-  );
+  const renderDialerInput = (forceDark = false) => {
+    const lightDialer = isLightTheme && !forceDark;
+    const dialerInputCls = lightDialer
+      ? 'w-10 text-center text-[13.5px] p-1 rounded border border-slate-300 bg-white text-slate-900 font-mono font-semibold'
+      : 'w-10 text-center text-[13.5px] p-1 rounded border border-gray-600 bg-black/40 text-white font-mono font-semibold';
+    return (
+      timerState === 'idle' && (
+        <div className={`flex items-center justify-center gap-1.5 my-1 ${lightDialer ? 'text-slate-700' : 'text-white'}`}>
+          <input
+            type="number"
+            min={0}
+            max={23}
+            value={inputH}
+            onChange={(e) => setInputH(Math.min(23, Math.max(0, parseInt(e.target.value) || 0)))}
+            className={dialerInputCls}
+          />
+          <span>:</span>
+          <input
+            type="number"
+            min={0}
+            max={59}
+            value={inputM}
+            onChange={(e) => setInputM(Math.min(59, Math.max(0, parseInt(e.target.value) || 0)))}
+            className={dialerInputCls}
+          />
+          <span>:</span>
+          <input
+            type="number"
+            min={0}
+            max={59}
+            value={inputS}
+            onChange={(e) => setInputS(Math.min(59, Math.max(0, parseInt(e.target.value) || 0)))}
+            className={dialerInputCls}
+          />
+        </div>
+      )
+    );
+  };
 
   // Quick preset bar
-  const renderQuickPresets = () => (
-    <div className="grid grid-cols-3 gap-1">
-      <button onClick={() => handleQuickPreset(10)} className="py-1 text-[13.5px] border border-gray-500/10 rounded hover:bg-white/5 text-gray-400 cursor-pointer">{lang === 'en' ? '10m' : '10분'}</button>
-      <button onClick={() => handleQuickPreset(30)} className="py-1 text-[13.5px] border border-gray-500/10 rounded hover:bg-white/5 text-gray-400 cursor-pointer">{lang === 'en' ? '30m' : '30분'}</button>
-      <button onClick={() => handleQuickPreset(60)} className="py-1 text-[13.5px] border border-gray-500/10 rounded hover:bg-white/5 text-gray-400 cursor-pointer">{lang === 'en' ? '1h' : '1시간'}</button>
-    </div>
-  );
+  const renderQuickPresets = (forceDark = false) => {
+    const lightPreset = isLightTheme && !forceDark;
+    const presetCls = lightPreset
+      ? 'py-1 text-[13.5px] border border-slate-300/80 rounded hover:bg-black/5 text-slate-700 cursor-pointer font-medium'
+      : 'py-1 text-[13.5px] border border-gray-500/10 rounded hover:bg-white/5 text-gray-400 cursor-pointer';
+    return (
+      <div className="grid grid-cols-3 gap-1">
+        <button onClick={() => handleQuickPreset(10)} className={presetCls}>{lang === 'en' ? '10m' : '10분'}</button>
+        <button onClick={() => handleQuickPreset(30)} className={presetCls}>{lang === 'en' ? '30m' : '30분'}</button>
+        <button onClick={() => handleQuickPreset(60)} className={presetCls}>{lang === 'en' ? '1h' : '1시간'}</button>
+      </div>
+    );
+  };
 
   // =========================================================================
   // DESIGN 1: STANDARD NEON RING
@@ -374,7 +401,7 @@ export default function CompactWidget({
             <div className="w-5 h-5 rounded-md overflow-hidden ring-1 ring-cyan-400/40 shadow-sm flex-shrink-0 bg-slate-950">
               <img src="/PowerController.png" alt="Icon" className="w-full h-full object-cover scale-105" />
             </div>
-            <span className="font-bold tracking-tight">{isWarningActive ? '🚨 1분 미만 임박' : (lang === 'en' ? 'Compact Power Widget' : '컴팩트 전원 위젯')}</span>
+            <span className="font-bold tracking-tight">{isWarningActive ? (lang === 'en' ? '🚨 < 1m Remaining' : '🚨 1분 미만 임박') : (lang === 'en' ? 'Compact Power Widget' : '컴팩트 전원 위젯')}</span>
             {isPowerSavingActive && (
               <span className="px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-mono font-bold flex items-center gap-0.5">
                 🌱 {lang === 'en' ? 'Eco' : '절전'} {batteryLevel ? `${batteryLevel}%` : ''}
@@ -404,7 +431,9 @@ export default function CompactWidget({
         {/* Middle Content Container */}
         <div className="flex-1 min-h-0 p-3.5 space-y-3 overflow-y-auto flex flex-col transition-all duration-300 ease-in-out">
           {/* Action selection */}
-          <div className="shrink-0 grid grid-cols-6 gap-1 bg-black/30 p-1.5 rounded-xl border border-white/5 transition-all duration-300 ease-in-out">
+          <div className={`shrink-0 grid grid-cols-6 gap-1 p-1.5 rounded-xl border transition-all duration-300 ease-in-out ${
+            isLightTheme ? 'bg-black/5 border-black/10' : 'bg-black/30 border-white/5'
+          }`}>
             {actionItems.map((item) => {
               const Icon = item.icon;
               const active = powerMode === item.id;
@@ -415,6 +444,8 @@ export default function CompactWidget({
                   className={`py-2 rounded-lg flex flex-col items-center justify-center gap-1 transition-all duration-200 cursor-pointer ${
                     active
                       ? 'bg-gradient-to-b from-blue-500 to-indigo-600 text-white font-bold shadow-md shadow-blue-900/40 ring-1 ring-blue-400/50 scale-105'
+                      : isLightTheme
+                      ? 'text-slate-600 hover:text-slate-900 hover:bg-black/5'
                       : 'text-gray-400 hover:text-white hover:bg-white/5'
                   }`}
                   title={lang === 'en' ? item.labelEn : item.labelKo}
@@ -426,7 +457,9 @@ export default function CompactWidget({
           </div>
 
           {/* Circular dial visualizer */}
-          <div className="flex-1 min-h-0 flex flex-col items-center justify-center py-2 bg-black/10 rounded-xl transition-all duration-300 ease-in-out">
+          <div className={`flex-1 min-h-0 flex flex-col items-center justify-center py-2 rounded-xl transition-all duration-300 ease-in-out ${
+            isLightTheme ? 'bg-black/5' : 'bg-black/10'
+          }`}>
             <div className="relative w-32 h-32 flex items-center justify-center shrink-0">
               <svg className="absolute inset-0 w-full h-full -rotate-90">
                 <circle cx="64" cy="64" r="56" className="stroke-gray-600/20 fill-none" strokeWidth="5" />
@@ -447,18 +480,24 @@ export default function CompactWidget({
                 {showCurrentTimeCompact && (
                   <span 
                     style={{ fontSize: `${clockFontSize}px` }} 
-                    className="font-mono font-semibold text-gray-300 leading-none mb-1 transition-all duration-300 ease-in-out"
+                    className={`font-mono font-semibold leading-none mb-1 transition-all duration-300 ease-in-out ${
+                      isLightTheme ? currentThemeConfig.subtext : 'text-gray-300'
+                    }`}
                   >
                     🕒 {currentTimeFormatted}
                   </span>
                 )}
                 <span 
                   style={{ fontSize: `${timerFontSize}px` }} 
-                  className="font-mono font-bold tracking-tight text-white tabnum leading-none transition-all duration-300 ease-in-out"
+                  className={`font-mono font-bold tracking-tight tabnum leading-none transition-all duration-300 ease-in-out ${
+                    isLightTheme ? currentThemeConfig.text : 'text-white'
+                  }`}
                 >
                   {formatTimeStr(secondsRemaining)}
                 </span>
-                <span className="text-[13.5px] font-semibold px-2 py-0.5 rounded-full mt-1 bg-blue-500/20 text-blue-300 transition-all duration-300 ease-in-out">
+                <span className={`text-[13.5px] font-semibold px-2 py-0.5 rounded-full mt-1 transition-all duration-300 ease-in-out ${
+                  isLightTheme ? 'bg-blue-500/15 text-blue-700' : 'bg-blue-500/20 text-blue-300'
+                }`}>
                   {getPowerModeKorean(powerMode)}
                 </span>
               </div>
@@ -519,7 +558,7 @@ export default function CompactWidget({
           </div>
         </div>
 
-        {renderConfigDrawer()}
+        {renderConfigDrawer(true)}
 
         {/* Middle Content Container */}
         <div className="flex-1 min-h-0 p-3 space-y-3 overflow-y-auto flex flex-col transition-all duration-300 ease-in-out">
@@ -554,7 +593,7 @@ export default function CompactWidget({
               />
             </div>
 
-            {renderDialerInput()}
+            {renderDialerInput(true)}
           </div>
 
           {/* Mode Selector */}
@@ -582,7 +621,7 @@ export default function CompactWidget({
         {/* Bottom Toolbar */}
         <div className="shrink-0 px-3 pb-3 space-y-2 transition-all duration-300 ease-in-out">
           {renderControlButtons()}
-          {renderQuickPresets()}
+          {renderQuickPresets(true)}
         </div>
       </motion.div>
     );
@@ -601,84 +640,92 @@ export default function CompactWidget({
         exit={{ opacity: 0, scale: 0.88, y: -10 }}
         transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
         style={{ width: `${widgetWidth}px` }}
-        className="rounded-full shadow-2xl border border-blue-500/50 bg-gray-900/95 px-3 py-2 text-white flex items-center justify-between gap-2 select-none transition-colors duration-300 ease-in-out"
+        className="flex flex-col gap-2 select-none"
       >
-        {/* Mode icon indicator */}
-        <div 
-          onClick={() => {
-            const nextIdx = (actionItems.findIndex(a => a.id === powerMode) + 1) % actionItems.length;
-            handleModeChange(actionItems[nextIdx].id);
-          }}
-          className={`shrink-0 px-2 py-1 rounded-full text-[13.5px] font-bold flex items-center gap-1 cursor-pointer transition-colors ${
-            powerMode === 'shutdown' ? 'bg-rose-600 text-white' : 'bg-blue-600 text-white'
-          }`}
-          title={lang === 'en' ? 'Click to cycle mode' : '클릭하여 전원 동작 변경'}
-        >
-          <Power className="w-3 h-3" />
-          <span>{getPowerModeKorean(powerMode)}</span>
-        </div>
+        <div className="rounded-full shadow-2xl border border-blue-500/50 bg-gray-900/95 px-3 py-2 text-white flex items-center justify-between gap-2 transition-colors duration-300 ease-in-out">
+          {/* Mode icon indicator */}
+          <div 
+            onClick={() => {
+              const nextIdx = (actionItems.findIndex(a => a.id === powerMode) + 1) % actionItems.length;
+              handleModeChange(actionItems[nextIdx].id);
+            }}
+            className={`shrink-0 px-2 py-1 rounded-full text-[13.5px] font-bold flex items-center gap-1 cursor-pointer transition-colors ${
+              powerMode === 'shutdown' ? 'bg-rose-600 text-white' : 'bg-blue-600 text-white'
+            }`}
+            title={lang === 'en' ? 'Click to cycle mode' : '클릭하여 전원 동작 변경'}
+          >
+            <Power className="w-3 h-3" />
+            <span>{getPowerModeKorean(powerMode)}</span>
+          </div>
 
-        {/* Center / Middle Content: Clock & Timer */}
-        <div className="flex-1 min-h-0 flex items-center justify-center gap-2 font-mono transition-all duration-300 ease-in-out">
-          {isPowerSavingActive && (
-            <span className="px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 text-[10px] font-bold">
-              🌱
+          {/* Center / Middle Content: Clock & Timer */}
+          <div className="flex-1 min-h-0 flex items-center justify-center gap-2 font-mono transition-all duration-300 ease-in-out">
+            {isPowerSavingActive && (
+              <span className="px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 text-[10px] font-bold">
+                🌱
+              </span>
+            )}
+            {showCurrentTimeCompact && (
+              <span style={{ fontSize: `${clockFontSize}px` }} className="text-gray-400 transition-all duration-300 ease-in-out">
+                {currentTimeFormatted}
+              </span>
+            )}
+            <span style={{ fontSize: `${timerFontSize}px` }} className="font-bold text-white tabnum transition-all duration-300 ease-in-out">
+              {formatTimeStr(secondsRemaining)}
             </span>
-          )}
-          {showCurrentTimeCompact && (
-            <span style={{ fontSize: `${clockFontSize}px` }} className="text-gray-400 transition-all duration-300 ease-in-out">
-              {currentTimeFormatted}
-            </span>
-          )}
-          <span style={{ fontSize: `${timerFontSize}px` }} className="font-bold text-white tabnum transition-all duration-300 ease-in-out">
-            {formatTimeStr(secondsRemaining)}
-          </span>
+          </div>
+
+          {/* Bottom / Right Toolbar */}
+          <div className="shrink-0 flex items-center gap-1 transition-all duration-300 ease-in-out">
+            {timerState === 'running' ? (
+              <button
+                onClick={handlePauseTimer}
+                className="p-1.5 rounded-full bg-amber-500 hover:bg-amber-400 text-white cursor-pointer"
+                title={lang === 'en' ? 'Pause' : '일시정지'}
+              >
+                <Pause className="w-3 h-3" />
+              </button>
+            ) : (
+              <button
+                onClick={handleStartTimer}
+                className="p-1.5 rounded-full bg-green-600 hover:bg-green-500 text-white cursor-pointer"
+                title={lang === 'en' ? 'Start' : '시작'}
+              >
+                <Play className="w-3 h-3 fill-white" />
+              </button>
+            )}
+
+            <button
+              onClick={handleResetTimer}
+              className="p-1.5 rounded-full bg-gray-800 hover:bg-gray-700 text-gray-300 cursor-pointer"
+              title={lang === 'en' ? 'Reset' : '리셋'}
+            >
+              <RotateCcw className="w-3 h-3" />
+            </button>
+
+            <button
+              onClick={() => setShowConfigDrawer(!showConfigDrawer)}
+              className="p-1.5 rounded-full hover:bg-gray-800 text-gray-400 cursor-pointer"
+              title={lang === 'en' ? 'Options' : '옵션 설정'}
+            >
+              <Sliders className="w-3 h-3" />
+            </button>
+
+            <button
+              onClick={toggleAlwaysOnTop}
+              className="p-1.5 rounded-full hover:bg-gray-800 text-gray-400 cursor-pointer"
+              title={lang === 'en' ? 'Maximize' : '전체 창 복귀'}
+            >
+              <Maximize2 className="w-3 h-3" />
+            </button>
+          </div>
         </div>
 
-        {/* Bottom / Right Toolbar */}
-        <div className="shrink-0 flex items-center gap-1 transition-all duration-300 ease-in-out">
-          {timerState === 'running' ? (
-            <button
-              onClick={handlePauseTimer}
-              className="p-1.5 rounded-full bg-amber-500 hover:bg-amber-400 text-white"
-              title="Pause"
-            >
-              <Pause className="w-3 h-3" />
-            </button>
-          ) : (
-            <button
-              onClick={handleStartTimer}
-              className="p-1.5 rounded-full bg-green-600 hover:bg-green-500 text-white"
-              title="Start"
-            >
-              <Play className="w-3 h-3 fill-white" />
-            </button>
-          )}
-
-          <button
-            onClick={handleResetTimer}
-            className="p-1.5 rounded-full bg-gray-800 hover:bg-gray-700 text-gray-300"
-            title="Reset"
-          >
-            <RotateCcw className="w-3 h-3" />
-          </button>
-
-          <button
-            onClick={() => setShowConfigDrawer(!showConfigDrawer)}
-            className="p-1.5 rounded-full hover:bg-gray-800 text-gray-400"
-            title="Options"
-          >
-            <Sliders className="w-3 h-3" />
-          </button>
-
-          <button
-            onClick={toggleAlwaysOnTop}
-            className="p-1.5 rounded-full hover:bg-gray-800 text-gray-400"
-            title="Maximize"
-          >
-            <Maximize2 className="w-3 h-3" />
-          </button>
-        </div>
+        {showConfigDrawer && (
+          <div className="rounded-2xl overflow-hidden shadow-2xl border border-blue-500/40 bg-gray-900/95">
+            {renderConfigDrawer(true)}
+          </div>
+        )}
       </motion.div>
     );
   }
@@ -718,7 +765,7 @@ export default function CompactWidget({
           </div>
         </div>
 
-        {renderConfigDrawer()}
+        {renderConfigDrawer(true)}
 
         {/* Middle Content Container */}
         <div className="flex-1 min-h-0 p-3.5 space-y-3 overflow-y-auto flex flex-col transition-all duration-300 ease-in-out">
@@ -741,7 +788,7 @@ export default function CompactWidget({
             <div className="text-[13.5px] font-bold uppercase tracking-wider text-[#d97706] mt-1 transition-all duration-300 ease-in-out">
               [ {getPowerModeKorean(powerMode)} ]
             </div>
-            {renderDialerInput()}
+            {renderDialerInput(true)}
           </div>
 
           {/* Push-button action row */}
@@ -766,7 +813,7 @@ export default function CompactWidget({
         {/* Bottom Toolbar */}
         <div className="shrink-0 px-3.5 pb-3.5 space-y-2 transition-all duration-300 ease-in-out">
           {renderControlButtons()}
-          {renderQuickPresets()}
+          {renderQuickPresets(true)}
         </div>
       </motion.div>
     );
@@ -787,12 +834,14 @@ export default function CompactWidget({
       className={`rounded-2xl overflow-hidden shadow-2xl border border-gray-500/20 flex flex-col max-h-[calc(100vh-2rem)] transition-colors duration-300 ease-in-out ${currentThemeConfig.windowBg} ${selectedFont}`}
     >
       {/* Clean Top Bar */}
-      <div className="shrink-0 p-4 pb-2 flex items-center justify-between border-b border-gray-500/10 transition-all duration-300 ease-in-out">
+      <div className={`shrink-0 p-4 pb-2 flex items-center justify-between border-b border-gray-500/15 transition-all duration-300 ease-in-out ${currentThemeConfig.text}`}>
         <div className="flex items-center gap-2">
           <Activity className="w-4 h-4 text-blue-500" />
           <span className="font-bold text-[13.5px]">{lang === 'en' ? 'Power Widget' : '전원 관리 미니창'}</span>
           {isPowerSavingActive && (
-            <span className="px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 text-[10px] font-mono font-bold">
+            <span className={`px-1.5 py-0.2 rounded text-[10px] font-mono font-bold ${
+              isLightTheme ? 'bg-emerald-500/15 text-emerald-700' : 'bg-emerald-500/20 text-emerald-300'
+            }`}>
               🌱 {lang === 'en' ? 'Eco' : '절전'}
             </span>
           )}
@@ -800,15 +849,15 @@ export default function CompactWidget({
         <div className="flex items-center gap-1">
           <button
             onClick={() => setShowConfigDrawer(!showConfigDrawer)}
-            className="p-1 rounded-lg hover:bg-gray-500/10 text-gray-400"
-            title="Options"
+            className={`p-1 rounded-lg hover:bg-gray-500/15 ${currentThemeConfig.subtext}`}
+            title={lang === 'en' ? 'Options' : '옵션 설정'}
           >
             <Sliders className="w-3.5 h-3.5" />
           </button>
           <button
             onClick={toggleAlwaysOnTop}
-            className="p-1 rounded-lg hover:bg-gray-500/10 text-gray-400"
-            title="Maximize"
+            className={`p-1 rounded-lg hover:bg-gray-500/15 ${currentThemeConfig.subtext}`}
+            title={lang === 'en' ? 'Maximize' : '전체 창 복귀'}
           >
             <Maximize2 className="w-3.5 h-3.5" />
           </button>
@@ -822,12 +871,14 @@ export default function CompactWidget({
         {/* Mode pill & Clock */}
         <div className="shrink-0 flex items-center justify-between px-1">
           <span className={`text-[13.5px] font-bold px-2 py-0.5 rounded-full transition-all duration-300 ${
-            powerMode === 'shutdown' ? 'bg-rose-500/15 text-rose-400' : 'bg-blue-500/15 text-blue-400'
+            powerMode === 'shutdown'
+              ? isLightTheme ? 'bg-rose-500/15 text-rose-700' : 'bg-rose-500/15 text-rose-400'
+              : isLightTheme ? 'bg-blue-500/15 text-blue-700' : 'bg-blue-500/15 text-blue-400'
           }`}>
             {getPowerModeKorean(powerMode)}
           </span>
           {showCurrentTimeCompact && (
-            <span style={{ fontSize: `${clockFontSize}px` }} className="font-mono text-gray-400 transition-all duration-300 ease-in-out">
+            <span style={{ fontSize: `${clockFontSize}px` }} className={`font-mono transition-all duration-300 ease-in-out ${currentThemeConfig.subtext}`}>
               {currentTimeFormatted}
             </span>
           )}
@@ -837,7 +888,7 @@ export default function CompactWidget({
         <div className="flex-1 min-h-0 text-center py-2 flex flex-col items-center justify-center transition-all duration-300 ease-in-out">
           <div 
             style={{ fontSize: `${timerFontSize}px` }}
-            className="font-bold tracking-tight font-mono text-white transition-all duration-300 ease-in-out"
+            className={`font-bold tracking-tight font-mono transition-all duration-300 ease-in-out ${currentThemeConfig.text}`}
           >
             {formatTimeStr(secondsRemaining)}
           </div>

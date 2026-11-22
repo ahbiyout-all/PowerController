@@ -138,7 +138,7 @@ Windows 방화벽 COM 인터페이스(`INetFwPolicy2`, `INetFwRules`, `INetFwRul
 * **기능**: PowerController 및 커맨더(PowerNetworkScheduler) 인바운드/아웃바운드 및 전용 포트(TCP 9988, UDP 9985, UDP 9986)와 버전 표기 규칙을 0.05초 만에 메모리 내 일괄 트랜잭션 등록합니다.
 * **매개변수**:
   * `target_dir`: 프로그램 설치 대상 디렉터리 경로 (`PowerController.exe`, `PowerNetworkScheduler.exe` 위치).
-  * `version_str`: 시맨틱 버전 문자열 (예: `L"2.9.1"`).
+  * `version_str`: 시맨틱 버전 문자열 (예: `L"2.9.2"`).
 * **반환값**: 등록된 방화벽 규칙 수 (`int >= 0`), 실패 시 `-1`.
 
 #### `int NativeBatchRemoveSuite(const wchar_t* version_str)`
@@ -296,10 +296,10 @@ killed_count = native_bridge.kill_process_tree_silent(target_pid)
 killed_count = native_bridge.kill_process_by_name_silent("PowerController.exe")
 
 # 5. Windows Defender 방화벽 규칙 COM 초고속(0.05초) 일괄 등록
-registered_count = native_bridge.batch_register_firewall_suite(target_dir="C:\\PowerController", version_str="2.9.1")
+registered_count = native_bridge.batch_register_firewall_suite(target_dir="C:\\PowerController", version_str="2.9.2")
 
 # 6. Windows Defender 방화벽 규칙 COM 초고속 소거
-removed_count = native_bridge.batch_remove_firewall_suite(version_str="2.9.1")
+removed_count = native_bridge.batch_remove_firewall_suite(version_str="2.9.2")
 
 # 7. Windows 세션 훅 가동 및 화면 잠금 실시간 감지
 native_bridge.start_session_hook()

@@ -23,9 +23,9 @@ PowerController 배포 시스템은 전 세계 소프트웨어 배포 표준인 
 5. **원격 무인 설치 시 프로세스 미종료 및 파일 락(Hang) 원천 차단 (v2.9.1)**:
    - 원격 배포 도구(GPO, Intune, PsExec)로 무인 설치(`/VERYSILENT /NORESTART` 또는 `--silent`) 시, 기존 트레이 백그라운드 프로세스가 잡고 있는 파일 락(`ERROR_SHARING_VIOLATION`)을 방지하기 위해 **다계층 강제 종료(`taskkill /F /T`, PowerShell, WMIC, TCP QUIT)** 및 **임시 파일 이름 변경(`.old_XXXX`) 락 우회** 기법을 선제 가동.
 6. **Windows 제어판 및 설정 앱 완벽 연동**: 표준 `unins000.exe`가 생성되어 제어판 '프로그램 추가/제거' 및 Windows 10/11 '설치된 앱'에 정식 아이콘, 버전, 게시자(`cisnet.co.kr`), 설치 위치, 링크가 깔끔하게 등록.
-7. **Windows Defender Firewall 사전 무음 등록 (메인 & 커맨더 버전 표기 명칭 포함, v2.9.1)**:
+7. **Windows Defender Firewall 사전 무음 등록 (메인 & 커맨더 버전 표기 명칭 포함, v2.9.2)**:
    - 프로그램 실행 전 설치 단계(`ssPostInstall`)에서 관리자 권한을 활용하여 **메인(`PowerController.exe`) 및 커맨더(`PowerNetworkScheduler.exe`) 2개 프로그램 모두**와 전용 통신 포트(TCP 9988, UDP 9985, UDP 9986)를 Windows 방화벽에 사전에 조용히(`SW_HIDE`) 자동 등록.
-   - 버전 정보가 붙은 이름(`PowerController v2.9.1`, `PowerNetworkScheduler v2.9.1`)도 함께 등록하여 첫 실행 시 공용 네트워크 보안 경고창이 일절 뜨지 않도록 사전 원천 차단.
+   - 버전 정보가 붙은 이름(`PowerController v2.9.2`, `PowerNetworkScheduler v2.9.2`)도 함께 등록하여 첫 실행 시 공용 네트워크 보안 경고창이 일절 뜨지 않도록 사전 원천 차단.
 
 ---
 
@@ -61,12 +61,12 @@ PowerController 배포 시스템은 전 세계 소프트웨어 배포 표준인 
 * 콘솔에서 `1` (기본값) 또는 `4` (전체 빌드)를 선택하면:
   1. `PyInstaller`를 통해 독립 앱 폴더(`dist\PowerController\`)를 컴파일합니다.
   2. 시스템에 설치된 `ISCC.exe`를 자동 탐지합니다.
-  3. `PowerController.iss` 스크립트를 컴파일하여 최종 인스톨러인 **`dist\PowerController_Setup_v2.9.1.exe`**를 원클릭으로 생성합니다.
+  3. `PowerController.iss` 스크립트를 컴파일하여 최종 인스톨러인 **`dist\PowerController_Setup_v2.9.2.exe`**를 원클릭으로 생성합니다.
 
 ### 방법 B: Inno Setup 컴파일러 CLI 직접 실행
 이미 `dist\PowerController\` 앱 폴더가 생성되어 있다면, 명령 프롬프트(CMD)에서 직접 인스톨러를 컴파일할 수 있습니다:
 ```cmd
-"C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DMyAppVersion=2.9.1 PowerController.iss
+"C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DMyAppVersion=2.9.2 PowerController.iss
 ```
 
 ---
@@ -94,37 +94,37 @@ PowerController 배포 시스템은 전 세계 소프트웨어 배포 표준인 
 
 ### 1) 진행 표시줄만 표시하는 자동 설치 (`/SILENT`)
 ```cmd
-PowerController_Setup_v2.9.1.exe /SILENT /NORESTART
+PowerController_Setup_v2.9.2.exe /SILENT /NORESTART
 ```
 
 ### 2) 화면 표시가 전혀 없는 완전 무인 설치 (`/VERYSILENT`)
 ```cmd
-PowerController_Setup_v2.9.1.exe /VERYSILENT /NORESTART
+PowerController_Setup_v2.9.2.exe /VERYSILENT /NORESTART
 ```
 
 ### 3) 사용자 정의 설치 디렉터리 지정 (`/DIR`)
 ```cmd
-PowerController_Setup_v2.9.1.exe /VERYSILENT /DIR="D:\Tools\PowerController"
+PowerController_Setup_v2.9.2.exe /VERYSILENT /DIR="D:\Tools\PowerController"
 ```
 
 ### 4) 바로가기 및 시작 프로그램 옵션 지정 (`/TASKS`)
 ```cmd
 # 바탕화면 바로가기만 생성하고 시작 프로그램 등록은 제외
-PowerController_Setup_v2.9.1.exe /VERYSILENT /TASKS="desktopicon"
+PowerController_Setup_v2.9.2.exe /VERYSILENT /TASKS="desktopicon"
 
 # 바탕화면 바로가기 및 시작 프로그램 둘 다 자동 등록
-PowerController_Setup_v2.9.1.exe /VERYSILENT /TASKS="desktopicon,startupicon"
+PowerController_Setup_v2.9.2.exe /VERYSILENT /TASKS="desktopicon,startupicon"
 ```
 
 ### 5) 설치 로그 파일 기록 (`/LOG`)
 ```cmd
-PowerController_Setup_v2.9.1.exe /VERYSILENT /LOG="C:\Temp\powercontroller_install.log"
+PowerController_Setup_v2.9.2.exe /VERYSILENT /LOG="C:\Temp\powercontroller_install.log"
 ```
 
 ### 6) 기존 버전 완전 삭제 후 무인 클린 재설치 (`/CLEAN=1`)
 ```cmd
 # 기존에 설치된 이전 버전을 백그라운드에서 완전히 삭제 후 깨끗하게 새로 설치
-PowerController_Setup_v2.9.1.exe /VERYSILENT /NORESTART /CLEAN=1
+PowerController_Setup_v2.9.2.exe /VERYSILENT /NORESTART /CLEAN=1
 ```
 
 ---
@@ -158,9 +158,9 @@ Windows 탐색기에서 생성된 실행 파일(`.exe`)을 마우스 우클릭�
 | :--- | :--- | :--- |
 | **파일 설명 (File description)** | `PowerController - 스마트 시스템 전원 및 자동 종료 예약 제어기` | `PowerController - Smart Shutdown & Power Management Agent` |
 | **형식 (Type)** | `응용 프로그램 (.exe)` | `Application (.exe)` |
-| **파일 버전 (File version)** | `2.9.1.0` | `2.9.1.0` |
+| **파일 버전 (File version)** | `2.9.2.0` | `2.9.2.0` |
 | **제품 이름 (Product name)** | `PowerController - 스마트 시스템 전원 제어기` | `PowerController - Smart Shutdown Agent` |
-| **제품 버전 (Product version)** | `2.9.1.0` | `2.9.1.0` |
+| **제품 버전 (Product version)** | `2.9.2.0` | `2.9.2.0` |
 | **저작권 (Copyright)** | `Copyright (c) 2026 AhBiYout. All rights reserved.` | `Copyright (c) 2026 AhBiYout. All rights reserved.` |
 | **언어 (Language)** | `한국어(대한민국)` [0412] / `영어(미국)` [0409] | `English (United States)` / `Korean` |
 | **원본 파일 이름 (Original filename)** | `PowerController.exe` | `PowerController.exe` |
@@ -169,17 +169,17 @@ Windows 탐색기에서 생성된 실행 파일(`.exe`)을 마우스 우클릭�
 | **합법적 상표 (Legal trademarks)** | `PowerController™ (AhBiYout)` | `PowerController is a trademark of AhBiYout.` |
 | **설명 / 주석 (Comments)** | `Windows 시스템 전원 자동 종료, 재시작, 절전, 정각 알림(Hourly Chime), 부팅 브리핑, 스케줄러, 상단고정 미니 위젯 5종 테마 및 원격 네트워크 제어를 지원하는 고성능 스마트 전원 관리 유틸리티입니다.` | `Smart Windows Power & Shutdown Controller with Mini Widget, Hourly Chime, Scheduler and Remote Network Manager.` |
 
-### 📌 2) Inno Setup 6 설치 관리자: `PowerController_Setup_v2.9.1.exe` (`PowerController.iss`)
+### 📌 2) Inno Setup 6 설치 관리자: `PowerController_Setup_v2.9.2.exe` (`PowerController.iss`)
 
 | 속성 항목 (Property) | 설정 값 (Value) |
 | :--- | :--- |
 | **파일 설명 (File description)** | `PowerController - 스마트 시스템 전원 및 자동 종료 예약 제어기 설치 마법사` |
 | **형식 (Type)** | `응용 프로그램 (.exe)` |
-| **파일 버전 (File version)** | `2.9.1.0` |
+| **파일 버전 (File version)** | `2.9.2.0` |
 | **제품 이름 (Product name)** | `PowerController - Smart Shutdown Agent` |
-| **제품 버전 (Product version)** | `2.9.1.0` |
+| **제품 버전 (Product version)** | `2.9.2.0` |
 | **저작권 (Copyright)** | `Copyright (c) 2026 AhBiYout. All rights reserved.` |
-| **원본 파일 이름 (Original filename)** | `PowerController_Setup_v2.9.1.exe` |
+| **원본 파일 이름 (Original filename)** | `PowerController_Setup_v2.9.2.exe` |
 | **회사 (Company)** | `cisnet.co.kr` |
 
 ### 📌 3) 원격 네트워크 스케줄러: `PowerNetworkScheduler.exe` (`version_network.txt`)
@@ -187,9 +187,9 @@ Windows 탐색기에서 생성된 실행 파일(`.exe`)을 마우스 우클릭�
 | 속성 항목 (Property) | 한국어 환경 (041204B0) | 영문 환경 (040904B0) |
 | :--- | :--- | :--- |
 | **파일 설명 (File description)** | `PowerController - 독립형 원격 네트워크 스케줄 관리기` | `PowerController - Standalone Network Remote Scheduler` |
-| **파일 버전 (File version)** | `2.9.1.0` | `2.9.1.0` |
+| **파일 버전 (File version)** | `2.9.2.0` | `2.9.2.0` |
 | **제품 이름 (Product name)** | `PowerController - 원격 네트워크 스케줄 관리기` | `PowerController - Network Remote Scheduler` |
-| **제품 버전 (Product version)** | `2.9.1.0` | `2.9.1.0` |
+| **제품 버전 (Product version)** | `2.9.2.0` | `2.9.2.0` |
 | **저작권 (Copyright)** | `Copyright (c) 2026 AhBiYout. All rights reserved.` | `Copyright (c) 2026 AhBiYout. All rights reserved.` |
 | **원본 파일 이름 (Original filename)** | `PowerNetworkScheduler.exe` | `PowerNetworkScheduler.exe` |
 | **내부 이름 (Internal name)** | `PowerNetworkScheduler` | `PowerNetworkScheduler` |
@@ -201,9 +201,9 @@ Windows 탐색기에서 생성된 실행 파일(`.exe`)을 마우스 우클릭�
 | 속성 항목 (Property) | 한국어 환경 (041204B0) | 영문 환경 (040904B0) |
 | :--- | :--- | :--- |
 | **파일 설명 (File description)** | `PowerController - 원클릭 오프라인 스케줄 공유 주입기` | `PowerController - One-Click Offline Schedule Injector` |
-| **파일 버전 (File version)** | `2.9.1.0` | `2.9.1.0` |
+| **파일 버전 (File version)** | `2.9.2.0` | `2.9.2.0` |
 | **제품 이름 (Product name)** | `PowerController - 스케줄 주입기` | `PowerController - Schedule Injector` |
-| **제품 버전 (Product version)** | `2.9.1.0` | `2.9.1.0` |
+| **제품 버전 (Product version)** | `2.9.2.0` | `2.9.2.0` |
 | **저작권 (Copyright)** | `Copyright (c) 2026 AhBiYout. All rights reserved.` | `Copyright (c) 2026 AhBiYout. All rights reserved.` |
 | **원본 파일 이름 (Original filename)** | `ApplySharedSchedules.exe` | `ApplySharedSchedules.exe` |
 | **내부 이름 (Internal name)** | `ApplySharedSchedules` | `ApplySharedSchedules` |
@@ -236,7 +236,7 @@ Windows 탐색기에서 생성된 실행 파일(`.exe`)을 마우스 우클릭�
 
 | 대상 플랫폼 | 산출물 경로 | 용량 | 패키지 구성 및 설치 방식 |
 | :--- | :--- | :--- | :--- |
-| 💻 **PC (Windows)** | `build_output/pc/PowerController-v2.9.1-Windows.zip` | 약 4.0MB | Inno Setup 설치 마법사 소스(`.iss`), Python 메인 엔진, 5대 네이티브 DLL, 웹 대시보드 산출물, 방화벽 등록 스크립트 |
+| 💻 **PC (Windows)** | `build_output/pc/PowerController-v2.9.2-Windows.zip` | 약 4.0MB | Inno Setup 설치 마법사 소스(`.iss`), Python 메인 엔진, 11대 네이티브 DLL, 웹 대시보드 산출물, 방화벽 등록 스크립트 |
 
 * 모바일(스마트폰/태블릿)에서는 웹 브라우저 접속을 통해 실시간 반응형 원격 리모컨(PWA)으로 침대나 외부에서 PC 전원을 원격으로 제어할 수 있습니다.
 
@@ -248,13 +248,13 @@ Windows 탐색기에서 생성된 실행 파일(`.exe`)을 마우스 우클릭�
 ### 3) GitHub Actions CI/CD 자동 릴리스 워크플로 (Node.js 22 LTS)
 * **`.github/workflows/release.yml`**:
   * GitHub의 최신 정책에 따라 **Node.js 22 LTS** 런타임 적용 완료 (Node 20 EOL 경고 원천 차단).
-  * `git tag -a v2.9.1` 푸시 시 Windows Runner에서 자동 빌드 수행 후 [GitHub Releases](https://github.com/ahbiyout-all/PowerController/releases)에 자동 등록.
+  * `git tag -a v2.9.2` 푸시 시 Windows Runner에서 자동 빌드 수행 후 [GitHub Releases](https://github.com/AhBiYout-all/PowerController/releases)에 자동 등록.
 
 ### 4) GitHub 원클릭 자동 동기화 및 릴리스 도구
-* **`push_to_github.bat`** (Windows 원클릭 실행 - 원격 히스토리 `--force` 자동 동기화 및 태그 갱신 내장 ⭐)
+* **`push_to_github.ps1`** (Windows PowerShell 원클릭 실행 - 원격 히스토리 `--force` 자동 동기화 및 태그 갱신 내장 ⭐)
 * **`github_sync.py`** (Python 기반 크로스플랫폼 동기화 엔진)
-* **`push_to_github.ps1`** (PowerShell 전용) / **`push_to_github.sh`** (Mac / Linux 전용)
-* 실행 시 `package.json`의 버전(`v2.9.1`)을 자동으로 파싱하여 Git 태그(`v2.9.1`) 생성 및 GitHub Releases로 즉시 자동 전송됩니다.
+* **`push_to_github.sh`** (macOS / Linux 전용)
+* 실행 시 `package.json`의 버전(`v2.9.2`)을 자동으로 파싱하여 Git 태그(`v2.9.2`) 생성 및 GitHub Releases로 즉시 자동 전송됩니다.
 
 
 

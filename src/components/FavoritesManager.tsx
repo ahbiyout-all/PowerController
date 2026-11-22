@@ -215,7 +215,7 @@ export default function FavoritesManager({ onFavSelect, lang = 'ko', theme = 'da
             <label className="block text-[10px] uppercase font-bold text-gray-400 mb-1.5">
               {lang === 'en' ? 'Select Power Action Mode' : '동작 모드 선택'}
             </label>
-            <div className="grid grid-cols-5 gap-1 text-[10.5px]">
+            <div className="grid grid-cols-3 sm:grid-cols-6 gap-1 text-[10.5px]">
               {(Object.keys(mode_meta) as PowerMode[]).map((m) => {
                 const meta = mode_meta[m];
                 const Icon = meta.icon;

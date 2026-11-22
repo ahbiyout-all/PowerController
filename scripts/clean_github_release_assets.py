@@ -24,9 +24,9 @@ REPO_NAME = "PowerController"
 def get_app_version():
     try:
         with open("package.json", "r", encoding="utf-8") as f:
-            return json.load(f).get("version", "2.9.1").strip()
+            return json.load(f).get("version", "2.9.2").strip()
     except Exception:
-        return "2.9.1"
+        return "2.9.2"
 
 def prune_release_assets(token=None, tag_name=None):
     version = get_app_version()

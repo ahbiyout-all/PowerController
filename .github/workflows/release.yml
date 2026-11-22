@@ -10,9 +10,9 @@ on:
   workflow_dispatch:
     inputs:
       release_version:
-        description: 'Release version tag (e.g. v2.9.1)'
+        description: 'Release version tag (e.g. v2.9.2)'
         required: false
-        default: 'v2.9.1'
+        default: 'v2.9.2'
 
 permissions:
   contents: write
@@ -90,7 +90,7 @@ jobs:
           elif [[ -n "${{ github.event.inputs.release_version }}" ]]; then
             TAG="${{ github.event.inputs.release_version }}"
           else
-            TAG=$(node -p "try { 'v' + require('./package.json').version } catch(e) { 'v2.9.1' }")
+            TAG=$(node -p "try { 'v' + require('./package.json').version } catch(e) { 'v2.9.2' }")
           fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "Target Version Tag: $TAG"

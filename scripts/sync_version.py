@@ -5,7 +5,7 @@ Single Source of Truth (SSOT) Dynamic Version Synchronizer
 Propagates version from package.json to all codebase and configuration files:
   - src/types.ts (APP_VERSION)
   - main.py (APP_VERSION)
-  - network_scheduler.py (VERSION)
+  - network_scheduler.py (APP_VERSION)
   - installer.py (APP_VERSION)
   - index.html (title, og:title, meta)
   - PowerController.iss (#define MyAppVersion)
@@ -24,7 +24,7 @@ def sync_versions():
     pkg_path = os.path.join(ROOT_DIR, "package.json")
     with open(pkg_path, "r", encoding="utf-8") as f:
         pkg_data = json.load(f)
-    version = pkg_data.get("version", "2.9.1").strip()
+    version = pkg_data.get("version", "2.9.2").strip()
     print(f"[*] Base Version (package.json): v{version}")
 
     # 2. Sync src/types.ts
@@ -52,7 +52,7 @@ def sync_versions():
     if os.path.exists(net_py):
         with open(net_py, "r", encoding="utf-8") as f:
             content = f.read()
-        content = re.sub(r'VERSION\s*=\s*["\'][^"\']+["\']', f'VERSION = "{version}"', content)
+        content = re.sub(r'APP_VERSION\s*=\s*["\'][^"\']+["\']', f'APP_VERSION = "{version}"', content)
         with open(net_py, "w", encoding="utf-8") as f:
             f.write(content)
         print(f"[✓] Synced network_scheduler.py -> v{version}")
@@ -83,7 +83,7 @@ def sync_versions():
         with open(html_file, "r", encoding="utf-8") as f:
             content = f.read()
         content = re.sub(r'<title>PowerController[^<]*</title>', f'<title>PowerController v{version}</title>', content)
-        content = re.sub(r'content="PowerController[^"]*" property="og:title"', f'content="PowerController v{version}" property="og:title"', content)
+        content = re.sub(r'(<meta\s+property="og:title"\s+content=")PowerController[^"]*(")', rf'\g<1>PowerController v{version}\g<2>', content)
         with open(html_file, "w", encoding="utf-8") as f:
             f.write(content)
         print(f"[✓] Synced index.html -> v{version}")

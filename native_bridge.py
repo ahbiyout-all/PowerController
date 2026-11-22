@@ -660,7 +660,7 @@ def send_beacon_direct(ip: str, port: int, data_str: str) -> bool:
 # 5. FirewallNative: Windows Defender Firewall COM 인터페이스 직결 제어기
 # --------------------------------------------------------------------------
 
-def batch_register_firewall_suite(target_dir: Optional[str] = None, version_str: str = "2.9.1") -> int:
+def batch_register_firewall_suite(target_dir: Optional[str] = None, version_str: str = "2.9.2") -> int:
     """
     PowerController 및 PowerNetworkScheduler 일체의 인바운드/아웃바운드 및
     전용 통신 포트(TCP 9988, UDP 9985, UDP 9986) 방화벽 예외 규칙을
@@ -742,7 +742,7 @@ def batch_register_firewall_suite(target_dir: Optional[str] = None, version_str:
     return 0
 
 
-def batch_remove_firewall_suite(version_str: str = "2.9.1") -> int:
+def batch_remove_firewall_suite(version_str: str = "2.9.2") -> int:
     """
     등록된 PowerController 및 PowerNetworkScheduler 관련 방화벽 규칙 전체를
     COM 인터페이스로 초고속 제거합니다.
