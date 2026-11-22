@@ -269,121 +269,70 @@ if exist "dist\ApplySharedSchedules.exe" copy /y "dist\ApplySharedSchedules.exe"
 if not exist "dist\PowerController\docs" mkdir "dist\PowerController\docs" >nul 2>&1
 if exist "docs\*" copy /y "docs\*" "dist\PowerController\docs\" >nul 2>&1
 
-:: Compile and copy Pure Custom Native DLLs (PowerCoreNative.dll, NetBeaconEngine.dll)
-if exist "native\power_core_native.c" (
-    echo [*] Checking C Compiler for PowerCoreNative.dll...
-    where gcc >nul 2>&1
-    if not errorlevel 1 (
-        gcc -O2 -shared -o "PowerCoreNative.dll" "native\power_core_native.c" -lkernel32 -luser32 >nul 2>&1
-    ) else (
-        where clang >nul 2>&1
-        if not errorlevel 1 (
-            clang -O2 -shared -o "PowerCoreNative.dll" "native\power_core_native.c" -lkernel32 -luser32 >nul 2>&1
-        ) else (
-            where cl >nul 2>&1
-            if not errorlevel 1 (
-                cl /O2 /LD "native\power_core_native.c" /Fe:"PowerCoreNative.dll" kernel32.lib user32.lib >nul 2>&1
-            )
-        )
-    )
-    if exist "PowerCoreNative.dll" (
-        copy /y "PowerCoreNative.dll" "dist\PowerController\" >nul 2>&1
-        copy /y "PowerCoreNative.dll" "dist\" >nul 2>&1
-        echo [OK] Pure Custom Native Engine compiled: PowerCoreNative.dll
-    )
-)
+:: Compile and copy ALL 12 Pure Custom Native DLLs
+echo [*] Compiling 12 Pure Custom Native DLLs...
 
-if exist "native\net_beacon_engine.c" (
-    echo [*] Checking C Compiler for NetBeaconEngine.dll...
-    where gcc >nul 2>&1
-    if not errorlevel 1 (
-        gcc -O2 -shared -o "NetBeaconEngine.dll" "native\net_beacon_engine.c" -lkernel32 -luser32 -lws2_32 >nul 2>&1
-    ) else (
-        where clang >nul 2>&1
-        if not errorlevel 1 (
-            clang -O2 -shared -o "NetBeaconEngine.dll" "native\net_beacon_engine.c" -lkernel32 -luser32 -lws2_32 >nul 2>&1
-        ) else (
-            where cl >nul 2>&1
-            if not errorlevel 1 (
-                cl /O2 /LD "native\net_beacon_engine.c" /Fe:"NetBeaconEngine.dll" kernel32.lib user32.lib ws2_32.lib >nul 2>&1
-            )
-        )
-    )
-    if exist "NetBeaconEngine.dll" (
-        copy /y "NetBeaconEngine.dll" "dist\PowerController\" >nul 2>&1
-        copy /y "NetBeaconEngine.dll" "dist\" >nul 2>&1
-        echo [OK] Pure Custom NetBeaconEngine compiled: NetBeaconEngine.dll
-    )
-)
+call :CompileC   "native\power_core_native.c"           "PowerCoreNative.dll"             "-lkernel32 -luser32"                             "kernel32.lib user32.lib"
+call :CompileC   "native\net_beacon_engine.c"           "NetBeaconEngine.dll"             "-lkernel32 -luser32 -lws2_32"                    "kernel32.lib user32.lib ws2_32.lib"
+call :CompileCpp "native\firewall_native.cpp"           "FirewallNative.dll"              "-lole32 -loleaut32"                              "ole32.lib oleaut32.lib"
+call :CompileC   "native\sys_power_hook.c"              "SysPowerHook.dll"                "-lkernel32 -luser32 -lwtsapi32"                  "kernel32.lib user32.lib wtsapi32.lib"
+call :CompileC   "native\schedule_crypto.c"             "ScheduleCrypto.dll"              "-lkernel32 -ladvapi32"                           "kernel32.lib advapi32.lib"
+call :CompileC   "native\disk_flush_native.c"           "DiskFlushNative.dll"             "-lkernel32 -ladvapi32"                           "kernel32.lib advapi32.lib"
+call :CompileCpp "native\audio_dimmer_native.cpp"       "AudioDimmerNative.dll"           "-lkernel32 -lole32"                              "kernel32.lib ole32.lib"
+call :CompileCpp "native\display_ddc_native.cpp"        "DisplayDdcNative.dll"            "-lkernel32 -luser32 -ldxva2"                     "kernel32.lib user32.lib dxva2.lib"
+call :CompileC   "native\low_level_input_idle_native.c" "LowLevelInputIdleNative.dll"     "-lkernel32 -luser32"                             "kernel32.lib user32.lib"
+call :CompileCpp "native\commander_tcp_dispatcher.cpp"  "CommanderTcpDispatcherNative.dll" "-lkernel32 -lws2_32"                            "kernel32.lib ws2_32.lib"
+call :CompileC   "native\commander_ping_scanner.c"      "CommanderPingScannerNative.dll"  "-lkernel32 -lws2_32 -liphlpapi"                  "kernel32.lib ws2_32.lib iphlpapi.lib"
+call :CompileC   "native\power_exec_native.c"           "PowerExecNative.dll"             "-lkernel32 -luser32 -ladvapi32 -lpowrprof"       "kernel32.lib user32.lib advapi32.lib powrprof.lib"
+goto AFTER_DLL_BUILD
 
-if exist "native\firewall_native.cpp" (
-    echo [*] Checking C++ Compiler for FirewallNative.dll...
-    where g++ >nul 2>&1
+:CompileC
+if not exist "%~1" goto :eof
+where gcc >nul 2>&1
+if not errorlevel 1 (
+    gcc -O2 -shared -o "%~2" "%~1" %~3 >nul 2>&1
+) else (
+    where clang >nul 2>&1
     if not errorlevel 1 (
-        g++ -O2 -shared -o "FirewallNative.dll" "native\firewall_native.cpp" -lole32 -loleaut32 >nul 2>&1
+        clang -O2 -shared -o "%~2" "%~1" %~3 >nul 2>&1
     ) else (
-        where clang++ >nul 2>&1
+        where cl >nul 2>&1
         if not errorlevel 1 (
-            clang++ -O2 -shared -o "FirewallNative.dll" "native\firewall_native.cpp" -lole32 -loleaut32 >nul 2>&1
-        ) else (
-            where cl >nul 2>&1
-            if not errorlevel 1 (
-                cl /O2 /EHsc /LD "native\firewall_native.cpp" /Fe:"FirewallNative.dll" ole32.lib oleaut32.lib >nul 2>&1
-            )
+            cl /O2 /LD "%~1" /Fe:"%~2" %~4 >nul 2>&1
         )
     )
-    if exist "FirewallNative.dll" (
-        copy /y "FirewallNative.dll" "dist\PowerController\" >nul 2>&1
-        copy /y "FirewallNative.dll" "dist\" >nul 2>&1
-        echo [OK] Pure Custom FirewallNative compiled: FirewallNative.dll
-    )
 )
+if exist "%~2" (
+    copy /y "%~2" "dist\PowerController\" >nul 2>&1
+    copy /y "%~2" "dist\" >nul 2>&1
+    echo [OK] Pure Custom Native DLL compiled: %~2
+)
+goto :eof
 
-if exist "native\sys_power_hook.c" (
-    echo [*] Checking C Compiler for SysPowerHook.dll...
-    where gcc >nul 2>&1
+:CompileCpp
+if not exist "%~1" goto :eof
+where g++ >nul 2>&1
+if not errorlevel 1 (
+    g++ -O2 -shared -o "%~2" "%~1" %~3 >nul 2>&1
+) else (
+    where clang++ >nul 2>&1
     if not errorlevel 1 (
-        gcc -O2 -shared -o "SysPowerHook.dll" "native\sys_power_hook.c" -lkernel32 -luser32 -lwtsapi32 >nul 2>&1
+        clang++ -O2 -shared -o "%~2" "%~1" %~3 >nul 2>&1
     ) else (
-        where clang >nul 2>&1
+        where cl >nul 2>&1
         if not errorlevel 1 (
-            clang -O2 -shared -o "SysPowerHook.dll" "native\sys_power_hook.c" -lkernel32 -luser32 -lwtsapi32 >nul 2>&1
-        ) else (
-            where cl >nul 2>&1
-            if not errorlevel 1 (
-                cl /O2 /LD "native\sys_power_hook.c" /Fe:"SysPowerHook.dll" kernel32.lib user32.lib wtsapi32.lib >nul 2>&1
-            )
+            cl /O2 /EHsc /LD "%~1" /Fe:"%~2" %~4 >nul 2>&1
         )
     )
-    if exist "SysPowerHook.dll" (
-        copy /y "SysPowerHook.dll" "dist\PowerController\" >nul 2>&1
-        copy /y "SysPowerHook.dll" "dist\" >nul 2>&1
-        echo [OK] Pure Custom SysPowerHook compiled: SysPowerHook.dll
-    )
 )
+if exist "%~2" (
+    copy /y "%~2" "dist\PowerController\" >nul 2>&1
+    copy /y "%~2" "dist\" >nul 2>&1
+    echo [OK] Pure Custom Native DLL compiled: %~2
+)
+goto :eof
 
-if exist "native\schedule_crypto.c" (
-    echo [*] Checking C Compiler for ScheduleCrypto.dll...
-    where gcc >nul 2>&1
-    if not errorlevel 1 (
-        gcc -O2 -shared -o "ScheduleCrypto.dll" "native\schedule_crypto.c" -lkernel32 >nul 2>&1
-    ) else (
-        where clang >nul 2>&1
-        if not errorlevel 1 (
-            clang -O2 -shared -o "ScheduleCrypto.dll" "native\schedule_crypto.c" -lkernel32 >nul 2>&1
-        ) else (
-            where cl >nul 2>&1
-            if not errorlevel 1 (
-                cl /O2 /LD "native\schedule_crypto.c" /Fe:"ScheduleCrypto.dll" kernel32.lib >nul 2>&1
-            )
-        )
-    )
-    if exist "ScheduleCrypto.dll" (
-        copy /y "ScheduleCrypto.dll" "dist\PowerController\" >nul 2>&1
-        copy /y "ScheduleCrypto.dll" "dist\" >nul 2>&1
-        echo [OK] Pure Custom ScheduleCrypto compiled: ScheduleCrypto.dll
-    )
-)
+:AFTER_DLL_BUILD
 
 :: Create version-tagged standalone binary copy
 if exist "dist\PowerController\PowerController.exe" (

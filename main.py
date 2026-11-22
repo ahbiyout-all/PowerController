@@ -452,7 +452,17 @@ def ensure_firewall_rule_silent():
             exe_path = sys.executable if getattr(sys, 'frozen', False) else sys.executable
             app_dir = os.path.dirname(os.path.abspath(exe_path))
             commander_exe = os.path.join(app_dir, "PowerNetworkScheduler.exe")
-            
+
+            # 1순위: FirewallNative.dll COM 직결 일괄 등록 (0.05초, 콘솔/UAC 지연 최소화)
+            if native_bridge and getattr(sys, 'frozen', False) and os.path.exists(os.path.join(app_dir, "PowerController.exe")):
+                try:
+                    if native_bridge.is_firewall_engine_loaded():
+                        reg_cnt = native_bridge.batch_register_firewall_suite(app_dir, APP_VERSION)
+                        if reg_cnt > 0:
+                            return
+                except Exception:
+                    pass
+
             creationflags = getattr(subprocess, 'CREATE_NO_WINDOW', 0x08000000)
             
             # [1] 메인 프로그램 (PowerController.exe) 인바운드 및 아웃바운드 허용 (기본 및 버전 표기)
@@ -4934,7 +4944,13 @@ if __name__ == "__main__":
             return labels.get(mode, "Unknown")
 
     def get_system_idle_seconds(self):
-        """Windows API GetLastInputInfo를 통해 사용자의 마지막 입력 경과 시간(초)을 감지합니다."""
+        """LowLevelInputIdleNative.dll 또는 Windows GetLastInputInfo를 통해 마지막 입력 경과 시간(초)을 32비트 롤오버 보정으로 감지합니다."""
+        if native_bridge:
+            try:
+                if native_bridge.is_input_idle_loaded():
+                    return max(0.0, float(native_bridge.get_system_idle_seconds()))
+            except Exception:
+                pass
         try:
             import ctypes
             class LASTINPUTINFO(ctypes.Structure):
@@ -4942,7 +4958,8 @@ if __name__ == "__main__":
             lii = LASTINPUTINFO()
             lii.cbSize = ctypes.sizeof(LASTINPUTINFO)
             if ctypes.windll.user32.GetLastInputInfo(ctypes.byref(lii)):
-                millis = ctypes.windll.kernel32.GetTickCount() - lii.dwTime
+                tick = ctypes.windll.kernel32.GetTickCount() & 0xFFFFFFFF
+                millis = (tick - (lii.dwTime & 0xFFFFFFFF)) & 0xFFFFFFFF
                 return max(0.0, millis / 1000.0)
         except Exception:
             pass
@@ -5750,11 +5767,14 @@ if __name__ == "__main__":
                 idle_m = int(curr_idle // 60)
                 lock_log = f"🔒 [자동 화면 잠금] 타이머 가동 중 유휴 상태({idle_m}분) 감지되어 윈도우 세션을 잠갔습니다." if self.lang == "ko" else f"🔒 [Auto Lock] Windows session locked due to system idle ({idle_m}m) during active timer."
                 self.log_event(lock_log, in_app_toast=True)
-                try:
-                    import ctypes
-                    ctypes.windll.user32.LockWorkStation()
-                except Exception:
-                    os.system("rundll32.exe user32.dll,LockWorkStation")
+                if native_bridge:
+                    native_bridge.lock_workstation_fast()
+                else:
+                    try:
+                        import ctypes
+                        ctypes.windll.user32.LockWorkStation()
+                    except Exception:
+                        os.system("rundll32.exe user32.dll,LockWorkStation")
             
         if self.remaining_seconds > 0:
             h = self.remaining_seconds // 3600
@@ -7056,8 +7076,25 @@ if __name__ == "__main__":
                         os.system("rundll32.exe user32.dll,LockWorkStation")
                     return
                 if norm_cmd == "sleep":
+                    if native_bridge:
+                        native_bridge.pre_shutdown_sync()
+                        if native_bridge.execute_suspend_state(hibernate=False, force_critical=True):
+                            return
                     os.system("rundll32.exe powrprof.dll,SetSuspendState 0,1,0")
                     return
+
+                if native_bridge:
+                    native_bridge.pre_shutdown_sync()
+                    if native_bridge.execute_system_shutdown(
+                        reboot=(norm_cmd == "reboot"),
+                        force=bool(force),
+                        timeout_sec=grace,
+                    ):
+                        try:
+                            self.root.destroy()
+                        except Exception:
+                            pass
+                        sys.exit(0)
 
                 if norm_cmd == "reboot":
                     os.system(f"shutdown /r{f_param} /t {grace}")
@@ -8198,11 +8235,13 @@ if __name__ == "__main__":
             self.tray_icon.stop()
             self.tray_icon = None
 
-        # 전원 동작 직전 네이티브 웨이크 타이머 및 절전 락 정리
+        # 전원 동작 직전 네이티브 웨이크 타이머, 절전 락 정리 및 디스크/레지스트리 캐시 물리 플러시
         if native_bridge:
             try:
                 native_bridge.cancel_hardware_wake_timer()
                 native_bridge.set_sleep_prevention(prevent_sleep=False, keep_display=False)
+                if self.mode in ["shutdown", "restart", "reboot", "sleep", "hibernate"]:
+                    native_bridge.pre_shutdown_sync()
             except Exception:
                 pass
 
@@ -8222,16 +8261,20 @@ if __name__ == "__main__":
 
         if self.mode == "shutdown":
             print("로그: 시스템 종료 명령 실행")
-            os.system(f"shutdown /s{f_param} /t 2")
+            if not (native_bridge and native_bridge.execute_system_shutdown(reboot=False, force=bool(force_flag), timeout_sec=2)):
+                os.system(f"shutdown /s{f_param} /t 2")
         elif self.mode in ["restart", "reboot"]:
             print("로그: 시스템 재시작 명령 실행")
-            os.system(f"shutdown /r{f_param} /t 2")
+            if not (native_bridge and native_bridge.execute_system_shutdown(reboot=True, force=bool(force_flag), timeout_sec=2)):
+                os.system(f"shutdown /r{f_param} /t 2")
         elif self.mode == "sleep":
             print("로그: 시스템 절전 명령 실행")
-            os.system("rundll32.exe powrprof.dll,SetSuspendState 0,1,0")
+            if not (native_bridge and native_bridge.execute_suspend_state(hibernate=False, force_critical=True)):
+                os.system("rundll32.exe powrprof.dll,SetSuspendState 0,1,0")
         elif self.mode == "hibernate":
             print("로그: 시스템 최대 절전 명령 실행")
-            os.system("shutdown /h")
+            if not (native_bridge and native_bridge.execute_suspend_state(hibernate=True, force_critical=True)):
+                os.system("shutdown /h")
         elif self.mode == "lock":
             print("로그: 화면 잠금 명령 실행")
             if native_bridge:
@@ -8246,8 +8289,9 @@ if __name__ == "__main__":
                 os.system("powershell (Add-Type '[DllImport(\"user32.dll\")]^public static extern int SendMessage(int hWnd, int hMsg, int wParam, int lParam);' -Name a -PassThru)::SendMessage(-1,0x0112,0xF170,2)")
         elif self.mode == "logout":
             print("로그: 시스템 로그아웃 명령 실행")
-            os.system(f"shutdown /l{f_param}")
-            
+            if not (native_bridge and native_bridge.execute_logoff(force=bool(force_flag))):
+                os.system(f"shutdown /l{f_param}")
+
         sys.exit(0)
 
     def load_theme(self):

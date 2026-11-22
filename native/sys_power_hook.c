@@ -102,12 +102,14 @@ static LRESULT CALLBACK SessionHookWndProc(HWND hWnd, UINT msg, WPARAM wParam, L
 
         EnsureCSInitialized();
         EnterCriticalSection(&g_csSession);
-        if (g_QueueCount < SESSION_EVENT_QUEUE_SIZE) {
-            g_EventQueue[g_QueueTail].event_type = evType;
-            g_EventQueue[g_QueueTail].session_id = sessId;
-            g_QueueTail = (g_QueueTail + 1) % SESSION_EVENT_QUEUE_SIZE;
-            g_QueueCount++;
+        if (g_QueueCount >= SESSION_EVENT_QUEUE_SIZE) {
+            g_QueueHead = (g_QueueHead + 1) % SESSION_EVENT_QUEUE_SIZE;
+            g_QueueCount--;
         }
+        g_EventQueue[g_QueueTail].event_type = evType;
+        g_EventQueue[g_QueueTail].session_id = sessId;
+        g_QueueTail = (g_QueueTail + 1) % SESSION_EVENT_QUEUE_SIZE;
+        g_QueueCount++;
         LeaveCriticalSection(&g_csSession);
         return 0;
     }
@@ -127,7 +129,12 @@ static DWORD WINAPI SessionHookThreadWorker(LPVOID lpParam) {
     wc.hInstance = hInstance;
     wc.lpszClassName = className;
 
-    RegisterClassExA(&wc);
+    ATOM regAtom = RegisterClassExA(&wc);
+    if (regAtom == 0 && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
+        g_HookRunning = FALSE;
+        if (g_hInitEvent) SetEvent(g_hInitEvent);
+        return 1;
+    }
 
     HWND hWnd = CreateWindowExA(
         0,
@@ -141,6 +148,7 @@ static DWORD WINAPI SessionHookThreadWorker(LPVOID lpParam) {
     );
 
     if (hWnd == NULL) {
+        UnregisterClassA(className, hInstance);
         g_HookRunning = FALSE;
         if (g_hInitEvent) SetEvent(g_hInitEvent);
         return 1;
@@ -184,23 +192,25 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
             EnsureCSInitialized();
             break;
         case DLL_PROCESS_DETACH:
-            if (g_HookRunning) {
-                if (g_WorkerThreadId != 0) {
-                    PostThreadMessage(g_WorkerThreadId, WM_QUIT, 0, 0);
+            if (lpvReserved == NULL) {
+                if (g_HookRunning) {
+                    if (g_WorkerThreadId != 0) {
+                        PostThreadMessage(g_WorkerThreadId, WM_QUIT, 0, 0);
+                    }
+                    if (g_hWorkerThread != NULL) {
+                        WaitForSingleObject(g_hWorkerThread, 1000);
+                        CloseHandle(g_hWorkerThread);
+                        g_hWorkerThread = NULL;
+                    }
                 }
-                if (g_hWorkerThread != NULL) {
-                    WaitForSingleObject(g_hWorkerThread, 1000);
-                    CloseHandle(g_hWorkerThread);
-                    g_hWorkerThread = NULL;
+                if (g_csInitialized) {
+                    DeleteCriticalSection(&g_csSession);
+                    g_csInitialized = FALSE;
                 }
-            }
-            if (g_csInitialized) {
-                DeleteCriticalSection(&g_csSession);
-                g_csInitialized = FALSE;
-            }
-            if (g_hWtsLib != NULL) {
-                FreeLibrary(g_hWtsLib);
-                g_hWtsLib = NULL;
+                if (g_hWtsLib != NULL) {
+                    FreeLibrary(g_hWtsLib);
+                    g_hWtsLib = NULL;
+                }
             }
             break;
     }
@@ -383,9 +393,19 @@ POWERHOOK_API BOOL NativeLockWorkStation(void) {
 }
 
 /*
- * Sub-millisecond Native Turn Off Monitor (replaces PowerShell inline compile)
+ * Sub-millisecond Native Turn Off Monitor (non-blocking against hung background windows)
  */
 POWERHOOK_API BOOL NativeTurnOffMonitor(void) {
-    SendMessage(HWND_BROADCAST, WM_SYSCOMMAND, SC_MONITORPOWER, 2);
-    return TRUE;
+    DWORD_PTR dwResult = 0;
+    if (SendMessageTimeoutW(
+            HWND_BROADCAST,
+            WM_SYSCOMMAND,
+            SC_MONITORPOWER,
+            (LPARAM)2,
+            SMTO_ABORTIFHUNG | SMTO_BLOCK,
+            500,
+            &dwResult)) {
+        return TRUE;
+    }
+    return SendNotifyMessageW(HWND_BROADCAST, WM_SYSCOMMAND, SC_MONITORPOWER, (LPARAM)2);
 }

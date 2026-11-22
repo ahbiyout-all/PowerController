@@ -94,10 +94,16 @@ POWER_CORE_API BOOL NativeSetHardwareWakeTimer(double seconds) {
 
     /*
      * Negative value specifies relative time in 100-nanosecond units.
-     * 1 second = 10,000,000 units.
+     * 1 second = 10,000,000 units. Clamp to 10 years max to prevent 64-bit overflow.
      */
+    if (seconds > 315360000.0) {
+        seconds = 315360000.0;
+    }
     LARGE_INTEGER dueTime;
     LONGLONG units = (LONGLONG)(seconds * 10000000.0);
+    if (units < 1) {
+        units = 1;
+    }
     dueTime.QuadPart = -units;
 
     /*
@@ -176,19 +182,23 @@ static BOOL TerminateSingleProcessSilent(DWORD pid) {
     return ok;
 }
 
-/* High-efficiency single-snapshot recursive process tree collection */
+/* High-efficiency single-snapshot recursive process tree collection with cycle guard */
 typedef struct {
     DWORD pid;
     DWORD parentPid;
+    BYTE visited;
 } ProcNode;
 
-static void CollectSubtree(DWORD currentPid, const ProcNode* allNodes, int totalNodes, DWORD* outPids, int maxPids, int* outCount) {
+static void CollectSubtree(DWORD currentPid, ProcNode* allNodes, int totalNodes, DWORD* outPids, int maxPids, int* outCount, int depth) {
+    if (depth > 64) {
+        return; /* Guard against extreme/malformed process recursion depth */
+    }
     for (int i = 0; i < totalNodes; i++) {
-        if (allNodes[i].parentPid == currentPid && allNodes[i].pid != currentPid) {
+        if (!allNodes[i].visited && allNodes[i].parentPid == currentPid && allNodes[i].pid != currentPid) {
+            allNodes[i].visited = 1;
             if (*outCount < maxPids) {
                 outPids[(*outCount)++] = allNodes[i].pid;
-                /* Recurse to grand-children */
-                CollectSubtree(allNodes[i].pid, allNodes, totalNodes, outPids, maxPids, outCount);
+                CollectSubtree(allNodes[i].pid, allNodes, totalNodes, outPids, maxPids, outCount, depth + 1);
             }
         }
     }
@@ -203,14 +213,24 @@ static void CollectChildPids(DWORD parentPid, DWORD* pids, int maxPids, int* cou
     PROCESSENTRY32W pe;
     pe.dwSize = sizeof(PROCESSENTRY32W);
 
-    ProcNode* allNodes = (ProcNode*)malloc(sizeof(ProcNode) * 1024);
+    int capacity = 1024;
+    ProcNode* allNodes = (ProcNode*)malloc(sizeof(ProcNode) * (size_t)capacity);
     int totalNodes = 0;
 
     if (allNodes != NULL && Process32FirstW(hSnap, &pe)) {
         do {
-            if (totalNodes < 1024) {
+            if (totalNodes >= capacity && capacity < 16384) {
+                int newCap = capacity * 2;
+                ProcNode* grown = (ProcNode*)realloc(allNodes, sizeof(ProcNode) * (size_t)newCap);
+                if (grown != NULL) {
+                    allNodes = grown;
+                    capacity = newCap;
+                }
+            }
+            if (totalNodes < capacity) {
                 allNodes[totalNodes].pid = pe.th32ProcessID;
                 allNodes[totalNodes].parentPid = pe.th32ParentProcessID;
+                allNodes[totalNodes].visited = (pe.th32ProcessID == parentPid) ? 1 : 0;
                 totalNodes++;
             }
         } while (Process32NextW(hSnap, &pe));
@@ -218,7 +238,7 @@ static void CollectChildPids(DWORD parentPid, DWORD* pids, int maxPids, int* cou
     CloseHandle(hSnap);
 
     if (allNodes != NULL) {
-        CollectSubtree(parentPid, allNodes, totalNodes, pids, maxPids, count);
+        CollectSubtree(parentPid, allNodes, totalNodes, pids, maxPids, count, 0);
         free(allNodes);
     }
 }
@@ -228,10 +248,10 @@ POWER_CORE_API int NativeKillProcessTree(unsigned long root_pid) {
         return 0;
     }
 
-    DWORD childPids[256];
+    DWORD childPids[1024];
     int childCount = 0;
 
-    CollectChildPids((DWORD)root_pid, childPids, 256, &childCount);
+    CollectChildPids((DWORD)root_pid, childPids, 1024, &childCount);
 
     int killed = 0;
     /* Kill children first (bottom-up) */
@@ -262,13 +282,14 @@ POWER_CORE_API int NativeKillProcessByName(const wchar_t* process_name) {
     PROCESSENTRY32W pe;
     pe.dwSize = sizeof(PROCESSENTRY32W);
 
-    DWORD targetPids[128];
+    DWORD selfPid = GetCurrentProcessId();
+    DWORD targetPids[256];
     int targetCount = 0;
 
     if (Process32FirstW(hSnap, &pe)) {
         do {
             if (_wcsicmp(pe.szExeFile, process_name) == 0) {
-                if (pe.th32ProcessID > 4 && targetCount < 128) {
+                if (pe.th32ProcessID > 4 && pe.th32ProcessID != selfPid && targetCount < 256) {
                     targetPids[targetCount++] = pe.th32ProcessID;
                 }
             }

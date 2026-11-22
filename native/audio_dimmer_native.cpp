@@ -26,35 +26,33 @@ static const GUID IID_IMMDeviceEnumerator_Custom =
 static const GUID IID_IAudioEndpointVolume_Custom = 
     { 0x5CDF2C82, 0x841E, 0x4546, { 0x97, 0x22, 0x0C, 0xF7, 0x40, 0x78, 0x22, 0x9A } };
 
-static BOOL g_AudioComInitialized = FALSE;
-
-static void EnsureAudioComInitialized(void) {
-    if (!g_AudioComInitialized) {
-        HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+struct ScopedAudioCom {
+    BOOL need_uninit;
+    ScopedAudioCom() : need_uninit(FALSE) {
+        HRESULT hr = CoInitializeEx(NULL, COINIT_MULTITHREADED);
+        if (hr == RPC_E_CHANGED_MODE) {
+            hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+        }
         if (hr == S_OK || hr == S_FALSE) {
-            g_AudioComInitialized = TRUE;
+            need_uninit = TRUE;
         }
     }
-}
+    ~ScopedAudioCom() {
+        if (need_uninit) {
+            CoUninitialize();
+            need_uninit = FALSE;
+        }
+    }
+};
 
 BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
-    switch (fdwReason) {
-        case DLL_PROCESS_ATTACH:
-            DisableThreadLibraryCalls(hinstDLL);
-            EnsureAudioComInitialized();
-            break;
-        case DLL_PROCESS_DETACH:
-            if (g_AudioComInitialized) {
-                CoUninitialize();
-                g_AudioComInitialized = FALSE;
-            }
-            break;
+    if (fdwReason == DLL_PROCESS_ATTACH) {
+        DisableThreadLibraryCalls(hinstDLL);
     }
     return TRUE;
 }
 
 static IAudioEndpointVolume* GetMasterAudioVolumeEndpoint(void) {
-    EnsureAudioComInitialized();
     IMMDeviceEnumerator* pEnumerator = NULL;
     IMMDevice* pDevice = NULL;
     IAudioEndpointVolume* pVolume = NULL;
@@ -81,19 +79,21 @@ static IAudioEndpointVolume* GetMasterAudioVolumeEndpoint(void) {
 }
 
 AUDIO_API float NativeGetMasterVolume(void) {
+    ScopedAudioCom com;
     IAudioEndpointVolume* pVol = GetMasterAudioVolumeEndpoint();
     if (!pVol) return -1.0f;
 
     float currentVol = 0.0f;
-    pVol->GetMasterVolumeLevelScalar(&currentVol);
+    HRESULT hr = pVol->GetMasterVolumeLevelScalar(&currentVol);
     pVol->Release();
-    return currentVol;
+    return SUCCEEDED(hr) ? currentVol : -1.0f;
 }
 
 AUDIO_API BOOL NativeSetMasterVolume(float level_scalar) {
     if (level_scalar < 0.0f) level_scalar = 0.0f;
     if (level_scalar > 1.0f) level_scalar = 1.0f;
 
+    ScopedAudioCom com;
     IAudioEndpointVolume* pVol = GetMasterAudioVolumeEndpoint();
     if (!pVol) return FALSE;
 
@@ -103,6 +103,7 @@ AUDIO_API BOOL NativeSetMasterVolume(float level_scalar) {
 }
 
 AUDIO_API BOOL NativeSetMasterMute(BOOL mute) {
+    ScopedAudioCom com;
     IAudioEndpointVolume* pVol = GetMasterAudioVolumeEndpoint();
     if (!pVol) return FALSE;
 
@@ -112,28 +113,48 @@ AUDIO_API BOOL NativeSetMasterMute(BOOL mute) {
 }
 
 /*
- * Smooth Sigmoid Fade-out of Audio Volume over fade_ms milliseconds
+ * Smooth Sigmoid/Cosine Fade-out of Audio Volume over fade_ms milliseconds
+ * Reuses a single COM endpoint and QueryPerformanceCounter wall clock.
  */
 AUDIO_API BOOL NativeFadeMasterVolume(float target_scalar, int fade_ms) {
+    if (target_scalar < 0.0f) target_scalar = 0.0f;
+    if (target_scalar > 1.0f) target_scalar = 1.0f;
+
+    ScopedAudioCom com;
+    IAudioEndpointVolume* pVol = GetMasterAudioVolumeEndpoint();
+    if (!pVol) return FALSE;
+
     if (fade_ms <= 0) {
-        return NativeSetMasterVolume(target_scalar);
+        HRESULT hr = pVol->SetMasterVolumeLevelScalar(target_scalar, NULL);
+        pVol->Release();
+        return SUCCEEDED(hr);
     }
 
-    float startVol = NativeGetMasterVolume();
-    if (startVol < 0.0f) return FALSE;
-
-    int steps = fade_ms / 20; // 50 updates per second
-    if (steps <= 0) steps = 1;
-    int stepSleep = fade_ms / steps;
-
-    for (int i = 1; i <= steps; i++) {
-        float progress = (float)i / (float)steps;
-        /* Cosine smooth interpolation */
-        float smoothFactor = 0.5f * (1.0f - (float)cos(progress * 3.14159265358979323846));
-        float currentTarget = startVol + (target_scalar - startVol) * smoothFactor;
-        NativeSetMasterVolume(currentTarget);
-        Sleep(stepSleep);
+    float startVol = 0.0f;
+    if (FAILED(pVol->GetMasterVolumeLevelScalar(&startVol))) {
+        pVol->Release();
+        return FALSE;
     }
 
-    return NativeSetMasterVolume(target_scalar);
+    LARGE_INTEGER freq, tStart, tNow;
+    QueryPerformanceFrequency(&freq);
+    QueryPerformanceCounter(&tStart);
+    double targetDurationSec = (double)fade_ms / 1000.0;
+
+    while (true) {
+        QueryPerformanceCounter(&tNow);
+        double elapsedSec = (double)(tNow.QuadPart - tStart.QuadPart) / (double)freq.QuadPart;
+        double progress = elapsedSec / targetDurationSec;
+        if (progress >= 1.0) {
+            break;
+        }
+        double smoothFactor = 0.5 * (1.0 - cos(progress * 3.14159265358979323846));
+        float currentTarget = startVol + (target_scalar - startVol) * (float)smoothFactor;
+        pVol->SetMasterVolumeLevelScalar(currentTarget, NULL);
+        Sleep(15);
+    }
+
+    HRESULT hrFinal = pVol->SetMasterVolumeLevelScalar(target_scalar, NULL);
+    pVol->Release();
+    return SUCCEEDED(hrFinal);
 }

@@ -31,35 +31,34 @@ static const GUID CLSID_NetFwRule_Custom =
 static const GUID IID_INetFwRule_Custom = 
     { 0xAF230244, 0xBCE3, 0x4585, { 0x8E, 0xC0, 0xAE, 0x81, 0x37, 0xCE, 0x17, 0x7B } };
 
-static BOOL g_ComInitialized = FALSE;
-
-static void EnsureComInitialized(void) {
-    if (!g_ComInitialized) {
-        HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+/* Per-thread RAII COM initializer safe across arbitrary worker threads */
+struct ScopedComInit {
+    BOOL need_uninit;
+    ScopedComInit() : need_uninit(FALSE) {
+        HRESULT hr = CoInitializeEx(NULL, COINIT_MULTITHREADED);
+        if (hr == RPC_E_CHANGED_MODE) {
+            hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+        }
         if (hr == S_OK || hr == S_FALSE) {
-            g_ComInitialized = TRUE;
+            need_uninit = TRUE;
         }
     }
-}
+    ~ScopedComInit() {
+        if (need_uninit) {
+            CoUninitialize();
+            need_uninit = FALSE;
+        }
+    }
+};
 
 BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
-    switch (fdwReason) {
-        case DLL_PROCESS_ATTACH:
-            DisableThreadLibraryCalls(hinstDLL);
-            EnsureComInitialized();
-            break;
-        case DLL_PROCESS_DETACH:
-            if (g_ComInitialized) {
-                CoUninitialize();
-                g_ComInitialized = FALSE;
-            }
-            break;
+    if (fdwReason == DLL_PROCESS_ATTACH) {
+        DisableThreadLibraryCalls(hinstDLL);
     }
     return TRUE;
 }
 
 static INetFwPolicy2* GetPolicyInstance(void) {
-    EnsureComInitialized();
     INetFwPolicy2* pPolicy = NULL;
     HRESULT hr = CoCreateInstance(
         CLSID_NetFwPolicy2_Custom,
@@ -79,6 +78,7 @@ static BOOL DeleteRuleInternal(INetFwRules* pFwRules, const wchar_t* rule_name) 
         return FALSE;
     }
     BSTR bstrName = SysAllocString(rule_name);
+    if (!bstrName) return FALSE;
     HRESULT hr = pFwRules->Remove(bstrName);
     SysFreeString(bstrName);
     return SUCCEEDED(hr);
@@ -104,6 +104,14 @@ static BOOL AddApplicationRuleInternal(INetFwRules* pFwRules, const wchar_t* rul
     BSTR bstrName = SysAllocString(rule_name);
     BSTR bstrApp = SysAllocString(exe_path);
     BSTR bstrDesc = SysAllocString(L"PowerController Suite Automated Firewall Exception");
+
+    if (!bstrName || !bstrApp || !bstrDesc) {
+        if (bstrName) SysFreeString(bstrName);
+        if (bstrApp) SysFreeString(bstrApp);
+        if (bstrDesc) SysFreeString(bstrDesc);
+        pRule->Release();
+        return FALSE;
+    }
 
     pRule->put_Name(bstrName);
     pRule->put_Description(bstrDesc);
@@ -144,6 +152,14 @@ static BOOL AddPortRuleInternal(INetFwRules* pFwRules, const wchar_t* rule_name,
     BSTR bstrPorts = SysAllocString(port_str);
     BSTR bstrDesc = SysAllocString(L"PowerController Suite Dedicated Port Exception");
 
+    if (!bstrName || !bstrPorts || !bstrDesc) {
+        if (bstrName) SysFreeString(bstrName);
+        if (bstrPorts) SysFreeString(bstrPorts);
+        if (bstrDesc) SysFreeString(bstrDesc);
+        pRule->Release();
+        return FALSE;
+    }
+
     pRule->put_Name(bstrName);
     pRule->put_Description(bstrDesc);
     pRule->put_Protocol(protocol == 6 ? NET_FW_IP_PROTOCOL_TCP : NET_FW_IP_PROTOCOL_UDP);
@@ -168,6 +184,7 @@ static BOOL AddPortRuleInternal(INetFwRules* pFwRules, const wchar_t* rule_name,
  * -------------------------------------------------------------------------- */
 
 FIREWALL_API BOOL NativeAddApplicationRule(const wchar_t* rule_name, const wchar_t* exe_path, int direction) {
+    ScopedComInit com;
     INetFwPolicy2* pPolicy = GetPolicyInstance();
     if (!pPolicy) return FALSE;
 
@@ -186,6 +203,7 @@ FIREWALL_API BOOL NativeAddApplicationRule(const wchar_t* rule_name, const wchar
 }
 
 FIREWALL_API BOOL NativeAddPortRule(const wchar_t* rule_name, int protocol, const wchar_t* port_str, int direction) {
+    ScopedComInit com;
     INetFwPolicy2* pPolicy = GetPolicyInstance();
     if (!pPolicy) return FALSE;
 
@@ -204,6 +222,7 @@ FIREWALL_API BOOL NativeAddPortRule(const wchar_t* rule_name, int protocol, cons
 }
 
 FIREWALL_API BOOL NativeDeleteRule(const wchar_t* rule_name) {
+    ScopedComInit com;
     INetFwPolicy2* pPolicy = GetPolicyInstance();
     if (!pPolicy) return FALSE;
 
@@ -223,6 +242,7 @@ FIREWALL_API BOOL NativeDeleteRule(const wchar_t* rule_name) {
 
 FIREWALL_API BOOL NativeIsFirewallRulePresent(const wchar_t* rule_name) {
     if (!rule_name) return FALSE;
+    ScopedComInit com;
     INetFwPolicy2* pPolicy = GetPolicyInstance();
     if (!pPolicy) return FALSE;
 
@@ -234,6 +254,11 @@ FIREWALL_API BOOL NativeIsFirewallRulePresent(const wchar_t* rule_name) {
     }
 
     BSTR bstrName = SysAllocString(rule_name);
+    if (!bstrName) {
+        pRules->Release();
+        pPolicy->Release();
+        return FALSE;
+    }
     INetFwRule* pItem = NULL;
     hr = pRules->Item(bstrName, &pItem);
     SysFreeString(bstrName);
@@ -253,6 +278,7 @@ FIREWALL_API BOOL NativeIsFirewallRulePresent(const wchar_t* rule_name) {
  * Batch register all PowerController and PowerNetworkScheduler rules in memory within ~0.05s
  */
 FIREWALL_API int NativeBatchRegisterSuite(const wchar_t* target_dir, const wchar_t* version_str) {
+    ScopedComInit com;
     INetFwPolicy2* pPolicy = GetPolicyInstance();
     if (!pPolicy) return -1;
 
@@ -268,15 +294,17 @@ FIREWALL_API int NativeBatchRegisterSuite(const wchar_t* target_dir, const wchar
         wcsncpy(ver, version_str, 31);
         ver[31] = L'\0';
     } else {
-        wcscpy(ver, L"2.9.1");
+        wcscpy(ver, L"2.9.2");
     }
 
     /* Build executable paths */
     wchar_t mainExe[MAX_PATH];
     wchar_t pnsExe[MAX_PATH];
     if (target_dir && wcslen(target_dir) > 0) {
-        _snwprintf(mainExe, MAX_PATH, L"%s\\PowerController.exe", target_dir);
-        _snwprintf(pnsExe, MAX_PATH, L"%s\\PowerNetworkScheduler.exe", target_dir);
+        _snwprintf(mainExe, MAX_PATH - 1, L"%s\\PowerController.exe", target_dir);
+        mainExe[MAX_PATH - 1] = L'\0';
+        _snwprintf(pnsExe, MAX_PATH - 1, L"%s\\PowerNetworkScheduler.exe", target_dir);
+        pnsExe[MAX_PATH - 1] = L'\0';
     } else {
         wcscpy(mainExe, L"PowerController.exe");
         wcscpy(pnsExe, L"PowerNetworkScheduler.exe");
@@ -288,21 +316,21 @@ FIREWALL_API int NativeBatchRegisterSuite(const wchar_t* target_dir, const wchar
 
     wcscpy(cleanList[cleanCount++], L"PowerController (Inbound)");
     wcscpy(cleanList[cleanCount++], L"PowerController (Outbound)");
-    _snwprintf(cleanList[cleanCount++], 128, L"PowerController v%s (Inbound)", ver);
-    _snwprintf(cleanList[cleanCount++], 128, L"PowerController v%s (Outbound)", ver);
+    _snwprintf(cleanList[cleanCount], 127, L"PowerController v%s (Inbound)", ver); cleanList[cleanCount++][127] = L'\0';
+    _snwprintf(cleanList[cleanCount], 127, L"PowerController v%s (Outbound)", ver); cleanList[cleanCount++][127] = L'\0';
     wcscpy(cleanList[cleanCount++], L"PowerController");
 
     wcscpy(cleanList[cleanCount++], L"PowerNetworkScheduler (Inbound)");
     wcscpy(cleanList[cleanCount++], L"PowerNetworkScheduler (Outbound)");
-    _snwprintf(cleanList[cleanCount++], 128, L"PowerNetworkScheduler v%s (Inbound)", ver);
-    _snwprintf(cleanList[cleanCount++], 128, L"PowerNetworkScheduler v%s (Outbound)", ver);
+    _snwprintf(cleanList[cleanCount], 127, L"PowerNetworkScheduler v%s (Inbound)", ver); cleanList[cleanCount++][127] = L'\0';
+    _snwprintf(cleanList[cleanCount], 127, L"PowerNetworkScheduler v%s (Outbound)", ver); cleanList[cleanCount++][127] = L'\0';
 
     wcscpy(cleanList[cleanCount++], L"PowerController TCP 9988");
     wcscpy(cleanList[cleanCount++], L"PowerController UDP 9985");
     wcscpy(cleanList[cleanCount++], L"PowerController UDP 9986");
-    _snwprintf(cleanList[cleanCount++], 128, L"PowerController v%s TCP 9988", ver);
-    _snwprintf(cleanList[cleanCount++], 128, L"PowerController v%s UDP 9985", ver);
-    _snwprintf(cleanList[cleanCount++], 128, L"PowerController v%s UDP 9986", ver);
+    _snwprintf(cleanList[cleanCount], 127, L"PowerController v%s TCP 9988", ver); cleanList[cleanCount++][127] = L'\0';
+    _snwprintf(cleanList[cleanCount], 127, L"PowerController v%s UDP 9985", ver); cleanList[cleanCount++][127] = L'\0';
+    _snwprintf(cleanList[cleanCount], 127, L"PowerController v%s UDP 9986", ver); cleanList[cleanCount++][127] = L'\0';
 
     for (int i = 0; i < cleanCount; i++) {
         DeleteRuleInternal(pRules, cleanList[i]);
@@ -314,10 +342,10 @@ FIREWALL_API int NativeBatchRegisterSuite(const wchar_t* target_dir, const wchar
     if (GetFileAttributesW(mainExe) != INVALID_FILE_ATTRIBUTES) {
         if (AddApplicationRuleInternal(pRules, L"PowerController (Inbound)", mainExe, 1)) registeredCount++;
         if (AddApplicationRuleInternal(pRules, L"PowerController (Outbound)", mainExe, 2)) registeredCount++;
-        
+
         wchar_t rNameIn[128], rNameOut[128];
-        _snwprintf(rNameIn, 128, L"PowerController v%s (Inbound)", ver);
-        _snwprintf(rNameOut, 128, L"PowerController v%s (Outbound)", ver);
+        _snwprintf(rNameIn, 127, L"PowerController v%s (Inbound)", ver); rNameIn[127] = L'\0';
+        _snwprintf(rNameOut, 127, L"PowerController v%s (Outbound)", ver); rNameOut[127] = L'\0';
         if (AddApplicationRuleInternal(pRules, rNameIn, mainExe, 1)) registeredCount++;
         if (AddApplicationRuleInternal(pRules, rNameOut, mainExe, 2)) registeredCount++;
     }
@@ -328,8 +356,8 @@ FIREWALL_API int NativeBatchRegisterSuite(const wchar_t* target_dir, const wchar
         if (AddApplicationRuleInternal(pRules, L"PowerNetworkScheduler (Outbound)", pnsExe, 2)) registeredCount++;
 
         wchar_t rNameIn[128], rNameOut[128];
-        _snwprintf(rNameIn, 128, L"PowerNetworkScheduler v%s (Inbound)", ver);
-        _snwprintf(rNameOut, 128, L"PowerNetworkScheduler v%s (Outbound)", ver);
+        _snwprintf(rNameIn, 127, L"PowerNetworkScheduler v%s (Inbound)", ver); rNameIn[127] = L'\0';
+        _snwprintf(rNameOut, 127, L"PowerNetworkScheduler v%s (Outbound)", ver); rNameOut[127] = L'\0';
         if (AddApplicationRuleInternal(pRules, rNameIn, pnsExe, 1)) registeredCount++;
         if (AddApplicationRuleInternal(pRules, rNameOut, pnsExe, 2)) registeredCount++;
     }
@@ -340,13 +368,13 @@ FIREWALL_API int NativeBatchRegisterSuite(const wchar_t* target_dir, const wchar
     if (AddPortRuleInternal(pRules, L"PowerController UDP 9986", 17, L"9986", 1)) registeredCount++;
 
     wchar_t rPortName[128];
-    _snwprintf(rPortName, 128, L"PowerController v%s TCP 9988", ver);
+    _snwprintf(rPortName, 127, L"PowerController v%s TCP 9988", ver); rPortName[127] = L'\0';
     if (AddPortRuleInternal(pRules, rPortName, 6, L"9988", 1)) registeredCount++;
 
-    _snwprintf(rPortName, 128, L"PowerController v%s UDP 9985", ver);
+    _snwprintf(rPortName, 127, L"PowerController v%s UDP 9985", ver); rPortName[127] = L'\0';
     if (AddPortRuleInternal(pRules, rPortName, 17, L"9985", 1)) registeredCount++;
 
-    _snwprintf(rPortName, 128, L"PowerController v%s UDP 9986", ver);
+    _snwprintf(rPortName, 127, L"PowerController v%s UDP 9986", ver); rPortName[127] = L'\0';
     if (AddPortRuleInternal(pRules, rPortName, 17, L"9986", 1)) registeredCount++;
 
     pRules->Release();
@@ -358,6 +386,7 @@ FIREWALL_API int NativeBatchRegisterSuite(const wchar_t* target_dir, const wchar
  * Batch remove all suite rules in memory
  */
 FIREWALL_API int NativeBatchRemoveSuite(const wchar_t* version_str) {
+    ScopedComInit com;
     INetFwPolicy2* pPolicy = GetPolicyInstance();
     if (!pPolicy) return -1;
 
@@ -373,7 +402,7 @@ FIREWALL_API int NativeBatchRemoveSuite(const wchar_t* version_str) {
         wcsncpy(ver, version_str, 31);
         ver[31] = L'\0';
     } else {
-        wcscpy(ver, L"2.9.1");
+        wcscpy(ver, L"2.9.2");
     }
 
     wchar_t cleanList[16][128];
@@ -381,21 +410,21 @@ FIREWALL_API int NativeBatchRemoveSuite(const wchar_t* version_str) {
 
     wcscpy(cleanList[cleanCount++], L"PowerController (Inbound)");
     wcscpy(cleanList[cleanCount++], L"PowerController (Outbound)");
-    _snwprintf(cleanList[cleanCount++], 128, L"PowerController v%s (Inbound)", ver);
-    _snwprintf(cleanList[cleanCount++], 128, L"PowerController v%s (Outbound)", ver);
+    _snwprintf(cleanList[cleanCount], 127, L"PowerController v%s (Inbound)", ver); cleanList[cleanCount++][127] = L'\0';
+    _snwprintf(cleanList[cleanCount], 127, L"PowerController v%s (Outbound)", ver); cleanList[cleanCount++][127] = L'\0';
     wcscpy(cleanList[cleanCount++], L"PowerController");
 
     wcscpy(cleanList[cleanCount++], L"PowerNetworkScheduler (Inbound)");
     wcscpy(cleanList[cleanCount++], L"PowerNetworkScheduler (Outbound)");
-    _snwprintf(cleanList[cleanCount++], 128, L"PowerNetworkScheduler v%s (Inbound)", ver);
-    _snwprintf(cleanList[cleanCount++], 128, L"PowerNetworkScheduler v%s (Outbound)", ver);
+    _snwprintf(cleanList[cleanCount], 127, L"PowerNetworkScheduler v%s (Inbound)", ver); cleanList[cleanCount++][127] = L'\0';
+    _snwprintf(cleanList[cleanCount], 127, L"PowerNetworkScheduler v%s (Outbound)", ver); cleanList[cleanCount++][127] = L'\0';
 
     wcscpy(cleanList[cleanCount++], L"PowerController TCP 9988");
     wcscpy(cleanList[cleanCount++], L"PowerController UDP 9985");
     wcscpy(cleanList[cleanCount++], L"PowerController UDP 9986");
-    _snwprintf(cleanList[cleanCount++], 128, L"PowerController v%s TCP 9988", ver);
-    _snwprintf(cleanList[cleanCount++], 128, L"PowerController v%s UDP 9985", ver);
-    _snwprintf(cleanList[cleanCount++], 128, L"PowerController v%s UDP 9986", ver);
+    _snwprintf(cleanList[cleanCount], 127, L"PowerController v%s TCP 9988", ver); cleanList[cleanCount++][127] = L'\0';
+    _snwprintf(cleanList[cleanCount], 127, L"PowerController v%s UDP 9985", ver); cleanList[cleanCount++][127] = L'\0';
+    _snwprintf(cleanList[cleanCount], 127, L"PowerController v%s UDP 9986", ver); cleanList[cleanCount++][127] = L'\0';
 
     int removed = 0;
     for (int i = 0; i < cleanCount; i++) {

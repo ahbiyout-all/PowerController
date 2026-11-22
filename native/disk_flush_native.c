@@ -68,6 +68,43 @@ static BOOL FlushSingleVolume(const wchar_t* volume_path) {
 }
 
 /*
+ * Flushes a specific logical drive letter (e.g. L'C')
+ */
+DISK_FLUSH_API BOOL NativeFlushSingleDrive(wchar_t drive_letter) {
+    if (!((drive_letter >= L'A' && drive_letter <= L'Z') || (drive_letter >= L'a' && drive_letter <= L'z'))) {
+        return FALSE;
+    }
+    wchar_t volPath[16];
+    _snwprintf(volPath, 15, L"\\\\.\\%c:", drive_letter);
+    volPath[15] = L'\0';
+    return FlushSingleVolume(volPath);
+}
+
+/*
+ * Flushes a specific file handle to disk (safe even without Administrator rights)
+ */
+DISK_FLUSH_API BOOL NativeFlushFilePath(const wchar_t* file_path) {
+    if (!file_path || wcslen(file_path) == 0) {
+        return FALSE;
+    }
+    HANDLE hFile = CreateFileW(
+        file_path,
+        GENERIC_WRITE,
+        FILE_SHARE_READ | FILE_SHARE_WRITE,
+        NULL,
+        OPEN_EXISTING,
+        FILE_ATTRIBUTE_NORMAL,
+        NULL
+    );
+    if (hFile == INVALID_HANDLE_VALUE) {
+        return FALSE;
+    }
+    BOOL ok = FlushFileBuffers(hFile);
+    CloseHandle(hFile);
+    return ok;
+}
+
+/*
  * Flushes dirty filesystem buffers across all mounted logical drives
  * Returns the number of successfully flushed volumes (>= 0).
  */
@@ -85,10 +122,7 @@ DISK_FLUSH_API int NativeFlushAllVolumes(void) {
         UINT driveType = GetDriveTypeW(pDrive);
         /* Flush Fixed HDD/SSD, Removable USB, and RAM disks */
         if (driveType == DRIVE_FIXED || driveType == DRIVE_REMOVABLE || driveType == DRIVE_RAMDISK) {
-            wchar_t volPath[16];
-            /* Convert "C:\\" to "\\\\.\\C:" */
-            swprintf(volPath, 16, L"\\\\.\\%c:", pDrive[0]);
-            if (FlushSingleVolume(volPath)) {
+            if (NativeFlushSingleDrive(pDrive[0])) {
                 flushedCount++;
             }
         }
@@ -103,10 +137,10 @@ DISK_FLUSH_API int NativeFlushAllVolumes(void) {
  */
 DISK_FLUSH_API BOOL NativePreShutdownSync(void) {
     /* 1. Flush all registry hive modifications to disk */
-    RegFlushKey(HKEY_CURRENT_USER);
+    LONG regCu = RegFlushKey(HKEY_CURRENT_USER);
     RegFlushKey(HKEY_LOCAL_MACHINE);
 
-    /* 2. Flush all filesystem storage volumes */
+    /* 2. Flush all filesystem storage volumes (may return 0 if non-admin, RegFlushKey still commits HKCU) */
     int flushed = NativeFlushAllVolumes();
-    return (flushed > 0);
+    return (flushed > 0 || regCu == ERROR_SUCCESS);
 }

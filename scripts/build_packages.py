@@ -103,6 +103,69 @@ def build_pc_installer():
             os.path.join(ROOT_DIR, "main.py")
         ], cwd=ROOT_DIR, check=False)
 
+        if os.path.exists(os.path.join(ROOT_DIR, "network_scheduler.py")):
+            subprocess.run([
+                py_exe, "-m", "PyInstaller",
+                "--onefile", "--noconsole", "--noconfirm",
+                *icon_arg,
+                "--name=PowerNetworkScheduler",
+                os.path.join(ROOT_DIR, "network_scheduler.py")
+            ], cwd=ROOT_DIR, check=False)
+
+        if os.path.exists(os.path.join(ROOT_DIR, "apply_shared_schedules.py")):
+            subprocess.run([
+                py_exe, "-m", "PyInstaller",
+                "--onefile", "--noconsole", "--noconfirm",
+                *icon_arg,
+                "--name=ApplySharedSchedules",
+                os.path.join(ROOT_DIR, "apply_shared_schedules.py")
+            ], cwd=ROOT_DIR, check=False)
+
+    # 1.5) Compile 12 Pure Custom Native DLLs (Windows host / MinGW / Clang / MSVC)
+    native_specs = [
+        ("native/power_core_native.c", "PowerCoreNative.dll", False, ["-lkernel32", "-luser32"], ["kernel32.lib", "user32.lib"]),
+        ("native/net_beacon_engine.c", "NetBeaconEngine.dll", False, ["-lkernel32", "-luser32", "-lws2_32"], ["kernel32.lib", "user32.lib", "ws2_32.lib"]),
+        ("native/firewall_native.cpp", "FirewallNative.dll", True, ["-lole32", "-loleaut32"], ["ole32.lib", "oleaut32.lib"]),
+        ("native/sys_power_hook.c", "SysPowerHook.dll", False, ["-lkernel32", "-luser32", "-lwtsapi32"], ["kernel32.lib", "user32.lib", "wtsapi32.lib"]),
+        ("native/schedule_crypto.c", "ScheduleCrypto.dll", False, ["-lkernel32", "-ladvapi32"], ["kernel32.lib", "advapi32.lib"]),
+        ("native/disk_flush_native.c", "DiskFlushNative.dll", False, ["-lkernel32", "-ladvapi32"], ["kernel32.lib", "advapi32.lib"]),
+        ("native/audio_dimmer_native.cpp", "AudioDimmerNative.dll", True, ["-lkernel32", "-lole32"], ["kernel32.lib", "ole32.lib"]),
+        ("native/display_ddc_native.cpp", "DisplayDdcNative.dll", True, ["-lkernel32", "-luser32", "-ldxva2"], ["kernel32.lib", "user32.lib", "dxva2.lib"]),
+        ("native/low_level_input_idle_native.c", "LowLevelInputIdleNative.dll", False, ["-lkernel32", "-luser32"], ["kernel32.lib", "user32.lib"]),
+        ("native/commander_tcp_dispatcher.cpp", "CommanderTcpDispatcherNative.dll", True, ["-lkernel32", "-lws2_32"], ["kernel32.lib", "ws2_32.lib"]),
+        ("native/commander_ping_scanner.c", "CommanderPingScannerNative.dll", False, ["-lkernel32", "-lws2_32", "-liphlpapi"], ["kernel32.lib", "ws2_32.lib", "iphlpapi.lib"]),
+        ("native/power_exec_native.c", "PowerExecNative.dll", False, ["-lkernel32", "-luser32", "-ladvapi32", "-lpowrprof"], ["kernel32.lib", "user32.lib", "advapi32.lib", "powrprof.lib"]),
+    ]
+    if sys.platform == "win32":
+        c_comp = shutil.which("gcc") or shutil.which("clang")
+        cpp_comp = shutil.which("g++") or shutil.which("clang++")
+        msvc_cl = shutil.which("cl")
+        onedir_out = os.path.join(dist_dir, "PowerController")
+        os.makedirs(onedir_out, exist_ok=True)
+        for rel_src, dll_name, is_cpp, gnu_libs, msvc_libs in native_specs:
+            src_path = os.path.join(ROOT_DIR, rel_src)
+            out_root = os.path.join(ROOT_DIR, dll_name)
+            if not os.path.exists(src_path):
+                continue
+            comp = cpp_comp if is_cpp else c_comp
+            if comp:
+                subprocess.run([comp, "-O2", "-shared", "-o", out_root, src_path, *gnu_libs], cwd=ROOT_DIR, check=False)
+            elif msvc_cl:
+                flags = ["/O2", "/EHsc", "/LD"] if is_cpp else ["/O2", "/LD"]
+                subprocess.run([msvc_cl, *flags, src_path, f"/Fe:{out_root}", *msvc_libs], cwd=ROOT_DIR, check=False)
+            if os.path.exists(out_root):
+                shutil.copy2(out_root, os.path.join(dist_dir, dll_name))
+                shutil.copy2(out_root, os.path.join(onedir_out, dll_name))
+                print(f"[✓] Compiled Pure Custom Native DLL: {dll_name}")
+        for helper in ["native_bridge.py", "schedule_share_builder.py", "Register_Firewall_Rules.bat", "PowerController.ico", "PowerController.png"]:
+            hp = os.path.join(ROOT_DIR, helper)
+            if os.path.exists(hp):
+                shutil.copy2(hp, os.path.join(onedir_out, helper))
+        for exe_helper in ["PowerNetworkScheduler.exe", "ApplySharedSchedules.exe"]:
+            ep = os.path.join(dist_dir, exe_helper)
+            if os.path.exists(ep):
+                shutil.copy2(ep, os.path.join(onedir_out, exe_helper))
+
     # 2) Inno Setup ISCC compilation
     iscc_path = find_iscc()
     iss_file = os.path.join(ROOT_DIR, "PowerController.iss")

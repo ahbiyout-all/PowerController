@@ -28,9 +28,20 @@
 - **iFrame 안전 UX & UI 다듬기**: 웹 뷰의 네이티브 `confirm()` 호출 제거 및 인앱 토스트 교체, `FavoritesManager` 6모드 그리드 2행 고아 버튼 정렬(`grid-cols-3 sm:grid-cols-6`), `BatteryHistoryChart` 및 `StartupTodayTasksModal` 누락 다국어 문구 현지화.
 - **버전 동기화(`sync_version.py`) 및 GitHub 저장소 경로 일원화**: `main.py`의 `GITHUB_REPO_OWNER`를 `AhBiYout-all`로 수정, `sync_version.py`의 `network_scheduler.py`(`APP_VERSION`) 및 `index.html`(`og:title`) 정규식 교정, 배포 스크립트 및 워크플로 버전 기본값을 `v2.9.2`로 통합.
 
-### 📦 5. Inno Setup 6 인스톨러 폴더 풀림(Unpacked Multi-File) & 방화벽 사전 무음 등록
-- **폴더 풀림(Unpacked Multi-File) 설치 구현**: PyInstaller `--onedir` 빌드 디렉터리(`dist\PowerController\*`) 트리 및 필수 네이티브 C/C++ DLL들을 개별 파일 구조로 전개, 기존 설치 감지 시 클린 설치(`Clean Install`) / 덮어쓰기 선택 다이얼로그 및 `/SILENT`, `/VERYSILENT`, `/CLEAN=1` 지원.
+### 📦 5. Inno Setup 6 표준 설치 흐름 · 프로그램 추가/제거 정식 등록 · 방화벽 무음 등록
+- **표준 설치 진행 순서 구현 (`PowerController.iss` & `scriptGenerators.ts`)**: `기존 실행 중인 앱 강제 종료` → `기존 설치 감지 시 삭제(클린 설치)/덮어쓰기 질의` → `라이선스 선언(KO/EN)` → `설치(Unpacked Multi-File)` → `완료 화면(wpFinished) 바탕화면 바로가기 체크` → `앱 바로 실행` 순서로 정밀 구성.
+- **Windows 프로그램 추가/제거 정식 등록 & 레거시 키 정리**: `Uninstallable=yes`, `CreateUninstallRegKey=yes`, `UninstallDisplayName`, `UninstallDisplayIcon`, `UninstallFilesDir` 명시 및 레거시 Python 설치 키 중복 정리.
 - **Windows Defender Firewall 사전 무음 등록**: 메인(`PowerController.exe`), 커맨더(`PowerNetworkScheduler.exe`), 전용 포트(TCP 9988, UDP 9985, UDP 9986) 및 버전 표기 명칭(`PowerController v2.9.2`) 동시 등록 및 제거 시 자동 정리.
+
+### ⚙️ 6. 12대 순수 창작 네이티브 DLL 고도화 · 전수 감사 패치 · `PowerExecNative.dll` 신설
+- **신규 12번째 순수 창작 DLL `PowerExecNative.dll` (`native/power_exec_native.c`)**: `SE_SHUTDOWN_NAME` 프로세스 토큰 특권 획득 후 `InitiateSystemShutdownExW` / `ExitWindowsEx` 및 정식 C ABI `SetSuspendState`(기존 `rundll32` 스택 ABI 결함 해소)를 직접 호출하여 서브프로세스 없이 종료·재시작·절전(S3)·최대 절전(S4)·로그아웃 실행 및 `DiskFlushNative` 캐시 플러시 연계.
+- **기존 11대 DLL 전수 감사 및 결함 수정**:
+  - `ScheduleCrypto.dll`: Base64 디코드 테이블 256원소 전체 초기화 수정, OS CSPRNG(`RtlGenRandom`) 솔트 적용, `constant_time_compare` HMAC 검증.
+  - `CommanderTcpDispatcherNative.dll`: 비동기 `FIONBIO` + `select()` 타임아웃으로 기존 21초 SYN 대기 스택 UAF 크래시 원천 제거 및 `NativeSendRuleCommandWithAck` 신설.
+  - `CommanderPingScannerNative.dll`: 스레드 안전 `WSAStartup` 초기화 보강(`WSANOTINITIALISED` 수정), `NativeSendWakeOnLanEx` 및 32스레드 C 풀 `NativeBatchScanLanTargets` 병렬 스캐너 신설.
+  - `FirewallNative.dll` & `AudioDimmerNative.dll`: `DllMain` 전역 COM 초기화 제거 및 per-call RAII(`ScopedComInit`/`ScopedAudioCom`) 전환, Audio QPC 단일 엔드포인트 페이드 최적화.
+  - `NetBeaconEngine.dll`, `SysPowerHook.dll`, `PowerCoreNative.c`, `DisplayDdcNative.dll`, `LowLevelInputIdleNative.dll`, `DiskFlushNative.dll`: `inet_pton` 전환, `SendMessageTimeoutW` 데드락 방지, 동적 프로세스 트리 확장·사이클 가드, VESA min/max 정규화 및 `NativeGetHardwareBrightness` 구현, 32비트 롤오버 오차 제거.
+- **통합 빌드 및 배포 일원화**: `native_bridge.py`, `main.py`, `network_scheduler.py`, `installer.py`, `build.bat`, `PowerController.iss`, `scripts/build_packages.py`, `scriptGenerators.ts`에 12대 DLL 컴파일·번들·호출 파이프라인 완비 및 `docs/pure_custom_dll_architecture.md` · `docs/dll_specification.md` 상세 기술 등록.
 
 ---
 

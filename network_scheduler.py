@@ -653,9 +653,16 @@ def get_local_mac():
 
 
 def get_mac_from_arp(ip):
-    """지정된 IP의 MAC 주소를 OS ARP 캐시 테이블에서 실시간 조회합니다."""
+    """지정된 IP의 MAC 주소를 C SendARP 또는 OS ARP 캐시 테이블에서 실시간 조회합니다."""
     if not ip or ip in ["127.0.0.1", "localhost"]:
         return get_local_mac()
+    if native_bridge:
+        try:
+            native_mac = native_bridge.resolve_mac_via_arp(ip)
+            if native_mac and native_mac != "00:00:00:00:00:00":
+                return native_mac
+        except Exception:
+            pass
     try:
         if os.path.exists("/proc/net/arp"):
             with open("/proc/net/arp", "r", encoding="utf-8") as f:
@@ -700,6 +707,28 @@ def send_wol_magic_packet(mac_address, target_ip=None, port=9, **kwargs):
             "message": f"올바르지 않은 MAC 주소 형식입니다: '{mac_address}' (12자리 16진수 필요)",
         }
 
+    formatted_mac = ":".join([clean_mac[i : i + 2].upper() for i in range(0, 12, 2)])
+    subnet_broadcast = ""
+    if target_ip and target_ip != "127.0.0.1":
+        parts = target_ip.split(".")
+        if len(parts) == 4:
+            subnet_broadcast = ".".join(parts[:3]) + ".255"
+
+    if native_bridge and native_bridge.is_commander_scanner_loaded():
+        try:
+            native_ok = native_bridge.send_wake_on_lan(formatted_mac, port=port, broadcast_ip=subnet_broadcast)
+            if port != 7:
+                native_bridge.send_wake_on_lan(formatted_mac, port=7, broadcast_ip=subnet_broadcast)
+            if native_ok:
+                routes = 4 if subnet_broadcast else 2
+                return {
+                    "success": True,
+                    "mac": formatted_mac,
+                    "message": f"네이티브 C 매직 패킷 브로드캐스트 전송 성공 ({routes}개 경로)",
+                }
+        except Exception:
+            pass
+
     mac_bytes = bytes.fromhex(clean_mac)
     magic_packet = b"\xff" * 6 + mac_bytes * 16
 
@@ -708,12 +737,10 @@ def send_wol_magic_packet(mac_address, target_ip=None, port=9, **kwargs):
 
     destinations = [("255.255.255.255", port), ("255.255.255.255", 7)]
     if target_ip and target_ip != "127.0.0.1":
-        parts = target_ip.split(".")
-        if len(parts) == 4:
-            subnet_broadcast = ".".join(parts[:3]) + ".255"
+        if subnet_broadcast:
             destinations.append((subnet_broadcast, port))
             destinations.append((subnet_broadcast, 7))
-            destinations.append((target_ip, port))
+        destinations.append((target_ip, port))
 
     sent_routes = 0
     for dst_ip, dst_port in destinations:
@@ -724,7 +751,6 @@ def send_wol_magic_packet(mac_address, target_ip=None, port=9, **kwargs):
             pass
     sock.close()
 
-    formatted_mac = ":".join([clean_mac[i : i + 2].upper() for i in range(0, 12, 2)])
     return {
         "success": sent_routes > 0,
         "mac": formatted_mac,
@@ -1003,19 +1029,32 @@ def send_via_bypass_channel(ip, payload):
 def send_payload_over_network(ip, port, payload, tcp_timeout=1.1):
     """지정된 원격 IP/Port로 JSON 페이로드를 전송하고 응답 ACK 및 지연시간(ms)을 반환합니다."""
     t0 = time.monotonic()
-    try:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(tcp_timeout)
-        sock.connect((ip, port))
-        sock.sendall(json.dumps(payload, ensure_ascii=False).encode("utf-8"))
-        resp_data = sock.recv(4096)
-        sock.close()
-        if resp_data:
-            resp = json.loads(resp_data.decode("utf-8"))
-            resp["latency_ms"] = max(1, int((time.monotonic() - t0) * 1000))
-            return resp
-    except Exception:
-        pass
+    raw_bytes = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+
+    # 1순위: CommanderTcpDispatcherNative.dll (논블로킹 select 타임아웃 C 소켓)
+    if native_bridge and native_bridge.is_commander_dispatcher_loaded():
+        try:
+            ack_bytes = native_bridge.send_payload_with_ack(ip, port, raw_bytes, int(tcp_timeout * 1000))
+            if ack_bytes:
+                resp = json.loads(ack_bytes.decode("utf-8"))
+                resp["latency_ms"] = max(1, int((time.monotonic() - t0) * 1000))
+                return resp
+        except Exception:
+            pass
+    else:
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(tcp_timeout)
+            sock.connect((ip, port))
+            sock.sendall(raw_bytes)
+            resp_data = sock.recv(4096)
+            sock.close()
+            if resp_data:
+                resp = json.loads(resp_data.decode("utf-8"))
+                resp["latency_ms"] = max(1, int((time.monotonic() - t0) * 1000))
+                return resp
+        except Exception:
+            pass
 
     resp = send_via_bypass_channel(ip, payload)
     resp["latency_ms"] = max(1, int((time.monotonic() - t0) * 1000))
@@ -2955,11 +2994,18 @@ class NetworkSchedulerApp:
         def scan_thread():
             active_ips = []
             lock = threading.Lock()
+            native_scan = None
+            if native_bridge and native_bridge.is_commander_scanner_loaded():
+                try:
+                    native_scan = native_bridge.batch_scan_lan_targets(ip_list, timeout_ms=280)
+                except Exception:
+                    native_scan = None
 
             def probe(ip_addr):
                 t0 = time.monotonic()
                 ok = False
                 resp = None
+                native_info = native_scan.get(ip_addr, {}) if isinstance(native_scan, dict) else {}
                 try:
                     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     s.settimeout(0.35)
@@ -2974,9 +3020,9 @@ class NetworkSchedulerApp:
                 if not ok and beacon and (time.time() - beacon.get("last_seen", 0) < 90):
                     ok = True
                 if ok:
-                    lat = (resp or {}).get("latency_ms") or max(1, int((time.monotonic() - t0) * 1000))
+                    lat = (resp or {}).get("latency_ms") or native_info.get("rtt_ms") or max(1, int((time.monotonic() - t0) * 1000))
                     with lock:
-                        active_ips.append((ip_addr, resp or {}, lat))
+                        active_ips.append((ip_addr, resp or {}, lat, native_info))
 
             with ThreadPoolExecutor(max_workers=32) as pool:
                 list(pool.map(probe, ip_list))
@@ -2989,8 +3035,14 @@ class NetworkSchedulerApp:
             for idx, ip in enumerate(ordered_register):
                 seat_idx = start_seat + idx
                 beacon_info = DISCOVERED_CLIENTS.get(ip, {})
-                resp_info = next((r for (rip, r, _) in active_ips if rip == ip), {})
-                mac = resp_info.get("mac") or beacon_info.get("mac") or (get_mac_from_arp(ip) if ip in active_ip_set else "")
+                match_entry = next(((r, n) for (rip, r, _, n) in active_ips if rip == ip), ({}, (native_scan or {}).get(ip, {})))
+                resp_info, native_info = match_entry
+                mac = (
+                    resp_info.get("mac")
+                    or beacon_info.get("mac")
+                    or (native_info or {}).get("mac")
+                    or (get_mac_from_arp(ip) if ip in active_ip_set else "")
+                )
                 host = resp_info.get("device") or beacon_info.get("hostname") or f"LAB-{format_seat_no(seat_idx)}"
 
                 if ip not in self.pc_records:
@@ -3014,7 +3066,7 @@ class NetworkSchedulerApp:
 
                 if ip in active_ip_set:
                     self.last_scanned_active_ips.add(ip)
-                    lat = next((l for (rip, _, l) in active_ips if rip == ip), 1)
+                    lat = next((l for (rip, _, l, _) in active_ips if rip == ip), 1)
                     self.pc_live_telemetry[ip] = {
                         "status": "online",
                         "latency_ms": lat,

@@ -109,7 +109,9 @@ export default function PackagerGuide({ lang = 'ko' }: PackagerGuideProps) {
                 <span>💻</span> {lang === 'en' ? 'Windows Official Installer (.exe)' : 'Windows 공식 설치 마법사 (.exe)'}
               </div>
               <p className="text-gray-500 dark:text-gray-400 text-[10px]">
-                {lang === 'en' ? 'Inno Setup 6 multi-language installer with silent firewall rules' : 'Inno Setup 6 다국어 설치 마법사 및 방화벽 규칙 자동 등록'}
+                {lang === 'en'
+                  ? 'Inno Setup 6: Auto-kill -> Uninstall/Overwrite -> License -> Install -> Desktop Shortcut & Launch + Add/Remove Programs'
+                  : 'Inno Setup 6: 강제종료 -> 삭제/덮어쓰기 -> 라이선스 -> 설치 -> 바로가기·앱실행 + 프로그램 추가/제거 정식 등록'}
               </p>
               <div className="font-mono text-[10px] text-emerald-500 font-semibold tabular-nums">
                 {safeName}_Setup_v{APP_VERSION}.exe

@@ -15,7 +15,7 @@
 #define MyAppMutex "Global\PowerControllerSingleInstanceMutex_f8908445,PowerController_SingleInstance_Mutex"
 
 [Setup]
-; NOTE: The value of AppId uniquely identifies this application.
+; NOTE: The value of AppId uniquely identifies this application in Windows Add/Remove Programs.
 AppId={{5A8C9B23-7F12-4D39-8C92-E6B3C0F59871}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
@@ -26,21 +26,29 @@ AppSupportURL={#MyAppURL}
 AppUpdatesURL={#MyAppURL}
 DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
+DisableProgramGroupPage=yes
 AllowNoIcons=yes
 LicenseFile=docs\LICENSE_ko.txt
 OutputDir=dist
 OutputBaseFilename=PowerController_Setup_v{#MyAppVersion}
 SetupIconFile=PowerController.ico
+; Windows 프로그램 추가/제거(제어판/설정) 정식 등록 지시어
+Uninstallable=yes
+CreateUninstallRegKey=yes
+UninstallDisplayName={#MyAppName} v{#MyAppVersion}
 UninstallDisplayIcon={app}\{#MyAppExeName}
+UninstallFilesDir={app}
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
+LanguageDetectionMethod=uilanguage
 PrivilegesRequired=admin
 PrivilegesRequiredOverridesAllowed=dialog
+; AppMutex 대신 InitializeSetup/InitializeUninstall 강제 종료 + Restart Manager 조합을 사용하여
+; 실행 중인 기존 앱을 사용자 개입 없이 즉시 자동 종료하고 설치 마법사를 바로 진행합니다.
 CloseApplications=force
 RestartApplications=no
 CloseApplicationsFilter=*.exe
-AppMutex={#MyAppMutex}
 ArchitecturesInstallIn64BitMode=x64compatible
 
 ; ===============================================================================
@@ -97,6 +105,13 @@ Source: "NetBeaconEngine.dll"; DestDir: "{app}"; Flags: ignoreversion skipifsour
 Source: "FirewallNative.dll"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "SysPowerHook.dll"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "ScheduleCrypto.dll"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "DiskFlushNative.dll"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "AudioDimmerNative.dll"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "DisplayDdcNative.dll"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "LowLevelInputIdleNative.dll"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "CommanderTcpDispatcherNative.dll"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "CommanderPingScannerNative.dll"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "PowerExecNative.dll"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "native_bridge.py"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "schedule_share_builder.py"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "Register_Firewall_Rules.bat"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
@@ -138,7 +153,7 @@ Filename: "netsh"; Parameters: "advfirewall firewall add rule name=""PowerContro
 Filename: "netsh"; Parameters: "advfirewall firewall add rule name=""PowerController v{#MyAppVersion} UDP 9985"" dir=in action=allow protocol=UDP localport=9985 enable=yes profile=any"; Flags: runhidden
 Filename: "netsh"; Parameters: "advfirewall firewall add rule name=""PowerController v{#MyAppVersion} UDP 9986"" dir=in action=allow protocol=UDP localport=9986 enable=yes profile=any"; Flags: runhidden
 
-; 프로그램 바로 실행 옵션
+; 프로그램 바로 실행 옵션 (완료 페이지 체크박스)
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram}"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
@@ -160,14 +175,26 @@ Filename: "netsh"; Parameters: "advfirewall firewall delete rule name=""PowerCon
 Filename: "netsh"; Parameters: "advfirewall firewall delete rule name=""PowerController"""; Flags: runhidden; RunOnceId: "DelFwRuleLegacyPC"
 
 [UninstallDelete]
+Type: files; Name: "{autodesktop}\{#MyAppName}.lnk"
+Type: files; Name: "{userdesktop}\{#MyAppName}.lnk"
 Type: files; Name: "{app}\*.log"
 Type: files; Name: "{app}\*.tmp"
 Type: files; Name: "{app}\*.old_*"
 Type: dirifempty; Name: "{app}"
 
 [Code]
+var
+  CleanInstallSelected: Boolean;
+  DesktopShortcutCheck: TNewCheckBox;
+  FinishedLayoutAdjusted: Boolean;
+
+function IsKoreanUI(): Boolean;
+begin
+  Result := (ActiveLanguage = 'korean');
+end;
+
 // ===============================================================================
-// 기존 실행 중인 프로세스 강제 종료 및 파일 락 즉시 해제 (무인/원격 설치 멈춤 원천 방지)
+// 1단계: 기존 실행 중인 프로세스 강제 종료 및 파일 락 즉시 해제
 // ===============================================================================
 procedure ForceKillProcess(const ExeName: String);
 var
@@ -177,7 +204,7 @@ begin
   BaseName := ChangeFileExt(ExeName, '');
   // 1. taskkill /F /T 트리 강제 종료 (최상위 및 모든 자식 프로세스 포함)
   Exec(ExpandConstant('{cmd}'), '/c taskkill.exe /F /T /IM "' + ExeName + '" >nul 2>&1', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-  
+
   // 2. PowerShell Stop-Process 보조 강제 종료
   Exec('powershell.exe', '-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "Get-Process -Name ''' + BaseName + ''' -ErrorAction SilentlyContinue | Stop-Process -Force"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 
@@ -190,6 +217,7 @@ begin
   ForceKillProcess('PowerController.exe');
   ForceKillProcess('PowerNetworkScheduler.exe');
   ForceKillProcess('ApplySharedSchedules.exe');
+  Sleep(250);
 end;
 
 procedure UnlockFileLock(const TargetExe: String);
@@ -225,27 +253,91 @@ begin
   UnlockFileLock(AddBackslash(TargetDir) + 'ApplySharedSchedules.exe');
 end;
 
-// 레지스트리 및 기본 시스템 경로에서 기존 설치 디렉터리 안전 조회 ({app} 상수 미사용)
-function GetInstalledPath(): String;
-var
-  RegKey: String;
+function QueryUninstallPath(const RootKey: Integer; const SubKey: String; var OutPath, OutUninst: String): Boolean;
 begin
-  Result := '';
-  // 1. AppId 기반 레지스트리 확인
-  RegKey := 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{5A8C9B23-7F12-4D39-8C92-E6B3C0F59871}_is1';
-  if not RegQueryStringValue(HKLM, RegKey, 'Inno Setup: App Path', Result) then
-    if not RegQueryStringValue(HKCU, RegKey, 'Inno Setup: App Path', Result) then
+  Result := False;
+  OutPath := '';
+  OutUninst := '';
+
+  if not RegKeyExists(RootKey, SubKey) then
+    Exit;
+
+  if not RegQueryStringValue(RootKey, SubKey, 'Inno Setup: App Path', OutPath) then
+    RegQueryStringValue(RootKey, SubKey, 'InstallLocation', OutPath);
+
+  if not RegQueryStringValue(RootKey, SubKey, 'QuietUninstallString', OutUninst) then
+    RegQueryStringValue(RootKey, SubKey, 'UninstallString', OutUninst);
+
+  if (OutPath = '') and (OutUninst <> '') then
+    OutPath := ExtractFileDir(RemoveQuotes(OutUninst));
+
+  Result := (OutPath <> '') or (OutUninst <> '');
+end;
+
+// 레지스트리(현재/레거시 Inno/레거시 Python) 및 기본 시스템 경로에서 기존 설치 디렉터리 안전 조회
+function GetExistingInstallInfo(var PrevPath, PrevUninst: String): Boolean;
+var
+  KeyInnoGuid, KeyInnoLegacy, KeyPyLegacy: String;
+begin
+  Result := False;
+  PrevPath := '';
+  PrevUninst := '';
+
+  KeyInnoGuid := 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{5A8C9B23-7F12-4D39-8C92-E6B3C0F59871}_is1';
+  KeyInnoLegacy := 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{#MyAppName}_is1';
+  KeyPyLegacy := 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{#MyAppName}';
+
+  if QueryUninstallPath(HKLM, KeyInnoGuid, PrevPath, PrevUninst) then
+  begin
+    Result := True;
+    Exit;
+  end;
+  if QueryUninstallPath(HKCU, KeyInnoGuid, PrevPath, PrevUninst) then
+  begin
+    Result := True;
+    Exit;
+  end;
+  if IsWin64 then
+  begin
+    if QueryUninstallPath(HKLM32, KeyInnoGuid, PrevPath, PrevUninst) then
     begin
-      // 2. 레거시 AppName 기반 레지스트리 확인
-      RegKey := 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{#MyAppName}_is1';
-      if not RegQueryStringValue(HKLM, RegKey, 'Inno Setup: App Path', Result) then
-        if not RegQueryStringValue(HKCU, RegKey, 'Inno Setup: App Path', Result) then
-        begin
-          // 3. 기본 Program Files 경로 폴백
-          if DirExists(ExpandConstant('{autopf}\{#MyAppName}')) then
-            Result := ExpandConstant('{autopf}\{#MyAppName}');
-        end;
+      Result := True;
+      Exit;
     end;
+    if QueryUninstallPath(HKCU32, KeyInnoGuid, PrevPath, PrevUninst) then
+    begin
+      Result := True;
+      Exit;
+    end;
+  end;
+
+  if QueryUninstallPath(HKLM, KeyInnoLegacy, PrevPath, PrevUninst) or
+     QueryUninstallPath(HKCU, KeyInnoLegacy, PrevPath, PrevUninst) or
+     QueryUninstallPath(HKCU, KeyPyLegacy, PrevPath, PrevUninst) or
+     QueryUninstallPath(HKLM, KeyPyLegacy, PrevPath, PrevUninst) then
+  begin
+    Result := True;
+    Exit;
+  end;
+
+  if DirExists(ExpandConstant('{autopf}\{#MyAppName}')) and
+     (FileExists(ExpandConstant('{autopf}\{#MyAppName}\{#MyAppExeName}')) or
+      FileExists(ExpandConstant('{autopf}\{#MyAppName}\unins000.exe'))) then
+  begin
+    PrevPath := ExpandConstant('{autopf}\{#MyAppName}');
+    Result := True;
+  end;
+end;
+
+procedure CleanupLegacyPythonUninstallKey();
+var
+  LegacyKey: String;
+begin
+  LegacyKey := 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{#MyAppName}';
+  if RegKeyExists(HKCU, LegacyKey) then
+    RegDeleteKeyIncludingSubkeys(HKCU, LegacyKey);
+  if RegKeyExists(HKLM, LegacyKey) then
+    RegDeleteKeyIncludingSubkeys(HKLM, LegacyKey);
 end;
 
 // ===============================================================================
@@ -337,97 +429,174 @@ begin
   SilentExec('netsh.exe advfirewall firewall delete rule name="PowerController v' + Ver + ' UDP 9986" >nul 2>&1');
 end;
 
-var
-  CleanInstallSelected: Boolean;
-
+// ===============================================================================
+// 설치 진행 순서 제어:
+//   1. 기존 앱 실행 중이면 즉시 강제 종료
+//   2. 기존 앱 설치 감지 시 사용자에게 삭제 / 덮어쓰기 선택 질의
+//   3. 라이선스 선언 (wpLicense)
+//   4. 설치 (wpSelectDir -> wpInstalling, 프로그램 추가/제거 정식 등록)
+//   5. 바탕화면 바로가기 체크 -> 6. 앱 실행 (wpFinished)
+// ===============================================================================
 function InitializeSetup(): Boolean;
 var
-  PrevPath, UninstExe: String;
+  PrevPath, PrevUninst, UninstExe: String;
   PromptMsg: String;
   UserChoice, ResultCode: Integer;
 begin
   Result := True;
   CleanInstallSelected := False;
+  FinishedLayoutAdjusted := False;
 
-  // 1. 설치 마법사 시작 전 실행 중인 모든 프로세스 강제 종료 ({app} 상수 절대 미사용)
+  // [순서 1] 실행 중인 기존 앱 즉시 강제 종료 ({app} 상수 미사용)
   KillAllPowerProcesses();
 
-  // 2. 기존 설치 디렉터리가 감지될 경우 처리
-  PrevPath := GetInstalledPath();
-  if (PrevPath <> '') and DirExists(PrevPath) then
+  // [순서 2] 기존 앱이 인스톨되어 있으면 사용자에게 삭제/덮어쓰기 질의 후 진행
+  if GetExistingInstallInfo(PrevPath, PrevUninst) then
   begin
-    UnlockDirectoryBinaries(PrevPath);
+    if PrevPath <> '' then
+      UnlockDirectoryBinaries(PrevPath);
 
-    // 대화형(GUI) 모드: 사용자에게 삭제(클린 설치) 또는 덮어쓰기(업그레이드) 선택 질의
     if not WizardSilent() then
     begin
-      PromptMsg := 
-        '⚠️ [기존 버전 설치 감지 / Existing Version Detected]' + #13#10#13#10 +
-        '시스템에 이미 설치된 PowerController가 감지되었습니다.' + #13#10 +
-        '  ▶ 설치 경로: ' + PrevPath + #13#10#13#10 +
-        '기존 버전을 먼저 완전히 삭제하고 새로 설치(클린 설치)하시겠습니까?' + #13#10#13#10 +
-        '  • [예 (Yes)]    : 기존 버전을 안전하게 삭제 후 클린 설치 (Clean Install, 권장)' + #13#10 +
-        '  • [아니오 (No)] : 기존 설정 및 파일 위에 덮어쓰기/업그레이드 설치 (Overwrite/Upgrade)' + #13#10 +
-        '  • [취소 (Cancel)]: 설치 마법사 종료' + #13#10#13#10 +
-        '------------------------------------------------------------' + #13#10 +
-        'Do you want to completely uninstall the previous version before installing?';
+      if IsKoreanUI() then
+      begin
+        PromptMsg :=
+          '[기존 버전 설치 감지]' + #13#10#13#10 +
+          '이 PC에 이미 PowerController가 설치되어 있습니다.' + #13#10 +
+          '  설치 경로: ' + PrevPath + #13#10#13#10 +
+          '기존 앱을 먼저 삭제한 뒤 새로 설치(클린 설치)하시겠습니까?' + #13#10#13#10 +
+          '  • [예 (Yes)]     : 기존 앱 삭제 후 새로 설치 (권장)' + #13#10 +
+          '  • [아니오 (No)]  : 기존 파일 위에 덮어쓰기(업그레이드) 설치' + #13#10 +
+          '  • [취소 (Cancel)]: 설치 취소';
+      end
+      else
+      begin
+        PromptMsg :=
+          '[Existing Installation Detected]' + #13#10#13#10 +
+          'PowerController is already installed on this computer.' + #13#10 +
+          '  Location: ' + PrevPath + #13#10#13#10 +
+          'Would you like to uninstall the existing version before installing?' + #13#10#13#10 +
+          '  - [Yes]    : Uninstall existing app first, then clean install (Recommended)' + #13#10 +
+          '  - [No]     : Overwrite / upgrade over existing installation' + #13#10 +
+          '  - [Cancel] : Exit setup';
+      end;
 
       UserChoice := MsgBox(PromptMsg, mbConfirmation, MB_YESNOCANCEL);
       if UserChoice = IDYES then
-      begin
-        CleanInstallSelected := True;
-      end
+        CleanInstallSelected := True
       else if UserChoice = IDCANCEL then
       begin
         Result := False;
         Exit;
       end;
-      // IDNO 선택 시: CleanInstallSelected := False 유지하며 기존 파일 위에 덮어쓰기 진행
     end
     else
     begin
-      // 무인 설치(Silent / VerySilent) 모드인 경우:
-      // 커맨드라인 스위치 /CLEAN 또는 /CLEANINSTALL 이 전달된 경우에만 삭제 후 재설치 진행
-      // 기본값은 시스템 관리자 원격 배포에 안전한 무중단 덮어쓰기/업그레이드(Overwrite)
       if (ExpandConstant('{param:clean|0}') = '1') or (ExpandConstant('{param:cleaninstall|0}') = '1') then
         CleanInstallSelected := True;
     end;
 
-    // 클린 설치(삭제) 모드 선택된 경우 기존 언인스톨러 조용히 실행
     if CleanInstallSelected then
     begin
-      UninstExe := AddBackslash(PrevPath) + 'unins000.exe';
-      if not FileExists(UninstExe) then
-        UninstExe := AddBackslash(PrevPath) + 'unins001.exe';
+      UninstExe := '';
+      if PrevPath <> '' then
+      begin
+        if FileExists(AddBackslash(PrevPath) + 'unins000.exe') then
+          UninstExe := AddBackslash(PrevPath) + 'unins000.exe'
+        else if FileExists(AddBackslash(PrevPath) + 'unins001.exe') then
+          UninstExe := AddBackslash(PrevPath) + 'unins001.exe';
+      end;
 
-      if FileExists(UninstExe) then
+      if UninstExe <> '' then
       begin
         Exec(UninstExe, '/SILENT /VERYSILENT /SUPPRESSMSGBOXES /NORESTART', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
         Sleep(800);
+      end
+      else if PrevUninst <> '' then
+      begin
+        Exec(ExpandConstant('{cmd}'), '/c ' + PrevUninst + ' --silent', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+        Sleep(800);
       end;
-      UnlockDirectoryBinaries(PrevPath);
+
+      CleanupLegacyPythonUninstallKey();
+      if PrevPath <> '' then
+        UnlockDirectoryBinaries(PrevPath);
     end;
+  end;
+end;
+
+procedure InitializeWizard();
+begin
+  // [순서 5] 설치 완료 화면(wpFinished)에 배치할 바탕화면 바로가기 체크박스 생성
+  DesktopShortcutCheck := TNewCheckBox.Create(WizardForm);
+  DesktopShortcutCheck.Parent := WizardForm.FinishedPage;
+  DesktopShortcutCheck.Caption := ExpandConstant('{cm:CreateDesktopIcon}');
+  DesktopShortcutCheck.Checked := True;
+  DesktopShortcutCheck.Visible := False;
+end;
+
+function ShouldSkipPage(PageID: Integer): Boolean;
+begin
+  Result := False;
+  // GUI 설치 시 바탕화면 바로가기 체크를 설치 완료 직후(wpFinished) 단계에서 제공하기 위해 별도 Tasks 페이지는 건너뜀
+  // (무인 설치 /SILENT /TASKS="..." 는 영향 없이 그대로 동작)
+  if (not WizardSilent()) and (PageID = wpSelectTasks) then
+    Result := True;
+end;
+
+procedure CurPageChanged(CurPageID: Integer);
+var
+  OffsetY: Integer;
+begin
+  if (CurPageID = wpFinished) and (not WizardSilent()) and (DesktopShortcutCheck <> nil) then
+  begin
+    DesktopShortcutCheck.Left := WizardForm.RunList.Left;
+    DesktopShortcutCheck.Width := WizardForm.RunList.Width;
+    DesktopShortcutCheck.Height := ScaleY(20);
+
+    if not FinishedLayoutAdjusted then
+    begin
+      FinishedLayoutAdjusted := True;
+      DesktopShortcutCheck.Top := WizardForm.RunList.Top;
+      OffsetY := ScaleY(24);
+      if WizardForm.RunList.Visible then
+      begin
+        WizardForm.RunList.Top := WizardForm.RunList.Top + OffsetY;
+        if WizardForm.RunList.Height > OffsetY + ScaleY(20) then
+          WizardForm.RunList.Height := WizardForm.RunList.Height - OffsetY;
+      end;
+    end;
+    DesktopShortcutCheck.Visible := True;
   end;
 end;
 
 function NextButtonClick(CurPageID: Integer): Boolean;
 var
   TargetDir, PromptMsg: String;
+  DesktopLnk, UserDesktopLnk: String;
   UserChoice: Integer;
 begin
   Result := True;
   if CurPageID = wpSelectDir then
   begin
     TargetDir := WizardDirValue;
-    // 이전에 InitializeSetup에서 이미 클린 처리하지 않았고, 선택한 디렉토리에 기존 실행파일이 존재하는 경우
+    // 사용자 지정 폴더에 기존 실행파일이 존재할 경우 덮어쓰기 확인
     if (not CleanInstallSelected) and DirExists(TargetDir) and FileExists(AddBackslash(TargetDir) + '{#MyAppExeName}') then
     begin
-      PromptMsg := 
-        '선택하신 폴더에 이미 PowerController 프로그램 파일이 존재합니다.' + #13#10#13#10 +
-        '  ▶ 대상 경로: ' + TargetDir + #13#10#13#10 +
-        '해당 폴더에 기존 파일을 덮어쓰기(업그레이드)하여 설치를 계속하시겠습니까?' + #13#10#13#10 +
-        '  • [확인 (OK)]  : 기존 파일 위에 덮어쓰기 계속' + #13#10 +
-        '  • [취소 (Cancel)]: 다른 폴더 선택으로 돌아가기';
+      if IsKoreanUI() then
+      begin
+        PromptMsg :=
+          '선택하신 폴더에 이미 PowerController 프로그램 파일이 존재합니다.' + #13#10#13#10 +
+          '  대상 경로: ' + TargetDir + #13#10#13#10 +
+          '기존 파일을 덮어쓰기(업그레이드)하여 설치를 계속하시겠습니까?';
+      end
+      else
+      begin
+        PromptMsg :=
+          'PowerController already exists in the selected folder.' + #13#10#13#10 +
+          '  Target folder: ' + TargetDir + #13#10#13#10 +
+          'Overwrite existing files and continue installation?';
+      end;
       UserChoice := MsgBox(PromptMsg, mbConfirmation, MB_OKCANCEL);
       if UserChoice <> IDOK then
       begin
@@ -435,28 +604,55 @@ begin
         Exit;
       end;
     end;
+  end
+  else if CurPageID = wpFinished then
+  begin
+    // [순서 5] 완료 버튼 클릭 시 바탕화면 바로가기 체크 상태 최종 반영 후 [순서 6] 앱 실행
+    DesktopLnk := ExpandConstant('{autodesktop}\{#MyAppName}.lnk');
+    UserDesktopLnk := ExpandConstant('{userdesktop}\{#MyAppName}.lnk');
+
+    if (DesktopShortcutCheck <> nil) and (not DesktopShortcutCheck.Checked) then
+    begin
+      if FileExists(DesktopLnk) then DeleteFile(DesktopLnk);
+      if FileExists(UserDesktopLnk) then DeleteFile(UserDesktopLnk);
+    end
+    else if (DesktopShortcutCheck <> nil) and DesktopShortcutCheck.Checked then
+    begin
+      if not FileExists(DesktopLnk) then
+      begin
+        CreateShellLink(
+          DesktopLnk,
+          '{#MyAppName}',
+          ExpandConstant('{app}\{#MyAppExeName}'),
+          '',
+          ExpandConstant('{app}'),
+          ExpandConstant('{app}\PowerController.ico'),
+          0,
+          SW_SHOWNORMAL
+        );
+      end;
+    end;
   end;
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
-  // 파일 복사(추출) 직전(ssInstall) 단계: 사용자가 설치 폴더를 확정한 시점이므로 {app} 상수가 100% 안전하게 초기화됨
+  // 파일 복사(추출) 직전(ssInstall) 단계: 실행 중 프로세스 재확인 종료 및 락 해제
   if CurStep = ssInstall then
   begin
     KillAllPowerProcesses();
     UnlockDirectoryBinaries(ExpandConstant('{app}'));
   end
-  // 파일 추출 직후 및 프로그램 실행 전(ssPostInstall) 단계:
-  // 설치 프로그램(Installer)에서 방화벽 규칙을 사전에 조용히 등록 (메인 및 커맨더 2개 모두 + 버전 정보가 붙은 앱 이름도 등록)
+  // 파일 추출 직후(ssPostInstall): 레거시 Python 언인스톨 키 중복 정리 및 방화벽 규칙 사전 무음 등록
   else if CurStep = ssPostInstall then
   begin
+    CleanupLegacyPythonUninstallKey();
     RegisterFirewallRulesSilently();
   end;
 end;
 
 function InitializeUninstall(): Boolean;
 begin
-  // 언인스톨 시작 시에는 {app} 상수가 이미 초기화되어 있으므로 안전하게 호출 가능
   KillAllPowerProcesses();
   UnlockDirectoryBinaries(ExpandConstant('{app}'));
   Result := True;
@@ -471,7 +667,7 @@ begin
   end
   else if CurUninstallStep = usPostUninstall then
   begin
-    // 언인스톨 완료 후 잔류 방화벽 규칙 모두 소거
+    CleanupLegacyPythonUninstallKey();
     RemoveFirewallRulesSilently();
   end;
 end;

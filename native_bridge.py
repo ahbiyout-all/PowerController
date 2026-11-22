@@ -1050,16 +1050,19 @@ def lock_workstation_fast() -> bool:
         try:
             return bool(ctypes.windll.user32.LockWorkStation())
         except Exception:
-            import os
-            os.system("rundll32.exe user32.dll,LockWorkStation")
-            return True
+            try:
+                flags = getattr(subprocess, 'CREATE_NO_WINDOW', 0x08000000)
+                subprocess.run(["rundll32.exe", "user32.dll,LockWorkStation"], capture_output=True, creationflags=flags)
+                return True
+            except Exception:
+                return False
     return False
 
 
 def turn_off_monitor_fast() -> bool:
     """
     PowerShell 및 인라인 C# 컴파일 오버헤드(2~3초 지연, 콘솔 깜빡임) 없이
-    0.0001초 만에 네이티브 윈도우 메시지로 모니터를 절전(화면 끄기) 모드로 전환합니다.
+    0.0001초 만에 비차단 윈도우 메시지(SendMessageTimeoutW)로 모니터를 절전(화면 끄기) 모드로 전환합니다.
     """
     if _IS_POWERHOOK_LOADED and _POWERHOOK_DLL:
         try:
@@ -1070,7 +1073,13 @@ def turn_off_monitor_fast() -> bool:
     if os.name == 'nt':
         try:
             # HWND_BROADCAST (0xFFFF), WM_SYSCOMMAND (0x0112), SC_MONITORPOWER (0xF170), 2 (Power off)
-            ctypes.windll.user32.SendMessageW(0xFFFF, 0x0112, 0xF170, 2)
+            # SMTO_ABORTIFHUNG | SMTO_BLOCK (0x0003), timeout 500ms
+            res = ctypes.c_ulong(0)
+            ok = ctypes.windll.user32.SendMessageTimeoutW(
+                0xFFFF, 0x0112, 0xF170, 2, 0x0003, 500, ctypes.byref(res)
+            )
+            if not ok:
+                ctypes.windll.user32.SendNotifyMessageW(0xFFFF, 0x0112, 0xF170, 2)
             return True
         except Exception:
             pass
@@ -1243,15 +1252,18 @@ def decrypt_schedule_payload(encrypted_b64: str, master_key: str = "") -> Option
 
 
 # ==============================================================================
-# 6. DiskFlushNative.dll: Atomic Disk Cache & Volume Buffer Flush
+# 8. DiskFlushNative.dll: Atomic Disk Cache & Volume Buffer Flush
 # ==============================================================================
 
 _DISKFLUSH_DLL: Optional[ctypes.CDLL] = None
 _IS_DISKFLUSH_LOADED: bool = False
 
+
 def _init_diskflush_dll():
     global _DISKFLUSH_DLL, _IS_DISKFLUSH_LOADED
     if _IS_DISKFLUSH_LOADED:
+        return
+    if os.name != 'nt':
         return
     path = _find_dll_in_candidates("DiskFlushNative.dll")
     if path:
@@ -1261,22 +1273,37 @@ def _init_diskflush_dll():
             dll.NativeFlushAllVolumes.restype = ctypes.c_int
             dll.NativePreShutdownSync.argtypes = []
             dll.NativePreShutdownSync.restype = ctypes.c_int
+            if hasattr(dll, "NativeFlushSingleDrive"):
+                dll.NativeFlushSingleDrive.argtypes = [ctypes.c_wchar]
+                dll.NativeFlushSingleDrive.restype = ctypes.c_int
+            if hasattr(dll, "NativeFlushFilePath"):
+                dll.NativeFlushFilePath.argtypes = [ctypes.c_wchar_p]
+                dll.NativeFlushFilePath.restype = ctypes.c_int
             _DISKFLUSH_DLL = dll
             _IS_DISKFLUSH_LOADED = True
         except Exception:
             _DISKFLUSH_DLL = None
+            _IS_DISKFLUSH_LOADED = False
+
+
+def is_disk_flush_loaded() -> bool:
+    """순수 창작 DiskFlushNative.dll 모듈이 활성화되어 있는지 반환합니다."""
+    _init_diskflush_dll()
+    return _IS_DISKFLUSH_LOADED
 
 
 def flush_all_volumes_sync() -> int:
     """모든 마운트된 디스크 드라이브의 파일시스템 캐시를 강제 플러시하여 데이터 손실을 방지합니다."""
     _init_diskflush_dll()
-    if _DISKFLUSH_DLL:
+    if _IS_DISKFLUSH_LOADED and _DISKFLUSH_DLL:
         try:
-            return _DISKFLUSH_DLL.NativeFlushAllVolumes()
+            return int(_DISKFLUSH_DLL.NativeFlushAllVolumes())
         except Exception:
             pass
 
-    # Fallback: Flush via kernel32 if available
+    if os.name != 'nt':
+        return 0
+
     count = 0
     try:
         import string
@@ -1284,11 +1311,11 @@ def flush_all_volumes_sync() -> int:
             vol_path = f"\\\\.\\{letter}:"
             h_vol = ctypes.windll.kernel32.CreateFileW(
                 vol_path,
-                0xC0000000, # GENERIC_READ | GENERIC_WRITE
-                3,          # FILE_SHARE_READ | FILE_SHARE_WRITE
+                0xC0000000,  # GENERIC_READ | GENERIC_WRITE
+                3,           # FILE_SHARE_READ | FILE_SHARE_WRITE
                 None,
-                3,          # OPEN_EXISTING
-                0x80,       # FILE_ATTRIBUTE_NORMAL
+                3,           # OPEN_EXISTING
+                0x80,        # FILE_ATTRIBUTE_NORMAL
                 None
             )
             if h_vol != -1 and h_vol != 0:
@@ -1300,16 +1327,30 @@ def flush_all_volumes_sync() -> int:
     return count
 
 
+def pre_shutdown_sync() -> bool:
+    """종료/절전 직전 레지스트리 하이브(RegFlushKey) 및 모든 디스크 볼륨 캐시를 원자적으로 동기화합니다."""
+    _init_diskflush_dll()
+    if _IS_DISKFLUSH_LOADED and _DISKFLUSH_DLL:
+        try:
+            return bool(_DISKFLUSH_DLL.NativePreShutdownSync())
+        except Exception:
+            pass
+    return flush_all_volumes_sync() > 0
+
+
 # ==============================================================================
-# 7. AudioDimmerNative.dll: Core Audio Smooth Volume Fade & Mute
+# 9. AudioDimmerNative.dll: Core Audio Smooth Volume Fade & Mute
 # ==============================================================================
 
 _AUDIODIMMER_DLL: Optional[ctypes.CDLL] = None
 _IS_AUDIODIMMER_LOADED: bool = False
 
+
 def _init_audiodimmer_dll():
     global _AUDIODIMMER_DLL, _IS_AUDIODIMMER_LOADED
     if _IS_AUDIODIMMER_LOADED:
+        return
+    if os.name != 'nt':
         return
     path = _find_dll_in_candidates("AudioDimmerNative.dll")
     if path:
@@ -1327,12 +1368,19 @@ def _init_audiodimmer_dll():
             _IS_AUDIODIMMER_LOADED = True
         except Exception:
             _AUDIODIMMER_DLL = None
+            _IS_AUDIODIMMER_LOADED = False
+
+
+def is_audio_dimmer_loaded() -> bool:
+    """순수 창작 AudioDimmerNative.dll 모듈이 활성화되어 있는지 반환합니다."""
+    _init_audiodimmer_dll()
+    return _IS_AUDIODIMMER_LOADED
 
 
 def fade_master_volume_sync(target_scalar: float = 0.0, fade_ms: int = 3000) -> bool:
     """오디오 출력 음량을 target_scalar(0.0~1.0)까지 fade_ms 동안 부드럽게 페이드다운합니다."""
     _init_audiodimmer_dll()
-    if _AUDIODIMMER_DLL:
+    if _IS_AUDIODIMMER_LOADED and _AUDIODIMMER_DLL:
         try:
             return bool(_AUDIODIMMER_DLL.NativeFadeMasterVolume(ctypes.c_float(target_scalar), ctypes.c_int(fade_ms)))
         except Exception:
@@ -1341,15 +1389,18 @@ def fade_master_volume_sync(target_scalar: float = 0.0, fade_ms: int = 3000) -> 
 
 
 # ==============================================================================
-# 8. DisplayDdcNative.dll: Hardware VESA DDC/CI Backlight Brightness Control
+# 10. DisplayDdcNative.dll: Hardware VESA DDC/CI Backlight Brightness Control
 # ==============================================================================
 
 _DISPLAYDDC_DLL: Optional[ctypes.CDLL] = None
 _IS_DISPLAYDDC_LOADED: bool = False
 
+
 def _init_displayddc_dll():
     global _DISPLAYDDC_DLL, _IS_DISPLAYDDC_LOADED
     if _IS_DISPLAYDDC_LOADED:
+        return
+    if os.name != 'nt':
         return
     path = _find_dll_in_candidates("DisplayDdcNative.dll")
     if path:
@@ -1357,33 +1408,57 @@ def _init_displayddc_dll():
             dll = ctypes.CDLL(path)
             dll.NativeSetHardwareBrightness.argtypes = [ctypes.c_int]
             dll.NativeSetHardwareBrightness.restype = ctypes.c_int
+            if hasattr(dll, "NativeGetHardwareBrightness"):
+                dll.NativeGetHardwareBrightness.argtypes = []
+                dll.NativeGetHardwareBrightness.restype = ctypes.c_int
             _DISPLAYDDC_DLL = dll
             _IS_DISPLAYDDC_LOADED = True
         except Exception:
             _DISPLAYDDC_DLL = None
+            _IS_DISPLAYDDC_LOADED = False
+
+
+def is_display_ddc_loaded() -> bool:
+    """순수 창작 DisplayDdcNative.dll 모듈이 활성화되어 있는지 반환합니다."""
+    _init_displayddc_dll()
+    return _IS_DISPLAYDDC_LOADED
 
 
 def set_hardware_brightness_sync(brightness_percent: int) -> int:
     """연결된 물리 모니터의 하드웨어 백라이트 밝기(0~100)를 변경합니다."""
     _init_displayddc_dll()
-    if _DISPLAYDDC_DLL:
+    if _IS_DISPLAYDDC_LOADED and _DISPLAYDDC_DLL:
         try:
-            return _DISPLAYDDC_DLL.NativeSetHardwareBrightness(ctypes.c_int(brightness_percent))
+            return int(_DISPLAYDDC_DLL.NativeSetHardwareBrightness(ctypes.c_int(brightness_percent)))
         except Exception:
             pass
     return 0
 
 
+def get_hardware_brightness() -> int:
+    """연결된 물리 모니터의 현재 하드웨어 백라이트 밝기(0~100, 미지원 시 -1)를 조회합니다."""
+    _init_displayddc_dll()
+    if _IS_DISPLAYDDC_LOADED and _DISPLAYDDC_DLL and hasattr(_DISPLAYDDC_DLL, "NativeGetHardwareBrightness"):
+        try:
+            return int(_DISPLAYDDC_DLL.NativeGetHardwareBrightness())
+        except Exception:
+            pass
+    return -1
+
+
 # ==============================================================================
-# 9. LowLevelInputIdleNative.dll: Low-Level User Input Inactivity Telemetry
+# 11. LowLevelInputIdleNative.dll: Low-Level User Input Inactivity Telemetry
 # ==============================================================================
 
 _INPUTIDLE_DLL: Optional[ctypes.CDLL] = None
 _IS_INPUTIDLE_LOADED: bool = False
 
+
 def _init_inputidle_dll():
     global _INPUTIDLE_DLL, _IS_INPUTIDLE_LOADED
     if _IS_INPUTIDLE_LOADED:
+        return
+    if os.name != 'nt':
         return
     path = _find_dll_in_candidates("LowLevelInputIdleNative.dll")
     if path:
@@ -1399,51 +1474,133 @@ def _init_inputidle_dll():
             _IS_INPUTIDLE_LOADED = True
         except Exception:
             _INPUTIDLE_DLL = None
+            _IS_INPUTIDLE_LOADED = False
+
+
+def is_input_idle_loaded() -> bool:
+    """순수 창작 LowLevelInputIdleNative.dll 모듈이 활성화되어 있는지 반환합니다."""
+    _init_inputidle_dll()
+    return _IS_INPUTIDLE_LOADED
 
 
 def get_system_idle_seconds() -> float:
-    """마지막 사용자 입력 이후 경과된 유휴 시간(초)을 반환합니다."""
+    """마지막 사용자 입력 이후 경과된 유휴 시간(초)을 32비트 롤오버 보정과 함께 반환합니다."""
     _init_inputidle_dll()
-    if _INPUTIDLE_DLL:
+    if _IS_INPUTIDLE_LOADED and _INPUTIDLE_DLL:
         try:
             return float(_INPUTIDLE_DLL.NativeGetSystemIdleSeconds())
         except Exception:
             pass
 
-    # Fallback: GetLastInputInfo via ctypes.windll
-    try:
-        class LASTINPUTINFO(ctypes.Structure):
-            _fields_ = [("cbSize", ctypes.c_uint), ("dwTime", ctypes.c_uint)]
-        
-        lii = LASTINPUTINFO()
-        lii.cbSize = ctypes.sizeof(LASTINPUTINFO)
-        if ctypes.windll.user32.GetLastInputInfo(ctypes.byref(lii)):
-            millis = ctypes.windll.kernel32.GetTickCount() - lii.dwTime
-            return max(0.0, millis / 1000.0)
-    except Exception:
-        pass
+    if os.name == 'nt':
+        try:
+            class LASTINPUTINFO(ctypes.Structure):
+                _fields_ = [("cbSize", ctypes.c_uint), ("dwTime", ctypes.c_uint)]
+
+            lii = LASTINPUTINFO()
+            lii.cbSize = ctypes.sizeof(LASTINPUTINFO)
+            if ctypes.windll.user32.GetLastInputInfo(ctypes.byref(lii)):
+                tick = ctypes.windll.kernel32.GetTickCount() & 0xFFFFFFFF
+                millis = (tick - (lii.dwTime & 0xFFFFFFFF)) & 0xFFFFFFFF
+                return float(millis) / 1000.0
+        except Exception:
+            pass
     return 0.0
 
 
 # ==============================================================================
-# 10. Commander Native Modules: Fast TCP Dispatcher, ICMP/ARP Scanner, WoL
+# 12. Commander Native Modules: Fast TCP Dispatcher, ICMP/ARP Scanner, WoL
 # ==============================================================================
 
 _COMMANDER_DISPATCHER_DLL: Optional[ctypes.CDLL] = None
+_IS_COMMANDER_DISPATCHER_LOADED: bool = False
 _COMMANDER_SCANNER_DLL: Optional[ctypes.CDLL] = None
+_IS_COMMANDER_SCANNER_LOADED: bool = False
+
+
+class _TargetPcStatusStruct(ctypes.Structure):
+    _fields_ = [
+        ("ip", ctypes.c_char * 64),
+        ("is_online", ctypes.c_int),
+        ("round_trip_ms", ctypes.c_ulong),
+        ("mac_address", ctypes.c_char * 32),
+    ]
+
+
+def _init_commander_dispatcher_dll():
+    global _COMMANDER_DISPATCHER_DLL, _IS_COMMANDER_DISPATCHER_LOADED
+    if _IS_COMMANDER_DISPATCHER_LOADED:
+        return
+    if os.name != 'nt':
+        return
+    path = _find_dll_in_candidates("CommanderTcpDispatcherNative.dll")
+    if path:
+        try:
+            dll = ctypes.CDLL(path)
+            dll.NativeSendSingleRuleCommand.argtypes = [ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_int]
+            dll.NativeSendSingleRuleCommand.restype = ctypes.c_int
+            dll.NativeBroadcastCommandFast.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int]
+            dll.NativeBroadcastCommandFast.restype = ctypes.c_int
+            if hasattr(dll, "NativeSendRuleCommandWithAck"):
+                dll.NativeSendRuleCommandWithAck.argtypes = [
+                    ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_int,
+                    ctypes.c_int, ctypes.c_char_p, ctypes.c_int
+                ]
+                dll.NativeSendRuleCommandWithAck.restype = ctypes.c_int
+            _COMMANDER_DISPATCHER_DLL = dll
+            _IS_COMMANDER_DISPATCHER_LOADED = True
+        except Exception:
+            _COMMANDER_DISPATCHER_DLL = None
+            _IS_COMMANDER_DISPATCHER_LOADED = False
+
+
+def _init_commander_scanner_dll():
+    global _COMMANDER_SCANNER_DLL, _IS_COMMANDER_SCANNER_LOADED
+    if _IS_COMMANDER_SCANNER_LOADED:
+        return
+    if os.name != 'nt':
+        return
+    path = _find_dll_in_candidates("CommanderPingScannerNative.dll")
+    if path:
+        try:
+            dll = ctypes.CDLL(path)
+            dll.NativePingSingleTarget.argtypes = [ctypes.c_char_p, ctypes.c_ulong, ctypes.POINTER(ctypes.c_ulong)]
+            dll.NativePingSingleTarget.restype = ctypes.c_int
+            dll.NativeSendArpProbe.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_int]
+            dll.NativeSendArpProbe.restype = ctypes.c_int
+            dll.NativeSendWakeOnLan.argtypes = [ctypes.c_char_p, ctypes.c_int]
+            dll.NativeSendWakeOnLan.restype = ctypes.c_int
+            if hasattr(dll, "NativeSendWakeOnLanEx"):
+                dll.NativeSendWakeOnLanEx.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_int]
+                dll.NativeSendWakeOnLanEx.restype = ctypes.c_int
+            if hasattr(dll, "NativeBatchScanLanTargets"):
+                dll.NativeBatchScanLanTargets.argtypes = [
+                    ctypes.POINTER(_TargetPcStatusStruct), ctypes.c_int, ctypes.c_ulong
+                ]
+                dll.NativeBatchScanLanTargets.restype = ctypes.c_int
+            _COMMANDER_SCANNER_DLL = dll
+            _IS_COMMANDER_SCANNER_LOADED = True
+        except Exception:
+            _COMMANDER_SCANNER_DLL = None
+            _IS_COMMANDER_SCANNER_LOADED = False
+
+
+def is_commander_dispatcher_loaded() -> bool:
+    """순수 창작 CommanderTcpDispatcherNative.dll 모듈이 활성화되어 있는지 반환합니다."""
+    _init_commander_dispatcher_dll()
+    return _IS_COMMANDER_DISPATCHER_LOADED
+
+
+def is_commander_scanner_loaded() -> bool:
+    """순수 창작 CommanderPingScannerNative.dll 모듈이 활성화되어 있는지 반환합니다."""
+    _init_commander_scanner_dll()
+    return _IS_COMMANDER_SCANNER_LOADED
+
 
 def send_rule_to_target_pc(target_ip: str, port: int, payload_bytes: bytes) -> bool:
     """커맨더 전용: 단일 대상 PC(TCP 9988)로 암호화된 예약 스케줄 봉투를 초고속 전송합니다."""
-    global _COMMANDER_DISPATCHER_DLL
-    if _COMMANDER_DISPATCHER_DLL is None:
-        path = _find_dll_in_candidates("CommanderTcpDispatcherNative.dll")
-        if path:
-            try:
-                _COMMANDER_DISPATCHER_DLL = ctypes.CDLL(path)
-            except Exception:
-                _COMMANDER_DISPATCHER_DLL = None
-
-    if _COMMANDER_DISPATCHER_DLL:
+    _init_commander_dispatcher_dll()
+    if _IS_COMMANDER_DISPATCHER_LOADED and _COMMANDER_DISPATCHER_DLL:
         try:
             return bool(_COMMANDER_DISPATCHER_DLL.NativeSendSingleRuleCommand(
                 target_ip.encode('utf-8'), ctypes.c_int(port), payload_bytes, ctypes.c_int(len(payload_bytes))
@@ -1451,7 +1608,6 @@ def send_rule_to_target_pc(target_ip: str, port: int, payload_bytes: bytes) -> b
         except Exception:
             pass
 
-    # Fallback: socket in Python
     try:
         import socket
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -1463,18 +1619,32 @@ def send_rule_to_target_pc(target_ip: str, port: int, payload_bytes: bytes) -> b
         return False
 
 
+def send_payload_with_ack(target_ip: str, port: int, payload_bytes: bytes, timeout_ms: int = 1100) -> Optional[bytes]:
+    """커맨더 전용: 논블로킹 Winsock2 connect+select 타임아웃으로 페이로드를 전송하고 ACK 바이트를 반환합니다. 실패 시 None."""
+    _init_commander_dispatcher_dll()
+    if _IS_COMMANDER_DISPATCHER_LOADED and _COMMANDER_DISPATCHER_DLL and hasattr(_COMMANDER_DISPATCHER_DLL, "NativeSendRuleCommandWithAck"):
+        try:
+            ack_buf = ctypes.create_string_buffer(8192)
+            recvd = _COMMANDER_DISPATCHER_DLL.NativeSendRuleCommandWithAck(
+                target_ip.encode('utf-8'),
+                ctypes.c_int(port if port > 0 else 9988),
+                payload_bytes,
+                ctypes.c_int(len(payload_bytes)),
+                ctypes.c_int(timeout_ms),
+                ack_buf,
+                8192
+            )
+            if recvd >= 0:
+                return ack_buf.raw[:recvd]
+        except Exception:
+            pass
+    return None
+
+
 def ping_single_target_pc(target_ip: str, timeout_ms: int = 500) -> bool:
     """커맨더 전용: 대상 PC가 LAN 상에서 켜져 있는지 C 레벨 원자적 ICMP Ping 스캔을 수행합니다."""
-    global _COMMANDER_SCANNER_DLL
-    if _COMMANDER_SCANNER_DLL is None:
-        path = _find_dll_in_candidates("CommanderPingScannerNative.dll")
-        if path:
-            try:
-                _COMMANDER_SCANNER_DLL = ctypes.CDLL(path)
-            except Exception:
-                _COMMANDER_SCANNER_DLL = None
-
-    if _COMMANDER_SCANNER_DLL:
+    _init_commander_scanner_dll()
+    if _IS_COMMANDER_SCANNER_LOADED and _COMMANDER_SCANNER_DLL:
         try:
             rtt = ctypes.c_ulong(0)
             return bool(_COMMANDER_SCANNER_DLL.NativePingSingleTarget(
@@ -1483,33 +1653,79 @@ def ping_single_target_pc(target_ip: str, timeout_ms: int = 500) -> bool:
         except Exception:
             pass
 
-    # Fallback: ping via subprocess
     try:
-        import subprocess
-        res = subprocess.run(["ping", "-n", "1", "-w", str(timeout_ms), target_ip], capture_output=True)
+        flags = getattr(subprocess, 'CREATE_NO_WINDOW', 0x08000000) if os.name == 'nt' else 0
+        cmd = ["ping", "-n", "1", "-w", str(timeout_ms), target_ip] if os.name == 'nt' else ["ping", "-c", "1", "-W", "1", target_ip]
+        res = subprocess.run(cmd, capture_output=True, creationflags=flags)
         return res.returncode == 0
     except Exception:
         return False
 
 
-def send_wake_on_lan(mac_address: str, port: int = 9) -> bool:
-    """커맨더 전용: 꺼져 있는 대상 PC를 깨우기 위해 Wake-on-LAN Magic Packet을 송출합니다."""
-    global _COMMANDER_SCANNER_DLL
-    if _COMMANDER_SCANNER_DLL is None:
-        path = _find_dll_in_candidates("CommanderPingScannerNative.dll")
-        if path:
-            try:
-                _COMMANDER_SCANNER_DLL = ctypes.CDLL(path)
-            except Exception:
-                _COMMANDER_SCANNER_DLL = None
-
-    if _COMMANDER_SCANNER_DLL:
+def resolve_mac_via_arp(target_ip: str) -> str:
+    """커맨더 전용: arp -a 서브프로세스 없이 C 레벨 SendARP로 LAN 대상의 MAC 주소를 즉각 조회합니다."""
+    if not target_ip:
+        return ""
+    _init_commander_scanner_dll()
+    if _IS_COMMANDER_SCANNER_LOADED and _COMMANDER_SCANNER_DLL:
         try:
-            return bool(_COMMANDER_SCANNER_DLL.NativeSendWakeOnLan(mac_address.encode('utf-8'), ctypes.c_int(port)))
+            mac_buf = ctypes.create_string_buffer(32)
+            if _COMMANDER_SCANNER_DLL.NativeSendArpProbe(target_ip.encode('utf-8'), mac_buf, 32):
+                return mac_buf.value.decode('ascii', errors='ignore').strip().upper()
+        except Exception:
+            pass
+    return ""
+
+
+def batch_scan_lan_targets(ip_list: list, timeout_ms: int = 350) -> Optional[dict]:
+    """
+    커맨더 50~254대 병렬 스캐너: C 스레드풀에서 ICMP Echo + SendARP를 병렬 실행하여
+    {ip: {'online': bool, 'rtt_ms': int, 'mac': str}} 딕셔너리를 초고속 반환합니다.
+    DLL 미로드 시 None을 반환하여 Python 스캐너로 안전 폴백합니다.
+    """
+    if not ip_list:
+        return {}
+    _init_commander_scanner_dll()
+    if _IS_COMMANDER_SCANNER_LOADED and _COMMANDER_SCANNER_DLL and hasattr(_COMMANDER_SCANNER_DLL, "NativeBatchScanLanTargets"):
+        try:
+            count = len(ip_list)
+            ArrType = _TargetPcStatusStruct * count
+            arr = ArrType()
+            for idx, ip_str in enumerate(ip_list):
+                arr[idx].ip = str(ip_str).encode('utf-8')[:63]
+                arr[idx].is_online = 0
+                arr[idx].round_trip_ms = 0
+                arr[idx].mac_address = b""
+            _COMMANDER_SCANNER_DLL.NativeBatchScanLanTargets(arr, ctypes.c_int(count), ctypes.c_ulong(timeout_ms))
+            result = {}
+            for idx in range(count):
+                ip_val = arr[idx].ip.decode('utf-8', errors='ignore')
+                result[ip_val] = {
+                    "online": bool(arr[idx].is_online),
+                    "rtt_ms": int(arr[idx].round_trip_ms),
+                    "mac": arr[idx].mac_address.decode('ascii', errors='ignore').strip().upper(),
+                }
+            return result
+        except Exception:
+            pass
+    return None
+
+
+def send_wake_on_lan(mac_address: str, port: int = 9, broadcast_ip: str = "") -> bool:
+    """커맨더 전용: 꺼져 있는 대상 PC를 깨우기 위해 Wake-on-LAN Magic Packet을 송출합니다."""
+    _init_commander_scanner_dll()
+    if _IS_COMMANDER_SCANNER_LOADED and _COMMANDER_SCANNER_DLL:
+        try:
+            if broadcast_ip and hasattr(_COMMANDER_SCANNER_DLL, "NativeSendWakeOnLanEx"):
+                if _COMMANDER_SCANNER_DLL.NativeSendWakeOnLanEx(
+                    mac_address.encode('utf-8'), broadcast_ip.encode('utf-8'), ctypes.c_int(port)
+                ):
+                    return True
+            if _COMMANDER_SCANNER_DLL.NativeSendWakeOnLan(mac_address.encode('utf-8'), ctypes.c_int(port)):
+                return True
         except Exception:
             pass
 
-    # Fallback: Python WoL magic packet
     try:
         import socket
         clean_mac = mac_address.replace(":", "").replace("-", "")
@@ -1518,10 +1734,214 @@ def send_wake_on_lan(mac_address: str, port: int = 9) -> bool:
             with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
                 s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
                 s.sendto(data, ('255.255.255.255', port))
+                if broadcast_ip:
+                    s.sendto(data, (broadcast_ip, port))
                 return True
     except Exception:
         pass
     return False
+
+
+# ==============================================================================
+# 13. PowerExecNative.dll: Win32 Privilege Escalation & Direct OS Power Engine
+# ==============================================================================
+
+_POWEREXEC_DLL: Optional[ctypes.CDLL] = None
+_IS_POWEREXEC_LOADED: bool = False
+
+
+def _init_power_exec_dll():
+    global _POWEREXEC_DLL, _IS_POWEREXEC_LOADED
+    if _IS_POWEREXEC_LOADED:
+        return
+    if os.name != 'nt':
+        return
+    path = _find_dll_in_candidates("PowerExecNative.dll")
+    if path:
+        try:
+            dll = ctypes.CDLL(path)
+            dll.NativeEnableShutdownPrivilege.argtypes = []
+            dll.NativeEnableShutdownPrivilege.restype = ctypes.c_int
+            dll.NativeCheckPowerCapabilities.argtypes = [
+                ctypes.POINTER(ctypes.c_int),
+                ctypes.POINTER(ctypes.c_int),
+                ctypes.POINTER(ctypes.c_int),
+            ]
+            dll.NativeCheckPowerCapabilities.restype = ctypes.c_int
+            dll.NativeExecuteSystemShutdown.argtypes = [
+                ctypes.c_int, ctypes.c_int, ctypes.c_ulong, ctypes.c_wchar_p
+            ]
+            dll.NativeExecuteSystemShutdown.restype = ctypes.c_int
+            dll.NativeExecuteSuspendState.argtypes = [ctypes.c_int, ctypes.c_int]
+            dll.NativeExecuteSuspendState.restype = ctypes.c_int
+            dll.NativeExecuteLogoff.argtypes = [ctypes.c_int]
+            dll.NativeExecuteLogoff.restype = ctypes.c_int
+            dll.NativeAbortSystemShutdown.argtypes = []
+            dll.NativeAbortSystemShutdown.restype = ctypes.c_int
+            _POWEREXEC_DLL = dll
+            _IS_POWEREXEC_LOADED = True
+        except Exception:
+            _POWEREXEC_DLL = None
+            _IS_POWEREXEC_LOADED = False
+
+
+def is_power_exec_loaded() -> bool:
+    """순수 창작 PowerExecNative.dll 모듈이 활성화되어 있는지 반환합니다."""
+    _init_power_exec_dll()
+    return _IS_POWEREXEC_LOADED
+
+
+def enable_shutdown_privilege() -> bool:
+    """현재 프로세스 토큰에 SE_SHUTDOWN_NAME 권한을 네이티브로 획득합니다."""
+    _init_power_exec_dll()
+    if _IS_POWEREXEC_LOADED and _POWEREXEC_DLL:
+        try:
+            return bool(_POWEREXEC_DLL.NativeEnableShutdownPrivilege())
+        except Exception:
+            pass
+    return False
+
+
+def check_power_capabilities() -> dict:
+    """하드웨어 절전(S3), 최대 절전(S4), 종료 권한 지원 여부를 조회합니다."""
+    _init_power_exec_dll()
+    if _IS_POWEREXEC_LOADED and _POWEREXEC_DLL:
+        try:
+            s3 = ctypes.c_int(0)
+            s4 = ctypes.c_int(0)
+            priv = ctypes.c_int(0)
+            if _POWEREXEC_DLL.NativeCheckPowerCapabilities(ctypes.byref(s3), ctypes.byref(s4), ctypes.byref(priv)):
+                return {
+                    "can_suspend": bool(s3.value),
+                    "can_hibernate": bool(s4.value),
+                    "has_shutdown_privilege": bool(priv.value),
+                }
+        except Exception:
+            pass
+    return {"can_suspend": os.name == 'nt', "can_hibernate": os.name == 'nt', "has_shutdown_privilege": False}
+
+
+def execute_system_shutdown(reboot: bool = False, force: bool = True, timeout_sec: int = 2, reason: str = "") -> bool:
+    """
+    shutdown.exe 서브프로세스 생성 없이 InitiateSystemShutdownExW / ExitWindowsEx를 직접 호출하여
+    시스템 종료 또는 재시작을 수행합니다. 실패 시 shutdown.exe로 안전 폴백합니다.
+    """
+    _init_power_exec_dll()
+    if _IS_POWEREXEC_LOADED and _POWEREXEC_DLL:
+        try:
+            if _POWEREXEC_DLL.NativeExecuteSystemShutdown(
+                1 if reboot else 0,
+                1 if force else 0,
+                max(0, int(timeout_sec)),
+                reason or "PowerController Scheduled Power Execution",
+            ):
+                return True
+        except Exception:
+            pass
+
+    if os.name == 'nt':
+        try:
+            flags = getattr(subprocess, 'CREATE_NO_WINDOW', 0x08000000)
+            cmd = ["shutdown", "/r" if reboot else "/s"]
+            if force:
+                cmd.append("/f")
+            cmd.extend(["/t", str(max(0, int(timeout_sec)))])
+            subprocess.run(cmd, capture_output=True, creationflags=flags)
+            return True
+        except Exception:
+            pass
+    return False
+
+
+def execute_suspend_state(hibernate: bool = False, force_critical: bool = True) -> bool:
+    """
+    rundll32.exe powrprof.dll,SetSuspendState ABI 손상 버그 없이 정식 C ABI SetSuspendState()를 호출하여
+    시스템 절전(S3) 또는 최대 절전(S4)으로 안전하게 진입합니다.
+    """
+    _init_power_exec_dll()
+    if _IS_POWEREXEC_LOADED and _POWEREXEC_DLL:
+        try:
+            if _POWEREXEC_DLL.NativeExecuteSuspendState(1 if hibernate else 0, 1 if force_critical else 0):
+                return True
+        except Exception:
+            pass
+
+    if os.name == 'nt':
+        try:
+            if ctypes.windll.powrprof.SetSuspendState(
+                ctypes.c_ubyte(1 if hibernate else 0),
+                ctypes.c_ubyte(1 if force_critical else 0),
+                ctypes.c_ubyte(0),
+            ):
+                return True
+        except Exception:
+            pass
+        try:
+            flags = getattr(subprocess, 'CREATE_NO_WINDOW', 0x08000000)
+            if hibernate:
+                subprocess.run(["shutdown", "/h"], capture_output=True, creationflags=flags)
+            else:
+                subprocess.run(["rundll32.exe", "powrprof.dll,SetSuspendState", "0,1,0"], capture_output=True, creationflags=flags)
+            return True
+        except Exception:
+            pass
+    return False
+
+
+def execute_logoff(force: bool = True) -> bool:
+    """shutdown /l CLI 없이 ExitWindowsEx(EWX_LOGOFF)를 직접 호출하여 로그아웃합니다."""
+    _init_power_exec_dll()
+    if _IS_POWEREXEC_LOADED and _POWEREXEC_DLL:
+        try:
+            if _POWEREXEC_DLL.NativeExecuteLogoff(1 if force else 0):
+                return True
+        except Exception:
+            pass
+
+    if os.name == 'nt':
+        try:
+            flags = 0x00000000 | (0x00000004 if force else 0x00000010)
+            if ctypes.windll.user32.ExitWindowsEx(flags, 0x00040000):
+                return True
+        except Exception:
+            pass
+        try:
+            flags = getattr(subprocess, 'CREATE_NO_WINDOW', 0x08000000)
+            cmd = ["shutdown", "/l"] + (["/f"] if force else [])
+            subprocess.run(cmd, capture_output=True, creationflags=flags)
+            return True
+        except Exception:
+            pass
+    return False
+
+
+def abort_system_shutdown() -> bool:
+    """진행 중인 OS 시스템 종료 카운트다운을 네이티브로 취소합니다."""
+    _init_power_exec_dll()
+    if _IS_POWEREXEC_LOADED and _POWEREXEC_DLL:
+        try:
+            return bool(_POWEREXEC_DLL.NativeAbortSystemShutdown())
+        except Exception:
+            pass
+    return False
+
+
+def get_native_modules_status() -> dict:
+    """12대 순수 창작 네이티브 DLL 전체의 런타임 로드 상태를 딕셔너리로 반환합니다."""
+    return {
+        "PowerCoreNative.dll": is_native_loaded(),
+        "NetBeaconEngine.dll": is_beacon_engine_loaded(),
+        "FirewallNative.dll": is_firewall_engine_loaded(),
+        "SysPowerHook.dll": is_power_hook_loaded(),
+        "ScheduleCrypto.dll": is_crypto_engine_loaded(),
+        "DiskFlushNative.dll": is_disk_flush_loaded(),
+        "AudioDimmerNative.dll": is_audio_dimmer_loaded(),
+        "DisplayDdcNative.dll": is_display_ddc_loaded(),
+        "LowLevelInputIdleNative.dll": is_input_idle_loaded(),
+        "CommanderTcpDispatcherNative.dll": is_commander_dispatcher_loaded(),
+        "CommanderPingScannerNative.dll": is_commander_scanner_loaded(),
+        "PowerExecNative.dll": is_power_exec_loaded(),
+    }
 
 
 

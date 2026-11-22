@@ -186,24 +186,31 @@ static int base64_encode(const unsigned char *src, size_t len, char *out, size_t
 
 static int base64_decode(const char *src, unsigned char *out, size_t max_out) {
     int dtable[256];
-    memset(dtable, 0x80, 256);
-    for (int i = 0; i < 64; i++) dtable[(unsigned char)b64_table[i]] = i;
-    dtable['='] = 0;
+    for (int k = 0; k < 256; k++) {
+        dtable[k] = -1;
+    }
+    for (int i = 0; i < 64; i++) {
+        dtable[(unsigned char)b64_table[i]] = i;
+    }
+    dtable[(unsigned char)'='] = 0;
 
     size_t len = strlen(src);
+    if (len == 0 || (len % 4) != 0) {
+        return -1;
+    }
+
     size_t j = 0;
     for (size_t i = 0; i < len; i += 4) {
-        if (i + 3 >= len) break;
         int a = dtable[(unsigned char)src[i]];
         int b = dtable[(unsigned char)src[i + 1]];
         int c = dtable[(unsigned char)src[i + 2]];
         int d = dtable[(unsigned char)src[i + 3]];
-        if ((a | b | c | d) & 0x80) return -1;
+        if (a < 0 || b < 0 || c < 0 || d < 0) return -1;
 
-        unsigned int triple = (a << 18) | (b << 12) | (c << 6) | d;
-        if (j < max_out) out[j++] = (triple >> 16) & 0xFF;
-        if (src[i + 2] != '=' && j < max_out) out[j++] = (triple >> 8) & 0xFF;
-        if (src[i + 3] != '=' && j < max_out) out[j++] = triple & 0xFF;
+        unsigned int triple = ((unsigned int)a << 18) | ((unsigned int)b << 12) | ((unsigned int)c << 6) | (unsigned int)d;
+        if (j < max_out) out[j++] = (unsigned char)((triple >> 16) & 0xFF);
+        if (src[i + 2] != '=' && j < max_out) out[j++] = (unsigned char)((triple >> 8) & 0xFF);
+        if (src[i + 3] != '=' && j < max_out) out[j++] = (unsigned char)(triple & 0xFF);
     }
     return (int)j;
 }
@@ -298,6 +305,40 @@ CRYPTO_API BOOL NativeVerifyScheduleSignature(const char* json_data, const char*
     return (constant_time_compare(computed, signature_hex, 64) != 0);
 }
 
+typedef BOOLEAN (APIENTRY *pfnRtlGenRandom)(PVOID, ULONG);
+
+static void generate_secure_random_bytes(unsigned char* out_buf, size_t len) {
+    HMODULE hAdv = LoadLibraryA("advapi32.dll");
+    if (hAdv) {
+        pfnRtlGenRandom rtlGenRandom = (pfnRtlGenRandom)GetProcAddress(hAdv, "SystemFunction036");
+        if (rtlGenRandom && rtlGenRandom(out_buf, (ULONG)len)) {
+            FreeLibrary(hAdv);
+            return;
+        }
+        FreeLibrary(hAdv);
+    }
+
+    /* High-resolution entropy fallback hashed via SHA-256 */
+    LARGE_INTEGER qpc;
+    QueryPerformanceCounter(&qpc);
+    unsigned char seed_in[32];
+    DWORD pid = GetCurrentProcessId();
+    DWORD tid = GetCurrentThreadId();
+    ULONGLONG ticks = GetTickCount64();
+    memcpy(seed_in, &qpc.QuadPart, sizeof(qpc.QuadPart));
+    memcpy(seed_in + 8, &ticks, sizeof(ticks));
+    memcpy(seed_in + 16, &pid, sizeof(pid));
+    memcpy(seed_in + 20, &tid, sizeof(tid));
+    unsigned int r = (unsigned int)rand();
+    memcpy(seed_in + 24, &r, sizeof(r));
+    memcpy(seed_in + 28, &out_buf, 4);
+
+    unsigned char digest[32];
+    sha256_bytes(seed_in, sizeof(seed_in), digest);
+    size_t to_copy = len < 32 ? len : 32;
+    memcpy(out_buf, digest, to_copy);
+}
+
 /*
  * Encrypts schedule JSON string into authenticated sealed envelope (Base64)
  * Format of payload: [16-byte random salt] + [32-byte HMAC] + [Encrypted Data]
@@ -308,9 +349,7 @@ CRYPTO_API int NativeEncryptSchedule(const char* plaintext, const char* master_k
     const char* use_key = (master_key && master_key[0]) ? master_key : DEFAULT_MASTER_SALT;
 
     unsigned char salt[16];
-    for (int i = 0; i < 16; ++i) {
-        salt[i] = (unsigned char)(rand() % 256);
-    }
+    generate_secure_random_bytes(salt, sizeof(salt));
 
     size_t envelope_len = 16 + 32 + pt_len;
     unsigned char* envelope = (unsigned char*)malloc(envelope_len);
@@ -322,17 +361,19 @@ CRYPTO_API int NativeEncryptSchedule(const char* plaintext, const char* master_k
     hmac_sha256((const unsigned char*)use_key, strlen(use_key), (const unsigned char*)plaintext, pt_len, hmac_tag);
     memcpy(envelope + 16, hmac_tag, 32);
 
-    unsigned char* keystream = (unsigned char*)malloc(pt_len);
-    if (!keystream) {
-        free(envelope);
-        return -1;
-    }
-    derive_keystream(use_key, salt, 16, keystream, pt_len);
+    if (pt_len > 0) {
+        unsigned char* keystream = (unsigned char*)malloc(pt_len);
+        if (!keystream) {
+            free(envelope);
+            return -1;
+        }
+        derive_keystream(use_key, salt, 16, keystream, pt_len);
 
-    for (size_t i = 0; i < pt_len; ++i) {
-        envelope[48 + i] = ((unsigned char)plaintext[i]) ^ keystream[i];
+        for (size_t i = 0; i < pt_len; ++i) {
+            envelope[48 + i] = ((unsigned char)plaintext[i]) ^ keystream[i];
+        }
+        free(keystream);
     }
-    free(keystream);
 
     int encoded_len = base64_encode(envelope, envelope_len, out_b64, (size_t)max_out_len);
     free(envelope);
@@ -347,11 +388,12 @@ CRYPTO_API int NativeDecryptSchedule(const char* in_b64, const char* master_key,
     const char* use_key = (master_key && master_key[0]) ? master_key : DEFAULT_MASTER_SALT;
 
     size_t in_len = strlen(in_b64);
-    size_t max_dec_len = in_len;
-    unsigned char* decoded = (unsigned char*)malloc(max_dec_len);
+    if (in_len == 0) return -1;
+
+    unsigned char* decoded = (unsigned char*)malloc(in_len);
     if (!decoded) return -1;
 
-    int decoded_len = base64_decode(in_b64, decoded, max_dec_len);
+    int decoded_len = base64_decode(in_b64, decoded, in_len);
     if (decoded_len < 48) {
         free(decoded);
         return -1;
@@ -368,25 +410,27 @@ CRYPTO_API int NativeDecryptSchedule(const char* in_b64, const char* master_key,
         return -1;
     }
 
-    unsigned char* keystream = (unsigned char*)malloc(pt_len);
-    if (!keystream) {
-        free(decoded);
-        return -1;
-    }
-    derive_keystream(use_key, salt, 16, keystream, pt_len);
+    if (pt_len > 0) {
+        unsigned char* keystream = (unsigned char*)malloc(pt_len);
+        if (!keystream) {
+            free(decoded);
+            return -1;
+        }
+        derive_keystream(use_key, salt, 16, keystream, pt_len);
 
-    for (size_t i = 0; i < pt_len; ++i) {
-        out_plaintext[i] = (char)(decoded[48 + i] ^ keystream[i]);
+        for (size_t i = 0; i < pt_len; ++i) {
+            out_plaintext[i] = (char)(decoded[48 + i] ^ keystream[i]);
+        }
+        free(keystream);
     }
     out_plaintext[pt_len] = '\0';
-    free(keystream);
     free(decoded);
 
-    /* Verify HMAC integrity */
+    /* Verify HMAC integrity in constant time */
     unsigned char computed_hmac[32];
     hmac_sha256((const unsigned char*)use_key, strlen(use_key), (const unsigned char*)out_plaintext, pt_len, computed_hmac);
-    if (memcmp(expected_hmac, computed_hmac, 32) != 0) {
-        memset(out_plaintext, 0, max_out_len);
+    if (!constant_time_compare((const char*)expected_hmac, (const char*)computed_hmac, 32)) {
+        memset(out_plaintext, 0, (size_t)max_out_len);
         return -2; /* Tampered / Corrupted data error */
     }
 

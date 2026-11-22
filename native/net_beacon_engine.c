@@ -43,8 +43,11 @@ static BOOL g_csInitialized = FALSE;
 /* Listener Socket State */
 static SOCKET g_ListenSocket = INVALID_SOCKET;
 static HANDLE g_hListenThread = NULL;
+static HANDLE g_hBindEvent = NULL;
+static volatile BOOL g_BindSuccess = FALSE;
 static volatile BOOL g_IsRunning = FALSE;
 static int g_CurrentListenPort = 0;
+static volatile LONG g_WsaInitState = 0; /* 0 = uninit, 1 = initialized */
 
 static void EnsureQueueCSInitialized(void) {
     if (!g_csInitialized) {
@@ -54,16 +57,20 @@ static void EnsureQueueCSInitialized(void) {
 }
 
 static BOOL InitWinsockIfNeeded(void) {
-    static BOOL s_WsaStarted = FALSE;
-    if (!s_WsaStarted) {
-        WSADATA wsaData;
-        int err = WSAStartup(MAKEWORD(2, 2), &wsaData);
-        if (err != 0) {
-            return FALSE;
-        }
-        s_WsaStarted = TRUE;
+    if (g_WsaInitState == 1) {
+        return TRUE;
     }
-    return TRUE;
+    EnsureQueueCSInitialized();
+    EnterCriticalSection(&g_csQueue);
+    if (g_WsaInitState == 0) {
+        WSADATA wsaData;
+        if (WSAStartup(MAKEWORD(2, 2), &wsaData) == 0) {
+            g_WsaInitState = 1;
+        }
+    }
+    BOOL ok = (g_WsaInitState == 1);
+    LeaveCriticalSection(&g_csQueue);
+    return ok;
 }
 
 /* Worker Thread for receiving UDP packets continuously */
@@ -71,7 +78,9 @@ static DWORD WINAPI BeaconListenerWorker(LPVOID lpParam) {
     int port = (int)(INT_PTR)lpParam;
     SOCKET s = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (s == INVALID_SOCKET) {
+        g_BindSuccess = FALSE;
         g_IsRunning = FALSE;
+        if (g_hBindEvent) SetEvent(g_hBindEvent);
         return 1;
     }
 
@@ -93,11 +102,15 @@ static DWORD WINAPI BeaconListenerWorker(LPVOID lpParam) {
 
     if (bind(s, (struct sockaddr*)&bindAddr, sizeof(bindAddr)) == SOCKET_ERROR) {
         closesocket(s);
+        g_BindSuccess = FALSE;
         g_IsRunning = FALSE;
+        if (g_hBindEvent) SetEvent(g_hBindEvent);
         return 2;
     }
 
     g_ListenSocket = s;
+    g_BindSuccess = TRUE;
+    if (g_hBindEvent) SetEvent(g_hBindEvent);
 
     char recv_buf[MAX_PACKET_PAYLOAD];
     struct sockaddr_in clientAddr;
@@ -110,28 +123,28 @@ static DWORD WINAPI BeaconListenerWorker(LPVOID lpParam) {
             recv_buf[bytes] = '\0';
 
             char ipStr[64];
-            const char* inetResult = inet_ntop(AF_INET, &clientAddr.sin_addr, ipStr, sizeof(ipStr));
-            if (!inetResult) {
-                strncpy(ipStr, inet_ntoa(clientAddr.sin_addr), sizeof(ipStr) - 1);
-                ipStr[sizeof(ipStr) - 1] = '\0';
+            if (!inet_ntop(AF_INET, &clientAddr.sin_addr, ipStr, sizeof(ipStr))) {
+                strcpy(ipStr, "0.0.0.0");
             }
 
             int clientPort = ntohs(clientAddr.sin_port);
 
-            /* Enqueue into Ring Buffer */
+            /* Enqueue into Ring Buffer (overwrite oldest on burst overflow so fresh beacons are preserved) */
             EnterCriticalSection(&g_csQueue);
-            if (g_QueueCount < RING_BUFFER_CAPACITY) {
-                BeaconPacket* pkt = &g_RingBuffer[g_QueueTail];
-                strncpy(pkt->sender_ip, ipStr, sizeof(pkt->sender_ip) - 1);
-                pkt->sender_ip[sizeof(pkt->sender_ip) - 1] = '\0';
-                pkt->sender_port = clientPort;
-                pkt->payload_len = bytes;
-                memcpy(pkt->payload, recv_buf, bytes);
-                pkt->payload[bytes] = '\0';
-
-                g_QueueTail = (g_QueueTail + 1) % RING_BUFFER_CAPACITY;
-                g_QueueCount++;
+            if (g_QueueCount >= RING_BUFFER_CAPACITY) {
+                g_QueueHead = (g_QueueHead + 1) % RING_BUFFER_CAPACITY;
+                g_QueueCount--;
             }
+            BeaconPacket* pkt = &g_RingBuffer[g_QueueTail];
+            strncpy(pkt->sender_ip, ipStr, sizeof(pkt->sender_ip) - 1);
+            pkt->sender_ip[sizeof(pkt->sender_ip) - 1] = '\0';
+            pkt->sender_port = clientPort;
+            pkt->payload_len = bytes;
+            memcpy(pkt->payload, recv_buf, bytes);
+            pkt->payload[bytes] = '\0';
+
+            g_QueueTail = (g_QueueTail + 1) % RING_BUFFER_CAPACITY;
+            g_QueueCount++;
             LeaveCriticalSection(&g_csQueue);
         }
     }
@@ -146,22 +159,27 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
         case DLL_PROCESS_ATTACH:
             DisableThreadLibraryCalls(hinstDLL);
             EnsureQueueCSInitialized();
-            InitWinsockIfNeeded();
             break;
         case DLL_PROCESS_DETACH:
             g_IsRunning = FALSE;
-            if (g_ListenSocket != INVALID_SOCKET) {
-                closesocket(g_ListenSocket);
-                g_ListenSocket = INVALID_SOCKET;
-            }
-            if (g_hListenThread != NULL) {
-                WaitForSingleObject(g_hListenThread, 1000);
-                CloseHandle(g_hListenThread);
-                g_hListenThread = NULL;
-            }
-            if (g_csInitialized) {
-                DeleteCriticalSection(&g_csQueue);
-                g_csInitialized = FALSE;
+            if (lpvReserved == NULL) {
+                if (g_ListenSocket != INVALID_SOCKET) {
+                    closesocket(g_ListenSocket);
+                    g_ListenSocket = INVALID_SOCKET;
+                }
+                if (g_hListenThread != NULL) {
+                    WaitForSingleObject(g_hListenThread, 1000);
+                    CloseHandle(g_hListenThread);
+                    g_hListenThread = NULL;
+                }
+                if (g_WsaInitState == 1) {
+                    WSACleanup();
+                    g_WsaInitState = 0;
+                }
+                if (g_csInitialized) {
+                    DeleteCriticalSection(&g_csQueue);
+                    g_csInitialized = FALSE;
+                }
             }
             break;
     }
@@ -173,6 +191,9 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
  * -------------------------------------------------------------------------- */
 
 BEACON_API BOOL NativeStartBeaconListener(int port) {
+    if (port <= 0 || port > 65535) {
+        return FALSE;
+    }
     EnsureQueueCSInitialized();
     if (!InitWinsockIfNeeded()) {
         return FALSE;
@@ -202,6 +223,8 @@ BEACON_API BOOL NativeStartBeaconListener(int port) {
     g_QueueCount = 0;
     LeaveCriticalSection(&g_csQueue);
 
+    g_BindSuccess = FALSE;
+    g_hBindEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
     g_IsRunning = TRUE;
     g_CurrentListenPort = port;
 
@@ -216,6 +239,26 @@ BEACON_API BOOL NativeStartBeaconListener(int port) {
 
     if (g_hListenThread == NULL) {
         g_IsRunning = FALSE;
+        if (g_hBindEvent) {
+            CloseHandle(g_hBindEvent);
+            g_hBindEvent = NULL;
+        }
+        return FALSE;
+    }
+
+    if (g_hBindEvent) {
+        WaitForSingleObject(g_hBindEvent, 1500);
+        CloseHandle(g_hBindEvent);
+        g_hBindEvent = NULL;
+    }
+
+    if (!g_BindSuccess) {
+        g_IsRunning = FALSE;
+        if (g_hListenThread != NULL) {
+            WaitForSingleObject(g_hListenThread, 500);
+            CloseHandle(g_hListenThread);
+            g_hListenThread = NULL;
+        }
         return FALSE;
     }
 
@@ -239,6 +282,7 @@ BEACON_API BOOL NativeStopBeaconListener(void) {
         g_hListenThread = NULL;
     }
 
+    g_CurrentListenPort = 0;
     return TRUE;
 }
 
@@ -255,7 +299,7 @@ BEACON_API int NativeGetBeaconQueueCount(void) {
  * Returns 1 if a packet was dequeued, 0 if queue is empty.
  */
 BEACON_API int NativeGetNextBeaconPacket(char* out_ip, int max_ip_len, int* out_port, char* out_data, int max_data_len) {
-    if (!out_ip || !out_port || !out_data || max_data_len <= 0) {
+    if (!out_ip || max_ip_len <= 0 || !out_port || !out_data || max_data_len <= 0) {
         return 0;
     }
 
@@ -268,7 +312,7 @@ BEACON_API int NativeGetNextBeaconPacket(char* out_ip, int max_ip_len, int* out_
     }
 
     BeaconPacket* pkt = &g_RingBuffer[g_QueueHead];
-    strncpy(out_ip, pkt->sender_ip, max_ip_len - 1);
+    strncpy(out_ip, pkt->sender_ip, (size_t)(max_ip_len - 1));
     out_ip[max_ip_len - 1] = '\0';
 
     *out_port = pkt->sender_port;
@@ -277,7 +321,7 @@ BEACON_API int NativeGetNextBeaconPacket(char* out_ip, int max_ip_len, int* out_
     if (copyLen >= max_data_len) {
         copyLen = max_data_len - 1;
     }
-    memcpy(out_data, pkt->payload, copyLen);
+    memcpy(out_data, pkt->payload, (size_t)copyLen);
     out_data[copyLen] = '\0';
 
     g_QueueHead = (g_QueueHead + 1) % RING_BUFFER_CAPACITY;
@@ -291,7 +335,7 @@ BEACON_API int NativeGetNextBeaconPacket(char* out_ip, int max_ip_len, int* out_
  * Fast Broadcast UDP packet to LAN and 127.0.0.1
  */
 BEACON_API BOOL NativeSendBroadcast(int port, const char* data, int data_len) {
-    if (!data || data_len <= 0) {
+    if (!data || data_len <= 0 || port <= 0 || port > 65535) {
         return FALSE;
     }
     if (!InitWinsockIfNeeded()) {
@@ -312,34 +356,29 @@ BEACON_API BOOL NativeSendBroadcast(int port, const char* data, int data_len) {
     bcastAddr.sin_port = htons((u_short)port);
     bcastAddr.sin_addr.s_addr = htonl(INADDR_BROADCAST); /* 255.255.255.255 */
 
-    sendto(s, data, data_len, 0, (struct sockaddr*)&bcastAddr, sizeof(bcastAddr));
+    int sentBcast = sendto(s, data, data_len, 0, (struct sockaddr*)&bcastAddr, sizeof(bcastAddr));
 
     /* Also send to localhost */
     struct sockaddr_in loopAddr;
     memset(&loopAddr, 0, sizeof(loopAddr));
     loopAddr.sin_family = AF_INET;
     loopAddr.sin_port = htons((u_short)port);
-    loopAddr.sin_addr.s_addr = inet_addr("127.0.0.1");
+    inet_pton(AF_INET, "127.0.0.1", &loopAddr.sin_addr);
 
-    sendto(s, data, data_len, 0, (struct sockaddr*)&loopAddr, sizeof(loopAddr));
+    int sentLoop = sendto(s, data, data_len, 0, (struct sockaddr*)&loopAddr, sizeof(loopAddr));
 
     closesocket(s);
-    return TRUE;
+    return (sentBcast != SOCKET_ERROR || sentLoop != SOCKET_ERROR);
 }
 
 /*
  * Fast Direct Unicast UDP packet to target IP:Port
  */
 BEACON_API BOOL NativeSendDirect(const char* ip, int port, const char* data, int data_len) {
-    if (!ip || !data || data_len <= 0) {
+    if (!ip || !data || data_len <= 0 || port <= 0 || port > 65535) {
         return FALSE;
     }
     if (!InitWinsockIfNeeded()) {
-        return FALSE;
-    }
-
-    SOCKET s = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-    if (s == INVALID_SOCKET) {
         return FALSE;
     }
 
@@ -347,7 +386,14 @@ BEACON_API BOOL NativeSendDirect(const char* ip, int port, const char* data, int
     memset(&targetAddr, 0, sizeof(targetAddr));
     targetAddr.sin_family = AF_INET;
     targetAddr.sin_port = htons((u_short)port);
-    targetAddr.sin_addr.s_addr = inet_addr(ip);
+    if (inet_pton(AF_INET, ip, &targetAddr.sin_addr) != 1) {
+        return FALSE; /* Reject invalid IPv4 addresses safely instead of broadcasting 255.255.255.255 */
+    }
+
+    SOCKET s = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (s == INVALID_SOCKET) {
+        return FALSE;
+    }
 
     int sent = sendto(s, data, data_len, 0, (struct sockaddr*)&targetAddr, sizeof(targetAddr));
 

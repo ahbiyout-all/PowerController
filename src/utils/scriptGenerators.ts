@@ -609,9 +609,14 @@ if __name__ == "__main__":
 }
 
 /**
- * Generates an Inno Setup 6 (.iss) compiler script with all comments,
- * [Setup] metadata, [Languages] default ordering, [CustomMessages],
- * [Run] firewall rules, and [Code] section comments dynamically localized.
+ * Generates an Inno Setup 6 (.iss) compiler script enforcing the exact setup sequence:
+ * 1. Force-kill running app processes
+ * 2. Detect existing installation and ask Uninstall (Clean) vs Overwrite
+ * 3. License agreement declaration (wpLicense)
+ * 4. Installation + formal Windows Add/Remove Programs registration
+ * 5. Desktop shortcut checkbox on completion screen (wpFinished)
+ * 6. Launch application checkbox (wpFinished)
+ * All comments, [Setup] metadata, [Languages] ordering, and prompts are dynamically localized.
  */
 export function generateInnoSetupScript(
   lang: AppLang,
@@ -629,9 +634,8 @@ Name: "english"; MessagesFile: "compiler:Default.isl"; LicenseFile: "docs\\LICEN
 
   return `; ===============================================================================
 ; ${safeName} v${appVersion} — ${isEn ? 'Inno Setup 6 Compiler Script' : 'Inno Setup 6 설치 마법사 컴파일 스크립트'}
-; ${isEn ? 'Smart Shutdown Agent & Auto Power Manager' : '스마트 시스템 전원 제어 및 자동 종료 예약기'}
+; ${isEn ? 'Flow: Kill Running App -> Uninstall/Overwrite Prompt -> License -> Install -> Desktop Shortcut Check -> Launch' : '진행 순서: 기존 앱 강제 종료 -> 설치됨 감지 시 삭제/덮어쓰기 질의 -> 라이선스 선언 -> 설치 -> 바탕화면 바로가기 체크 -> 앱 실행'}
 ; ${isEn ? 'Publisher: AhBiYout | Official Blog: https://ahbiyoutvibe.blogspot.com/' : '제작 및 배포: AhBiYout | 공식 블로그: https://ahbiyoutvibe.blogspot.com/'}
-; ${isEn ? 'Dynamically generated with localized installer metadata & comments (EN)' : '감지된 사용자 언어(KO)에 맞춰 주석과 설치 설정이 동적으로 생성되었습니다'}
 ; ===============================================================================
 
 #ifndef MyAppVersion
@@ -642,10 +646,9 @@ Name: "english"; MessagesFile: "compiler:Default.isl"; LicenseFile: "docs\\LICEN
 #define MyAppPublisher "AhBiYout"
 #define MyAppURL "https://ahbiyoutvibe.blogspot.com/"
 #define MyAppExeName "${safeName}.exe"
-#define MyAppMutex "Global\\${safeName}SingleInstanceMutex_f8908445,${safeName}_SingleInstance_Mutex"
 
 [Setup]
-; ${isEn ? 'Uniquely identifies this application across Windows uninstall entries' : 'Windows 프로그램 추가/제거 목록에서 이 앱을 고유하게 식별하는 GUID'}
+; ${isEn ? 'Uniquely identifies this application in Windows Add/Remove Programs (Apps & Features)' : 'Windows 프로그램 추가/제거(설치된 앱) 목록에서 이 앱을 고유하게 식별하는 GUID'}
 AppId={{5A8C9B23-7F12-4D39-8C92-E6B3C0F59871}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
@@ -656,21 +659,27 @@ AppSupportURL={#MyAppURL}
 AppUpdatesURL={#MyAppURL}
 DefaultDirName={autopf}\\{#MyAppName}
 DefaultGroupName={#MyAppName}
+DisableProgramGroupPage=yes
 AllowNoIcons=yes
 LicenseFile=${isEn ? 'docs\\LICENSE_en.txt' : 'docs\\LICENSE_ko.txt'}
 OutputDir=dist
 OutputBaseFilename=${safeName}_Setup_v{#MyAppVersion}
 SetupIconFile=${safeName}.ico
+; ${isEn ? 'Formal Windows Add/Remove Programs registration directives' : 'Windows 프로그램 추가/제거 정식 등록 지시어'}
+Uninstallable=yes
+CreateUninstallRegKey=yes
+UninstallDisplayName={#MyAppName} v{#MyAppVersion}
 UninstallDisplayIcon={app}\\{#MyAppExeName}
+UninstallFilesDir={app}
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
+LanguageDetectionMethod=uilanguage
 PrivilegesRequired=admin
 PrivilegesRequiredOverridesAllowed=dialog
 CloseApplications=force
 RestartApplications=no
 CloseApplicationsFilter=*.exe
-AppMutex={#MyAppMutex}
 ArchitecturesInstallIn64BitMode=x64compatible
 
 ; ===============================================================================
@@ -691,7 +700,7 @@ VersionInfoOriginalFileName=${safeName}_Setup_v{#MyAppVersion}.exe
 ${languagesBlock}
 
 [CustomMessages]
-; ${isEn ? 'Localized checkbox prompts for shortcuts, startup, and post-install launch' : '바탕화면 아이콘, 시작 프로그램 등록 및 설치 후 실행 옵션의 다국어 메시지'}
+; ${isEn ? 'Localized checkbox prompts for shortcuts, startup, and post-install launch' : '바탕화면 바로가기, 시작 프로그램 등록 및 앱 실행 옵션 다국어 메시지'}
 english.CreateDesktopIcon=Create a &desktop shortcut
 english.CreateStartupIcon=Register to start automatically with &Windows
 english.LaunchProgram=Launch ${safeName} now
@@ -720,6 +729,14 @@ Source: "NetBeaconEngine.dll"; DestDir: "{app}"; Flags: ignoreversion skipifsour
 Source: "FirewallNative.dll"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "SysPowerHook.dll"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "ScheduleCrypto.dll"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "DiskFlushNative.dll"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "AudioDimmerNative.dll"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "DisplayDdcNative.dll"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "LowLevelInputIdleNative.dll"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "CommanderTcpDispatcherNative.dll"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "CommanderPingScannerNative.dll"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "PowerExecNative.dll"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "native_bridge.py"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "${safeName}.ico"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "${safeName}.png"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "docs\\LICENSE_en.txt"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
@@ -740,7 +757,7 @@ Filename: "netsh"; Parameters: "advfirewall firewall add rule name=""${safeName}
 Filename: "netsh"; Parameters: "advfirewall firewall add rule name=""${safeName} TCP 9988"" dir=in action=allow protocol=TCP localport=9988 enable=yes profile=any"; Flags: runhidden
 Filename: "netsh"; Parameters: "advfirewall firewall add rule name=""${safeName} UDP 9986"" dir=in action=allow protocol=UDP localport=9986 enable=yes profile=any"; Flags: runhidden
 
-; ${isEn ? 'Offer to launch the application immediately after setup finishes' : '설치 완료 직후 프로그램 바로 실행 옵션 제공'}
+; ${isEn ? 'Launch application checkbox on Finished page (postinstall)' : '설치 완료 화면에서 바로 앱 실행 체크박스 제공'}
 Filename: "{app}\\{#MyAppExeName}"; Description: "{cm:LaunchProgram}"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
@@ -750,21 +767,187 @@ Filename: "netsh"; Parameters: "advfirewall firewall delete rule name=""${safeNa
 Filename: "netsh"; Parameters: "advfirewall firewall delete rule name=""${safeName} TCP 9988"""; Flags: runhidden; RunOnceId: "DelFwRuleTCP"
 Filename: "netsh"; Parameters: "advfirewall firewall delete rule name=""${safeName} UDP 9986"""; Flags: runhidden; RunOnceId: "DelFwRuleUDP"
 
+[UninstallDelete]
+Type: files; Name: "{autodesktop}\\{#MyAppName}.lnk"
+Type: files; Name: "{userdesktop}\\{#MyAppName}.lnk"
+Type: files; Name: "{app}\\*.log"
+Type: files; Name: "{app}\\*.tmp"
+Type: dirifempty; Name: "{app}"
+
 [Code]
-// ${isEn ? 'Force-terminate running processes before overwriting binaries during upgrades' : '업데이트 설치 시 실행 중인 프로세스를 강제 종료하여 파일 잠금(Lock) 충돌을 원천 방지'}
+var
+  CleanInstallSelected: Boolean;
+  DesktopShortcutCheck: TNewCheckBox;
+  FinishedLayoutAdjusted: Boolean;
+
+// ${isEn ? '1. Force-terminate running processes before checking or overwriting' : '1단계: 기존 실행 중인 앱을 강제 종료하고 파일 잠금을 해제'}
 procedure ForceKillProcess(const ExeName: String);
 var
   ResultCode: Integer;
+  BaseName: String;
 begin
+  BaseName := ChangeFileExt(ExeName, '');
   Exec(ExpandConstant('{cmd}'), '/c taskkill.exe /F /T /IM "' + ExeName + '" >nul 2>&1', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec('powershell.exe', '-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "Get-Process -Name ''' + BaseName + ''' -ErrorAction SilentlyContinue | Stop-Process -Force"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 end;
 
-function PrepareToInstall(var NeedsRestart: Boolean): String;
+procedure KillAllPowerProcesses();
 begin
-  // ${isEn ? 'Ensure zero sharing-violation errors on main app and network tower binaries' : '메인 컨트롤러 및 원격 스케줄러 프로세스를 사전에 안전 종료'}
   ForceKillProcess('{#MyAppExeName}');
   ForceKillProcess('PowerNetworkScheduler.exe');
   ForceKillProcess('ApplySharedSchedules.exe');
-  Result := '';
+  Sleep(250);
+end;
+
+function QueryUninstallPath(const RootKey: Integer; const SubKey: String; var OutPath, OutUninst: String): Boolean;
+begin
+  Result := False;
+  OutPath := '';
+  OutUninst := '';
+  if not RegKeyExists(RootKey, SubKey) then Exit;
+  if not RegQueryStringValue(RootKey, SubKey, 'Inno Setup: App Path', OutPath) then
+    RegQueryStringValue(RootKey, SubKey, 'InstallLocation', OutPath);
+  if not RegQueryStringValue(RootKey, SubKey, 'QuietUninstallString', OutUninst) then
+    RegQueryStringValue(RootKey, SubKey, 'UninstallString', OutUninst);
+  if (OutPath = '') and (OutUninst <> '') then
+    OutPath := ExtractFileDir(RemoveQuotes(OutUninst));
+  Result := (OutPath <> '') or (OutUninst <> '');
+end;
+
+function GetExistingInstallInfo(var PrevPath, PrevUninst: String): Boolean;
+var
+  KeyGuid, KeyLegacy: String;
+begin
+  Result := False;
+  PrevPath := '';
+  PrevUninst := '';
+  KeyGuid := 'Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{5A8C9B23-7F12-4D39-8C92-E6B3C0F59871}_is1';
+  KeyLegacy := 'Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{#MyAppName}';
+
+  if QueryUninstallPath(HKLM, KeyGuid, PrevPath, PrevUninst) or
+     QueryUninstallPath(HKCU, KeyGuid, PrevPath, PrevUninst) or
+     QueryUninstallPath(HKCU, KeyLegacy, PrevPath, PrevUninst) or
+     QueryUninstallPath(HKLM, KeyLegacy, PrevPath, PrevUninst) then
+  begin
+    Result := True;
+    Exit;
+  end;
+end;
+
+// ${isEn ? '2. Prompt Uninstall (Clean) vs Overwrite when previous install is found' : '2단계: 기존 설치 감지 시 삭제 후 재설치 / 덮어쓰기 선택 질의 후 라이선스 단계로 진입'}
+function InitializeSetup(): Boolean;
+var
+  PrevPath, PrevUninst, UninstExe, PromptMsg: String;
+  UserChoice, ResultCode: Integer;
+begin
+  Result := True;
+  CleanInstallSelected := False;
+  FinishedLayoutAdjusted := False;
+  KillAllPowerProcesses();
+
+  if GetExistingInstallInfo(PrevPath, PrevUninst) then
+  begin
+    if not WizardSilent() then
+    begin
+      if ActiveLanguage = 'korean' then
+        PromptMsg := '[기존 버전 설치 감지]' + #13#10#13#10 + '이미 설치된 {#MyAppName}가 감지되었습니다.' + #13#10 + '경로: ' + PrevPath + #13#10#13#10 + '• [예]: 기존 앱 삭제 후 새로 설치' + #13#10 + '• [아니오]: 기존 파일 위에 덮어쓰기 설치' + #13#10 + '• [취소]: 설치 중단'
+      else
+        PromptMsg := '[Existing Installation Detected]' + #13#10#13#10 + '{#MyAppName} is already installed at: ' + PrevPath + #13#10#13#10 + '- [Yes]: Uninstall existing version first (Clean Install)' + #13#10 + '- [No]: Overwrite / upgrade existing installation' + #13#10 + '- [Cancel]: Exit setup';
+
+      UserChoice := MsgBox(PromptMsg, mbConfirmation, MB_YESNOCANCEL);
+      if UserChoice = IDYES then CleanInstallSelected := True
+      else if UserChoice = IDCANCEL then begin Result := False; Exit; end;
+    end;
+
+    if CleanInstallSelected then
+    begin
+      UninstExe := AddBackslash(PrevPath) + 'unins000.exe';
+      if FileExists(UninstExe) then
+      begin
+        Exec(UninstExe, '/SILENT /VERYSILENT /SUPPRESSMSGBOXES /NORESTART', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+        Sleep(800);
+      end
+      else if PrevUninst <> '' then
+      begin
+        Exec(ExpandConstant('{cmd}'), '/c ' + PrevUninst + ' --silent', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+        Sleep(800);
+      end;
+    end;
+  end;
+end;
+
+procedure InitializeWizard();
+begin
+  // ${isEn ? '5. Desktop shortcut checkbox rendered on Finished page right after installation' : '5단계: 설치 완료 화면(wpFinished)에 바탕화면 바로가기 체크박스 생성'}
+  DesktopShortcutCheck := TNewCheckBox.Create(WizardForm);
+  DesktopShortcutCheck.Parent := WizardForm.FinishedPage;
+  DesktopShortcutCheck.Caption := ExpandConstant('{cm:CreateDesktopIcon}');
+  DesktopShortcutCheck.Checked := True;
+  DesktopShortcutCheck.Visible := False;
+end;
+
+function ShouldSkipPage(PageID: Integer): Boolean;
+begin
+  Result := (not WizardSilent()) and (PageID = wpSelectTasks);
+end;
+
+procedure CurPageChanged(CurPageID: Integer);
+var
+  OffsetY: Integer;
+begin
+  if (CurPageID = wpFinished) and (not WizardSilent()) and (DesktopShortcutCheck <> nil) then
+  begin
+    DesktopShortcutCheck.Left := WizardForm.RunList.Left;
+    DesktopShortcutCheck.Width := WizardForm.RunList.Width;
+    DesktopShortcutCheck.Height := ScaleY(20);
+    if not FinishedLayoutAdjusted then
+    begin
+      FinishedLayoutAdjusted := True;
+      DesktopShortcutCheck.Top := WizardForm.RunList.Top;
+      OffsetY := ScaleY(24);
+      if WizardForm.RunList.Visible then
+      begin
+        WizardForm.RunList.Top := WizardForm.RunList.Top + OffsetY;
+        if WizardForm.RunList.Height > OffsetY + ScaleY(20) then
+          WizardForm.RunList.Height := WizardForm.RunList.Height - OffsetY;
+      end;
+    end;
+    DesktopShortcutCheck.Visible := True;
+  end;
+end;
+
+function NextButtonClick(CurPageID: Integer): Boolean;
+var
+  DesktopLnk, UserDesktopLnk: String;
+begin
+  Result := True;
+  if CurPageID = wpFinished then
+  begin
+    DesktopLnk := ExpandConstant('{autodesktop}\\{#MyAppName}.lnk');
+    UserDesktopLnk := ExpandConstant('{userdesktop}\\{#MyAppName}.lnk');
+    if (DesktopShortcutCheck <> nil) and (not DesktopShortcutCheck.Checked) then
+    begin
+      if FileExists(DesktopLnk) then DeleteFile(DesktopLnk);
+      if FileExists(UserDesktopLnk) then DeleteFile(UserDesktopLnk);
+    end
+    else if (DesktopShortcutCheck <> nil) and DesktopShortcutCheck.Checked then
+    begin
+      if not FileExists(DesktopLnk) then
+        CreateShellLink(DesktopLnk, '{#MyAppName}', ExpandConstant('{app}\\{#MyAppExeName}'), '', ExpandConstant('{app}'), ExpandConstant('{app}\\${safeName}.ico'), 0, SW_SHOWNORMAL);
+    end;
+  end;
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssInstall then
+    KillAllPowerProcesses();
+end;
+
+function InitializeUninstall(): Boolean;
+begin
+  KillAllPowerProcesses();
+  Result := True;
 end;`;
 }
+

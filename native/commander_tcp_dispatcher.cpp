@@ -22,92 +22,174 @@
 
 #define DISPATCHER_API extern "C" __declspec(dllexport)
 
-struct DispatchJob {
-    char target_ip[64];
-    int target_port;
-    char payload[8192];
-    int payload_len;
-    BOOL is_success;
-    int error_code;
-};
+static CRITICAL_SECTION g_csWsa;
+static BOOL g_csWsaInit = FALSE;
+static volatile LONG g_WsaReady = 0;
 
-static BOOL InitWsaIfNeeded(void) {
-    static BOOL s_WsaInit = FALSE;
-    if (!s_WsaInit) {
-        WSADATA wsa;
-        if (WSAStartup(MAKEWORD(2, 2), &wsa) == 0) {
-            s_WsaInit = TRUE;
-        }
+static void EnsureWsaCS(void) {
+    if (!g_csWsaInit) {
+        InitializeCriticalSection(&g_csWsa);
+        g_csWsaInit = TRUE;
     }
-    return s_WsaInit;
 }
 
-static DWORD WINAPI SingleDispatchWorker(LPVOID lpParam) {
-    DispatchJob* job = (DispatchJob*)lpParam;
-    if (!job) return 1;
+static BOOL InitWsaIfNeeded(void) {
+    if (g_WsaReady == 1) {
+        return TRUE;
+    }
+    EnsureWsaCS();
+    EnterCriticalSection(&g_csWsa);
+    if (g_WsaReady == 0) {
+        WSADATA wsa;
+        if (WSAStartup(MAKEWORD(2, 2), &wsa) == 0) {
+            g_WsaReady = 1;
+        }
+    }
+    BOOL ok = (g_WsaReady == 1);
+    LeaveCriticalSection(&g_csWsa);
+    return ok;
+}
 
-    SOCKET s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    if (s == INVALID_SOCKET) {
-        job->is_success = FALSE;
-        job->error_code = WSAGetLastError();
-        return 1;
+BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
+    switch (fdwReason) {
+        case DLL_PROCESS_ATTACH:
+            DisableThreadLibraryCalls(hinstDLL);
+            EnsureWsaCS();
+            break;
+        case DLL_PROCESS_DETACH:
+            if (lpvReserved == NULL) {
+                if (g_WsaReady == 1) {
+                    WSACleanup();
+                    g_WsaReady = 0;
+                }
+                if (g_csWsaInit) {
+                    DeleteCriticalSection(&g_csWsa);
+                    g_csWsaInit = FALSE;
+                }
+            }
+            break;
+    }
+    return TRUE;
+}
+
+/*
+ * Non-blocking TCP connect() with bounded select() timeout (eliminates 21s SYN retry hang
+ * and eliminates dangling stack-pointer worker threads).
+ */
+static BOOL ConnectWithTimeout(SOCKET s, const struct sockaddr_in* dest, int timeout_ms) {
+    u_long nonBlocking = 1;
+    if (ioctlsocket(s, FIONBIO, &nonBlocking) != 0) {
+        return FALSE;
     }
 
-    /* Set connect/send timeout to 1500ms */
-    DWORD timeout = 1500;
-    setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, (const char*)&timeout, sizeof(timeout));
-    setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeout, sizeof(timeout));
+    int rc = connect(s, (const struct sockaddr*)dest, sizeof(*dest));
+    if (rc == 0) {
+        u_long blocking = 0;
+        ioctlsocket(s, FIONBIO, &blocking);
+        return TRUE;
+    }
+
+    int err = WSAGetLastError();
+    if (err != WSAEWOULDBLOCK && err != WSAEINPROGRESS) {
+        return FALSE;
+    }
+
+    fd_set writeSet, exceptSet;
+    FD_ZERO(&writeSet);
+    FD_ZERO(&exceptSet);
+    FD_SET(s, &writeSet);
+    FD_SET(s, &exceptSet);
+
+    struct timeval tv;
+    tv.tv_sec = timeout_ms / 1000;
+    tv.tv_usec = (timeout_ms % 1000) * 1000;
+
+    int sel = select(0, NULL, &writeSet, &exceptSet, &tv);
+    if (sel <= 0 || FD_ISSET(s, &exceptSet) || !FD_ISSET(s, &writeSet)) {
+        return FALSE;
+    }
+
+    int soError = 0;
+    int optLen = sizeof(soError);
+    if (getsockopt(s, SOL_SOCKET, SO_ERROR, (char*)&soError, &optLen) != 0 || soError != 0) {
+        return FALSE;
+    }
+
+    u_long blocking = 0;
+    ioctlsocket(s, FIONBIO, &blocking);
+    return TRUE;
+}
+
+/*
+ * Sends TCP payload to target PC and optionally captures JSON ACK response within timeout_ms.
+ * Returns received ACK byte count (>= 0) on send/recv success, or -1 on error/timeout.
+ */
+DISPATCHER_API int NativeSendRuleCommandWithAck(
+    const char* ip,
+    int port,
+    const char* payload,
+    int payload_len,
+    int timeout_ms,
+    char* out_ack_buf,
+    int max_ack_len
+) {
+    if (!ip || !payload || payload_len <= 0) return -1;
+    if (!InitWsaIfNeeded()) return -1;
 
     struct sockaddr_in dest;
     memset(&dest, 0, sizeof(dest));
     dest.sin_family = AF_INET;
-    dest.sin_port = htons((u_short)job->target_port);
-    dest.sin_addr.s_addr = inet_addr(job->target_ip);
-
-    if (connect(s, (struct sockaddr*)&dest, sizeof(dest)) == SOCKET_ERROR) {
-        closesocket(s);
-        job->is_success = FALSE;
-        job->error_code = WSAGetLastError();
-        return 2;
+    dest.sin_port = htons((u_short)(port > 0 ? port : 9988));
+    if (inet_pton(AF_INET, ip, &dest.sin_addr) != 1) {
+        return -1;
     }
 
-    int sentBytes = send(s, job->payload, job->payload_len, 0);
-    if (sentBytes == job->payload_len) {
-        job->is_success = TRUE;
-        job->error_code = 0;
-    } else {
-        job->is_success = FALSE;
-        job->error_code = WSAGetLastError();
+    SOCKET s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (s == INVALID_SOCKET) {
+        return -1;
+    }
+
+    int effTimeout = (timeout_ms > 50) ? timeout_ms : 1100;
+    if (!ConnectWithTimeout(s, &dest, effTimeout)) {
+        closesocket(s);
+        return -1;
+    }
+
+    DWORD rwTimeout = (DWORD)effTimeout;
+    setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, (const char*)&rwTimeout, sizeof(rwTimeout));
+    setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, (const char*)&rwTimeout, sizeof(rwTimeout));
+
+    int totalSent = 0;
+    while (totalSent < payload_len) {
+        int sent = send(s, payload + totalSent, payload_len - totalSent, 0);
+        if (sent <= 0) {
+            closesocket(s);
+            return -1;
+        }
+        totalSent += sent;
+    }
+
+    int ackBytes = 0;
+    if (out_ack_buf && max_ack_len > 1) {
+        int recvd = recv(s, out_ack_buf, max_ack_len - 1, 0);
+        if (recvd > 0) {
+            out_ack_buf[recvd] = '\0';
+            ackBytes = recvd;
+        } else {
+            out_ack_buf[0] = '\0';
+        }
     }
 
     closesocket(s);
-    return 0;
+    return ackBytes;
 }
 
 /*
- * Dispatches payload to a single target IP asynchronously with 1.5s timeout
+ * Dispatches payload to a single target IP with exact non-blocking 1.5s connect timeout
  */
 DISPATCHER_API BOOL NativeSendSingleRuleCommand(const char* ip, int port, const char* payload, int payload_len) {
-    if (!ip || !payload || payload_len <= 0) return FALSE;
-    InitWsaIfNeeded();
-
-    DispatchJob job;
-    strncpy(job.target_ip, ip, sizeof(job.target_ip) - 1);
-    job.target_ip[sizeof(job.target_ip) - 1] = '\0';
-    job.target_port = port > 0 ? port : 9988;
-    job.payload_len = payload_len < 8192 ? payload_len : 8191;
-    memcpy(job.payload, payload, job.payload_len);
-    job.payload[job.payload_len] = '\0';
-    job.is_success = FALSE;
-    job.error_code = 0;
-
-    HANDLE hThread = CreateThread(NULL, 0, SingleDispatchWorker, &job, 0, NULL);
-    if (hThread == NULL) return FALSE;
-
-    WaitForSingleObject(hThread, 2000);
-    CloseHandle(hThread);
-
-    return job.is_success;
+    int res = NativeSendRuleCommandWithAck(ip, port, payload, payload_len, 1500, NULL, 0);
+    return (res >= 0) ? TRUE : FALSE;
 }
 
 /*
@@ -115,7 +197,7 @@ DISPATCHER_API BOOL NativeSendSingleRuleCommand(const char* ip, int port, const 
  */
 DISPATCHER_API BOOL NativeBroadcastCommandFast(int port, const char* payload, int payload_len) {
     if (!payload || payload_len <= 0) return FALSE;
-    InitWsaIfNeeded();
+    if (!InitWsaIfNeeded()) return FALSE;
 
     SOCKET s = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (s == INVALID_SOCKET) return FALSE;

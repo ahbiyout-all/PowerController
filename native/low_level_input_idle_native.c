@@ -37,12 +37,8 @@ IDLE_API DWORD NativeGetSystemIdleMilliseconds(void) {
     }
 
     DWORD currentTick = GetTickCount();
-    if (currentTick >= lii.dwTime) {
-        return (currentTick - lii.dwTime);
-    } else {
-        /* TickCount wrap-around after ~49.7 days */
-        return (0xFFFFFFFF - lii.dwTime) + currentTick;
-    }
+    /* Unsigned 32-bit subtraction naturally handles the 49.7-day rollover without off-by-one error */
+    return (DWORD)(currentTick - lii.dwTime);
 }
 
 /*

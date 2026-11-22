@@ -29,6 +29,10 @@
 - **폴더 풀림(Unpacked Multi-File) 설치 구현**: PyInstaller `--onedir` 빌드 디렉터리(`dist\PowerController\*`) 트리 및 필수 네이티브 C/C++ DLL들을 개별 파일 구조로 전개, 기존 설치 감지 시 클린 설치(`Clean Install`) / 덮어쓰기 선택 다이얼로그 및 `/SILENT`, `/VERYSILENT`, `/CLEAN=1` 지원.
 - **Windows Defender Firewall 사전 무음 등록**: 메인(`PowerController.exe`), 커맨더(`PowerNetworkScheduler.exe`), 전용 포트(TCP 9988, UDP 9985, UDP 9986) 및 버전 표기 명칭(`PowerController v2.9.2`) 동시 등록 및 제거 시 자동 정리.
 
+### ⚙️ 6. 12대 순수 창작 네이티브 DLL 고도화 · 전수 감사 패치 · `PowerExecNative.dll` 신설
+- **신규 12번째 순수 창작 DLL `PowerExecNative.dll`**: `SE_SHUTDOWN_NAME` 토큰 권한 상승 후 `InitiateSystemShutdownExW` / `ExitWindowsEx` 및 정식 C ABI `SetSuspendState` 직결 호출로 `shutdown.exe` / `rundll32` 없이 시스템 종료·재시작·절전·최대 절전·로그아웃 수행 및 `DiskFlushNative` 사전 디스크/레지스트리 플러시 연계.
+- **기존 11대 DLL 전수 감사 결함 패치**: `ScheduleCrypto.dll` Base64 테이블 초기화·`RtlGenRandom`·상수 시간 HMAC 수정, `CommanderTcpDispatcherNative.dll` 논블로킹 `select()` 전환으로 스택 UAF 크래시 제거 및 ACK 수신 API 신설, `CommanderPingScannerNative.dll` 32스레드 C ICMP/ARP 병렬 스캐너 신설, `FirewallNative`/`AudioDimmer` COM RAII 전환, `NetBeaconEngine`/`SysPowerHook`/`PowerCoreNative`/`DisplayDdc`/`InputIdle` 안정화 및 12대 DLL 빌드·인스톨러 파이프라인 통합.
+
 ---
 
 ## [v2.9.1] - 2026-10-09 (GitHub 릴리스 자동화, 실시간 자동 업데이트 및 크로스 플랫폼 패키징)

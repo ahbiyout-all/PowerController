@@ -951,7 +951,13 @@ class SetupWizard:
                     files_to_copy.append((src_script, dst_script))
 
         # 2.56 Companion tools, native DLLs & executables
-        for comp_tool in ["PowerCoreNative.dll", "NetBeaconEngine.dll", "FirewallNative.dll", "SysPowerHook.dll", "ScheduleCrypto.dll", "native_bridge.py", "PowerNetworkScheduler.exe", "ApplySharedSchedules.exe", "Register_Firewall_Rules.bat"]:
+        for comp_tool in [
+            "PowerCoreNative.dll", "NetBeaconEngine.dll", "FirewallNative.dll",
+            "SysPowerHook.dll", "ScheduleCrypto.dll", "DiskFlushNative.dll",
+            "AudioDimmerNative.dll", "DisplayDdcNative.dll", "LowLevelInputIdleNative.dll",
+            "CommanderTcpDispatcherNative.dll", "CommanderPingScannerNative.dll", "PowerExecNative.dll",
+            "native_bridge.py", "PowerNetworkScheduler.exe", "ApplySharedSchedules.exe", "Register_Firewall_Rules.bat",
+        ]:
             src_tool = os.path.join(base_path, comp_tool)
             if not os.path.exists(src_tool):
                 src_tool = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dist", comp_tool)
@@ -1708,7 +1714,13 @@ def run_silent_install(install_dir=None, clean_install=False, create_shortcut=Tr
                 files_to_copy.append((src_script, dst_script))
 
     # Companion tools, native DLLs & executables
-    for comp_tool in ["PowerCoreNative.dll", "NetBeaconEngine.dll", "FirewallNative.dll", "SysPowerHook.dll", "ScheduleCrypto.dll", "native_bridge.py", "PowerNetworkScheduler.exe", "ApplySharedSchedules.exe", "Register_Firewall_Rules.bat"]:
+    for comp_tool in [
+        "PowerCoreNative.dll", "NetBeaconEngine.dll", "FirewallNative.dll",
+        "SysPowerHook.dll", "ScheduleCrypto.dll", "DiskFlushNative.dll",
+        "AudioDimmerNative.dll", "DisplayDdcNative.dll", "LowLevelInputIdleNative.dll",
+        "CommanderTcpDispatcherNative.dll", "CommanderPingScannerNative.dll", "PowerExecNative.dll",
+        "native_bridge.py", "PowerNetworkScheduler.exe", "ApplySharedSchedules.exe", "Register_Firewall_Rules.bat",
+    ]:
         src_tool = os.path.join(base_path, comp_tool)
         if not os.path.exists(src_tool):
             src_tool = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dist", comp_tool)

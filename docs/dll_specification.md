@@ -1,371 +1,190 @@
-# PowerController 순수 창작 DLL 명세서 (DLL Specification)
+# PowerController 12대 순수 창작 DLL 명세서 (DLL C ABI Specification)
+
+**버전**: v2.9.2  
+**갱신 일자**: 2026-10-17  
+
+---
 
 ## 📌 문서 개요
-본 문서는 PowerController의 고성능 및 저수준 Windows OS 제어를 담당하는 순수 창작 네이티브 모듈인 **`PowerCoreNative.dll`**의 아키텍처, C ABI 함수 명세, 파라미터 규격, 에러 처리 및 파이썬 연동 방식을 정의합니다.
+본 문서는 PowerController Suite의 저수준 Windows OS 제어, 암호화, 방화벽 COM 제어, 50~500대 LAN 관제 및 직접 전원 실행을 담당하는 **12대 순수 창작 네이티브 DLL**의 C ABI 익스포트 함수, 파라미터 규격, 반환값, 그리고 `native_bridge.py` 파이썬 바인딩 인터페이스를 정의합니다.
 
 ---
 
-## 🏗️ 1. 아키텍처 개요 (Architecture Overview)
+## 📜 C ABI 함수 명세 (12대 Pure Custom DLLs)
 
-```text
-┌────────────────────────────────────────────────────────┐
-│                   Python Application                   │
-│      (main.py / installer.py / network_scheduler.py)   │
-└───────────────────────────┬────────────────────────────┘
-                            │ ctypes (C ABI)
-┌───────────────────────────▼────────────────────────────┐
-│                    native_bridge.py                    │
-│      - DLL 로더 (Dynamic Path Locator)                  │
-│      - 함수 시그니처 바인딩                             │
-│      - Graceful Fallback (DLL 부재 시 파이썬 구현 자동 전환)│
-└─────────────┬────────────────────────────┬─────────────┘
-              │ (DLL 로드 성공)            │ (DLL 부재 / 실패)
-┌─────────────▼──────────────┐ ┌───────────▼─────────────┐
-│    PowerCoreNative.dll     │ │  Python Fallback Engine │
-│  - C99 / Windows Native    │ │  - ctypes.windll        │
-│  - CreateWaitableTimerW    │ │  - taskkill / subprocess│
-│  - TerminateProcess        │ └─────────────────────────┘
-│  - Toolhelp32Snapshot      │
-│  - SetThreadExecutionState │
-└────────────────────────────┘
-```
+### [A] `PowerCoreNative.dll` (`native/power_core_native.c`)
+하드웨어 RTC 웨이크업, 절전 방지 및 무음 프로세스 트리 제어 엔진
+
+* `BOOL NativeIsHardwareWakeSupported(void)`: ACPI 웨이크업 타이머 생성 가능 여부 반환 (`TRUE`/`FALSE`).
+* `BOOL NativeSetHardwareWakeTimer(double seconds)`: `CreateWaitableTimerW` + `SetWaitableTimer(..., fResume=TRUE)`로 절전(S3) 중에도 PC를 깨우는 하드웨어 타이머 등록 (`seconds` 최대 10년 클램핑).
+* `BOOL NativeCancelHardwareWakeTimer(void)`: 활성화된 하드웨어 웨이크업 타이머 취소 및 핸들 해제.
+* `BOOL NativeSetSleepPrevention(int prevent_sleep, int keep_display)`: `SetThreadExecutionState` 기반 시스템/화면 절전 진입 차단 및 복구.
+* `int NativeKillProcessTree(unsigned long root_pid)`: `CreateToolhelp32Snapshot` 단일 스냅샷 + 동적 확장(`realloc` 최대 16,384노드) + 사이클 가드 기반 하위 프로세스 트리 무음 강제 종료.
+* `int NativeKillProcessByName(const wchar_t* process_name)`: 실행 파일명 일치 프로세스 일괄 무음 종료(자기 자신 PID 보호).
 
 ---
 
-## 📜 2. C ABI 함수 명세 (Exported Functions)
+### [B] `NetBeaconEngine.dll` (`native/net_beacon_engine.c`)
+Winsock2 비동기 UDP 비콘(Port 9985/9986) 리스너 및 512슬롯 FIFO 링버퍼 엔진
 
-### [A] PowerCoreNative.dll
-
-모든 함수는 표준 C 링키지(`extern "C"` / `__declspec(dllexport)`)를 따르며, `__stdcall` 또는 `__cdecl` 표준 호출 규약을 지원합니다.
-
-### 2.1 하드웨어 웨이크업 타이머 (Hardware Wake-Up Timer)
-
-#### `BOOL NativeSetHardwareWakeTimer(double seconds)`
-* **기능**: 지정된 시간(초) 후에 운영체제가 절전 모드(S3/Modern Standby)에 있더라도 **하드웨어 RTC 인터럽트를 발생시켜 시스템을 깨우는(Resume)** 대기 가능 타이머(`WaitableTimer`)를 생성 및 등록합니다.
-* **매개변수**:
-  * `seconds` (`double`): 현재 시각으로부터 시스템이 깨어나야 할 상대 시간 (초 단위, 예: 3600.0 = 1시간 뒤).
-* **반환값**:
-  * 성공 시 `TRUE (1)`, 실패 시 `FALSE (0)`.
-* **내부 사용 API**:
-  * `CreateWaitableTimerW(NULL, TRUE, L"PowerController_HardwareWakeTimer")`
-  * `SetWaitableTimer(hTimer, &dueTime, 0, NULL, NULL, TRUE)` (`fResume = TRUE`)
-
-#### `BOOL NativeCancelHardwareWakeTimer(void)`
-* **기능**: 활성화되어 대기 중인 하드웨어 웨이크업 타이머를 즉시 취소하고 핸들을 안전하게 해제합니다.
-* **반환값**:
-  * 성공 시 `TRUE (1)`, 실패 시 `FALSE (0)`.
-* **내부 사용 API**:
-  * `CancelWaitableTimer(hTimer)`
-  * `CloseHandle(hTimer)`
-
-#### `BOOL NativeIsHardwareWakeSupported(void)`
-* **기능**: 현재 시스템과 하드웨어 ACPI 펌웨어에서 웨이크업 타이머를 지원하는지 여부를 검사합니다.
-* **반환값**:
-  * 지원 시 `TRUE (1)`, 미지원 시 `FALSE (0)`.
+* `BOOL NativeStartBeaconListener(int port)`: 지정 포트(`1..65535`)로 백그라운드 UDP 리스너 스레드 가동 (`g_hBindEvent` 동기화 바인딩 검증).
+* `BOOL NativeStopBeaconListener(void)`: 리스너 스레드 종료 및 소켓 자원 회수.
+* `int NativeGetBeaconQueueCount(void)`: 512슬롯 링버퍼 내 대기 중인 패킷 수 반환.
+* `int NativeGetNextBeaconPacket(char* out_ip, int max_ip_len, int* out_port, char* out_data, int max_data_len)`: 가장 오래된 수신 비콘 패킷 1건을 원자적으로 인출(성공 `1`, 큐 비어있음 `0`).
+* `BOOL NativeSendBroadcast(int port, const char* data, int data_len)`: LAN 브로드캐스트(`255.255.255.255`) 및 로컬 루프백(`127.0.0.1`) 동시 UDP 송출.
+* `BOOL NativeSendDirect(const char* ip, int port, const char* data, int data_len)`: `inet_pton` 검증된 대상 IP로 유니캐스트 UDP 패킷 송출.
 
 ---
 
-### 2.2 전원 및 절전 모드 방지 제어 (Power Execution State)
+### [C] `FirewallNative.dll` (`native/firewall_native.cpp`)
+Windows Defender Firewall `INetFwPolicy2` / `INetFwRules` COM 직결 제어기 (per-call `ScopedComInit` RAII)
 
-#### `BOOL NativeSetSleepPrevention(int prevent_sleep, int keep_display)`
-* **기능**: Windows 전원 관리자에게 프로그램이 활성 작업 중임을 알리고 시스템 강제 절전 및 화면 꺼짐을 제어합니다.
-* **매개변수**:
-  * `prevent_sleep` (`int`): `1`이면 시스템 자동 절전 진입 차단, `0`이면 해제.
-  * `keep_display` (`int`): `1`이면 디스플레이(화면) 꺼짐 및 화면보호기 진입 차단, `0`이면 해제.
-* **반환값**:
-  * 성공 시 `TRUE (1)`, 실패 시 `FALSE (0)`.
-* **내부 플래그**:
-  * `ES_CONTINUOUS | ES_SYSTEM_REQUIRED` (절전 차단)
-  * `ES_DISPLAY_REQUIRED` (화면 유지)
+* `int NativeBatchRegisterSuite(const wchar_t* target_dir, const wchar_t* version_str)`: `PowerController.exe`, `PowerNetworkScheduler.exe` 인/아웃바운드 및 TCP 9988, UDP 9985/9986, 버전 표기 규칙을 0.05초 내 일괄 등록(등록 규칙 수 반환, 실패 시 `-1`).
+* `int NativeBatchRemoveSuite(const wchar_t* version_str)`: 등록된 PowerController Suite 방화벽 규칙 일괄 삭제.
+* `BOOL NativeAddApplicationRule(const wchar_t* rule_name, const wchar_t* exe_path, int direction)`: 단일 실행 파일 허용 규칙 추가 (`direction`: `1`=Inbound, `2`=Outbound).
+* `BOOL NativeAddPortRule(const wchar_t* rule_name, int protocol, const wchar_t* port_str, int direction)`: 단일 포트 허용 규칙 추가 (`protocol`: `6`=TCP, `17`=UDP).
+* `BOOL NativeDeleteRule(const wchar_t* rule_name)`: 명칭 기반 방화벽 규칙 삭제.
+* `BOOL NativeIsFirewallRulePresent(const wchar_t* rule_name)`: 규칙 등록 여부 즉시 확인.
 
 ---
 
-### 2.3 초고속 무음 프로세스 트리 종료 (Silent Process Tree Killer)
+### [D] `SysPowerHook.dll` (`native/sys_power_hook.c`)
+Windows 세션 변경 알림 훅, 하드웨어 배터리 감시 및 비차단 전원 액션 트리거
 
-#### `int NativeKillProcessTree(unsigned long root_pid)`
-* **기능**: 지정된 루트 프로세스 ID(`root_pid`)와 그에 종속된 모든 하위 자식 프로세스들을 재귀 탐색하여 **서브프로세스(`taskkill`) 스폰 없이 0.01초 내에 100% 무음으로 강제 종료**합니다.
-* **매개변수**:
-  * `root_pid` (`unsigned long`): 종료할 대상 프로세스의 PID.
-* **반환값**:
-  * 성공적으로 종료된 프로세스 수 (`int >= 0`). 실패 시 `-1`.
-* **내부 사용 API**:
-  * `CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)`
-  * `Process32FirstW`, `Process32NextW`
-  * `OpenProcess(PROCESS_TERMINATE, FALSE, pid)`
-  * `TerminateProcess(hProcess, 1)`
-
-#### `int NativeKillProcessByName(const wchar_t* process_name)`
-* **기능**: 실행 중인 프로세스 목록에서 이미지 이름(예: `L"PowerController.exe"`)과 일치하는 모든 인스턴스를 무음으로 강제 종료합니다.
-* **매개변수**:
-  * `process_name` (`const wchar_t*`): 유니코드 문자열 프로세스 이름.
-* **반환값**:
-  * 성공적으로 종료된 프로세스 수 (`int >= 0`).
+* `BOOL NativeStartSessionHook(void)`: `HWND_MESSAGE` + `WTSRegisterSessionNotification` 백그라운드 세션 감시 스레드 시작.
+* `BOOL NativeStopSessionHook(void)`: 세션 훅 해제 및 스레드 안전 종료.
+* `int NativeGetLastSessionEvent(void)`: 마지막 수신 세션 이벤트 코드 (`7`: `WTS_SESSION_LOCK`, `8`: `WTS_SESSION_UNLOCK`).
+* `int NativeGetNextSessionEvent(int* out_event_type, int* out_session_id)`: 64슬롯 큐에서 세션 이벤트 인출 (`1`/`0`).
+* `BOOL NativeIsSessionLocked(void)`: 현재 사용자 세션 잠금 상태 여부.
+* `BOOL NativeGetBatteryStatus(int* out_ac_status, int* out_battery_flag, int* out_percent, int* out_life_time)`: `GetSystemPowerStatus` 실시간 조회.
+* `BOOL NativeIsOnBatteryPower(void)` / `int NativeGetBatteryPercent(void)` / `BOOL NativeIsBatteryCritical(int threshold_percent)`: 배터리 상태/잔량/위험 임계치 판정.
+* `BOOL NativeLockWorkStation(void)`: `LockWorkStation()` 네이티브 즉시 호출.
+* `BOOL NativeTurnOffMonitor(void)`: `SendMessageTimeoutW(HWND_BROADCAST, WM_SYSCOMMAND, SC_MONITORPOWER, 2, SMTO_ABORTIFHUNG | SMTO_BLOCK, 500, ...)` 비차단 모니터 절전 전환.
 
 ---
 
-### [B] NetBeaconEngine.dll
+### [E] `ScheduleCrypto.dll` (`native/schedule_crypto.c`)
+외부 의존성 없는 순수 C99 SHA-256, HMAC-SHA256, CSPRNG 암호화 봉투 엔진
 
-수백 대 이상의 대규모 사내망 클라이언트 PC 비콘 및 UDP 통신을 **CPU 점유율 0.0%**로 처리하는 순수 창작 고속 I/O 엔진입니다.
-
-#### `BOOL NativeStartBeaconListener(int port)`
-* **기능**: Winsock2 비동기 백그라운드 워커 스레드를 가동하여 지정 포트(기본 9986)의 UDP 비콘 패킷을 수신하고 인메모리 링버퍼에 적재합니다.
-* **매개변수**: `port` (`int`): 수신 대기할 포트 번호.
-* **소켓 옵션**: `SO_REUSEADDR`, `SO_BROADCAST`, 수신 타임아웃 500ms.
-
-#### `BOOL NativeStopBeaconListener(void)`
-* **기능**: 비콘 리스너 스레드와 Winsock 소켓을 안전하게 중단하고 자원을 회수합니다.
-
-#### `int NativeGetBeaconQueueCount(void)`
-* **기능**: 현재 C 링버퍼(512 슬롯)에 대기 중인 수신 패킷 수를 반환합니다.
-
-#### `int NativeGetNextBeaconPacket(char* out_ip, int max_ip_len, int* out_port, char* out_data, int max_data_len)`
-* **기능**: 링버퍼(FIFO)에서 가장 오래된 수신 패킷을 1개 원자적으로 인출합니다.
-* **반환값**: 패킷 인출 성공 시 `1`, 큐가 비어있으면 `0`.
-
-#### `BOOL NativeSendBroadcast(int port, const char* data, int data_len)`
-* **기능**: C 레벨에서 LAN 브로드캐스트(`255.255.255.255`) 및 로컬 루프백(`127.0.0.1`)으로 UDP 데이터를 서브밀리초 단위로 초고속 송출합니다.
-
-#### `BOOL NativeSendDirect(const char* ip, int port, const char* data, int data_len)`
-* **기능**: 대상 PC IP 및 포트로 유니캐스트 UDP 패킷을 즉시 발송합니다.
+* `BOOL NativeComputeSHA256(const unsigned char* data, int data_len, char* out_hex, int max_hex_len)`: SHA-256 64자리 16진수 계산.
+* `BOOL NativeGenerateHMAC(const char* data, const char* key, char* out_hmac_hex, int max_len)`: HMAC-SHA256 전자 서명 생성.
+* `BOOL NativeVerifyScheduleSignature(const char* json_data, const char* signature_hex, const char* master_key)`: `constant_time_compare()` 기반 타이밍 공격 방어 서명 검증.
+* `int NativeEncryptSchedule(const char* plaintext, const char* master_key, char* out_b64, int max_out_len)`: `RtlGenRandom` CSPRNG 16바이트 Salt + 32바이트 HMAC + XOR-Sponge 암호문을 Base64 봉투로 출력(바이트 길이 반환, 오류 시 음수).
+* `int NativeDecryptSchedule(const char* in_b64, const char* master_key, char* out_plaintext, int max_out_len)`: Base64 디코드 및 상수 시간 HMAC 무결성 검증 후 평문 복원(위변조 시 `-2` 반환).
 
 ---
 
-### [C] FirewallNative.dll
+### [F] `DiskFlushNative.dll` (`native/disk_flush_native.c`)
+시스템 전원 차단 직전 파일시스템 버퍼 및 레지스트리 하이브 물리 동기화 엔진
 
-Windows 방화벽 COM 인터페이스(`INetFwPolicy2`, `INetFwRules`, `INetFwRule`)를 메모리 상에서 직접 호출하여, `netsh.exe` CLI의 느린 실행 속도(2~4초)를 **0.05초**로 단축하는 순수 창작 고속 방화벽 제어기입니다.
-
-#### `int NativeBatchRegisterSuite(const wchar_t* target_dir, const wchar_t* version_str)`
-* **기능**: PowerController 및 커맨더(PowerNetworkScheduler) 인바운드/아웃바운드 및 전용 포트(TCP 9988, UDP 9985, UDP 9986)와 버전 표기 규칙을 0.05초 만에 메모리 내 일괄 트랜잭션 등록합니다.
-* **매개변수**:
-  * `target_dir`: 프로그램 설치 대상 디렉터리 경로 (`PowerController.exe`, `PowerNetworkScheduler.exe` 위치).
-  * `version_str`: 시맨틱 버전 문자열 (예: `L"2.9.2"`).
-* **반환값**: 등록된 방화벽 규칙 수 (`int >= 0`), 실패 시 `-1`.
-
-#### `int NativeBatchRemoveSuite(const wchar_t* version_str)`
-* **기능**: 등록된 모든 PowerController Suite 방화벽 규칙을 0.01초 만에 깔끔하게 소거합니다.
-* **반환값**: 소거된 방화벽 규칙 수 (`int >= 0`).
-
-#### `BOOL NativeAddApplicationRule(const wchar_t* rule_name, const wchar_t* exe_path, int direction)`
-* **기능**: 단일 실행 파일의 인바운드(`direction=1`) 또는 아웃바운드(`direction=2`) 방화벽 예외 규칙을 COM을 통해 즉각 추가합니다 (`profile=any`, `action=allow`).
-
-#### `BOOL NativeAddPortRule(const wchar_t* rule_name, int protocol, const wchar_t* port_str, int direction)`
-* **기능**: 지정된 TCP(`protocol=6`) 또는 UDP(`protocol=17`) 포트에 대한 방화벽 허용 규칙을 생성합니다.
-
-#### `BOOL NativeDeleteRule(const wchar_t* rule_name)`
-* **기능**: 규칙 명칭 기반으로 방화벽 규칙을 즉시 제거합니다.
-
-#### `BOOL NativeIsFirewallRulePresent(const wchar_t* rule_name)`
-* **기능**: 특정 방화벽 규칙의 등록 여부를 0.001초 만에 확인합니다.
+* `BOOL NativeFlushSingleDrive(wchar_t drive_letter)`: 지정 논리 드라이브(예: `L'C'`) raw 볼륨 캐시 플러시.
+* `BOOL NativeFlushFilePath(const wchar_t* file_path)`: 비관리자 환경에서도 특정 설정 파일 핸들의 버퍼를 물리 디스크로 커밋.
+* `int NativeFlushAllVolumes(void)`: 고정/이동식/RAM 드라이브 전체 `FlushFileBuffers` 실행(성공 볼륨 수 반환).
+* `BOOL NativePreShutdownSync(void)`: `RegFlushKey(HKEY_CURRENT_USER / HKEY_LOCAL_MACHINE)` + `NativeFlushAllVolumes()` 일괄 실행.
 
 ---
 
-### [D] SysPowerHook.dll
+### [G] `AudioDimmerNative.dll` (`native/audio_dimmer_native.cpp`)
+Windows Core Audio (`IMMDeviceEnumerator`, `IAudioEndpointVolume`) 직결 음량 페이드/음소거 엔진
 
-Windows 세션 변경 알림(`WTSRegisterSessionNotification`) 및 하드웨어 배터리/전원 상태(`GetSystemPowerStatus`)를 실시간 훅하여 감시하고, 즉각적인 화면 잠금 및 모니터 절전을 수행하는 순수 창작 모듈입니다.
-
-#### `BOOL NativeStartSessionHook(void)`
-* **기능**: 백그라운드 메시지 전용 윈도우(`HWND_MESSAGE`)를 생성하고 `WTSRegisterSessionNotification`을 등록하여 세션 변경 이벤트(화면 잠금, 잠금 해제, RDP 원격 접속 등)를 실시간 수신합니다.
-
-#### `BOOL NativeStopSessionHook(void)`
-* **기능**: 세션 알림 등록을 해제하고 백그라운드 메시지 스레드를 안전하게 종료합니다.
-
-#### `int NativeGetLastSessionEvent(void)`
-* **기능**: 가장 최근 수신된 세션 이벤트 코드를 반환합니다 (`7`: `WTS_SESSION_LOCK`, `8`: `WTS_SESSION_UNLOCK`).
-
-#### `int NativeGetNextSessionEvent(int* out_event_type, int* out_session_id)`
-* **기능**: 64슬롯 인메모리 FIFO 큐에서 다음 수신된 세션 이벤트를 원자적으로 인출합니다. (이벤트 존재 시 `1`, 큐 비어있으면 `0` 반환).
-
-#### `BOOL NativeIsSessionLocked(void)`
-* **기능**: 현재 사용자의 윈도우 화면이 잠겨있는지(`Win + L` 등) 실시간 상태를 반환합니다.
-
-#### `BOOL NativeGetBatteryStatus(int* out_ac_status, int* out_battery_flag, int* out_percent, int* out_life_time)`
-* **기능**: `GetSystemPowerStatus`를 호출하여 AC 전원 연결 여부, 배터리 플래그, 배터리 잔량(%), 남은 수명 시간을 조회합니다.
-
-#### `BOOL NativeIsOnBatteryPower(void)`
-* **기능**: 현재 컴퓨터가 AC 전원 분리 상태로 배터리(UPS 포함)로만 동작 중인지 판별합니다.
-
-#### `int NativeGetBatteryPercent(void)`
-* **기능**: 현재 배터리 잔량 백분율(0~100)을 반환하며, 배터리가 없는 데스크톱은 `-1`을 반환합니다.
-
-#### `BOOL NativeIsBatteryCritical(int threshold_percent)`
-* **기능**: 배터리 잔량이 임계치(기본 10%) 이하인지 검사하여 시스템 안전 자동 종료 조건 여부를 판별합니다.
-
-#### `BOOL NativeLockWorkStation(void)`
-* **기능**: `rundll32.exe` 프로세스 생성 오버헤드 없이 0.0001초 만에 화면을 즉각 잠급니다.
-
-#### `BOOL NativeTurnOffMonitor(void)`
-* **기능**: PowerShell 및 인라인 C# 컴파일 지연(2~3초) 없이 0.0001초 만에 윈도우 메시지(`SC_MONITORPOWER, 2`)로 모니터를 절전(화면 끄기) 모드로 전환합니다.
+* `float NativeGetMasterVolume(void)`: 현재 기본 출력 장치 마스터 볼륨 스칼라(`0.0~1.0`, 실패 시 `-1.0`).
+* `BOOL NativeSetMasterVolume(float level_scalar)`: 즉시 볼륨 설정(`0.0~1.0` 클램핑).
+* `BOOL NativeSetMasterMute(BOOL mute)`: 즉시 음소거/해제 토글.
+* `BOOL NativeFadeMasterVolume(float target_scalar, int fade_ms)`: 단일 엔드포인트 COM 재사용 + `QueryPerformanceCounter` 기반 코사인 커브 부드러운 페이드 전환.
 
 ---
 
-### [E] ScheduleCrypto.dll
+### [H] `DisplayDdcNative.dll` (`native/display_ddc_native.cpp`)
+Dxva2.dll VESA DDC/CI 물리 모니터 백라이트 밝기 제어기
 
-외부 라이브러리 의존성 없이 표준 C99로 순수 개발된 고속 암호화 및 디지털 서명 엔진으로, 사내 배포용 예약 스케줄(`power_scheduler_rules.json`) 및 원클릭 주입기(`ApplySharedSchedules.exe`), 네트워크 브로드캐스트의 악의적 변조와 전원 공격을 방어합니다.
-
-#### `BOOL NativeComputeSHA256(const unsigned char* data, int data_len, char* out_hex, int max_hex_len)`
-* **기능**: 임의의 바이너리 또는 텍스트 데이터의 SHA-256 해시값(64자리 16진수)을 초고속으로 계산합니다.
-
-#### `BOOL NativeGenerateHMAC(const char* data, const char* key, char* out_hmac_hex, int max_len)`
-* **기능**: 관리자 마스터 키와 데이터로부터 변조 방지용 HMAC-SHA256 전자 서명을 생성합니다.
-
-#### `BOOL NativeVerifyScheduleSignature(const char* json_data, const char* signature_hex, const char* master_key)`
-* **기능**: 수신된 스케줄 JSON이 관리자에 의해 서명된 무결한 원본인지 서명을 검증합니다. (위조/변조 시 `0` 반환).
-
-#### `int NativeEncryptSchedule(const char* plaintext, const char* master_key, char* out_b64, int max_out_len)`
-* **기능**: 스케줄 JSON 데이터를 무작위 16바이트 Salt, HMAC 무결성 태그, 키스트림 암호화가 결합된 Base64 보안 봉투로 인코딩합니다.
-
-#### `int NativeDecryptSchedule(const char* in_b64, const char* master_key, char* out_plaintext, int max_out_len)`
-* **기능**: 암호화된 Base64 봉투를 복호화하고 HMAC 무결성을 검증하여 원본 JSON을 복원합니다. 변조 감지 시 복호화를 거부하고 오류(`-2`)를 반환합니다.
+* `int NativeSetHardwareBrightness(int brightness_percent)`: 연결된 모든 물리 모니터의 VESA min/max 범위에 맞추어 백라이트 밝기(`0~100%`) 설정(성공 모니터 수 반환).
+* `int NativeGetHardwareBrightness(void)`: 첫 번째 물리 모니터의 현재 하드웨어 밝기(`0~100%`, 미지원 시 `-1`) 조회.
 
 ---
 
-### [F] DiskFlushNative.dll
+### [I] `LowLevelInputIdleNative.dll` (`native/low_level_input_idle_native.c`)
+Win32 `GetLastInputInfo` 기반 32비트 롤오버 안전 유휴 시간 측정기
 
-강제 종료/재부팅 전 RAM 캐시에 잔류 중인 모든 파일시스템 버퍼를 물리 스토리지로 강제 동기화하는 순수 창작 C 모듈입니다.
-
-#### `int NativeFlushAllVolumes(void)`
-* **기능**: C:, D: 등 마운트된 모든 논리 볼륨의 파일시스템 Write-back 캐시 버퍼를 `FlushFileBuffers`로 강제 플러시합니다.
-
----
-
-### [G] AudioDimmerNative.dll
-
-Windows Core Audio API (`IAudioEndpointVolume`) 직결 오디오 페이드아웃 및 볼륨 제어 모듈입니다.
-
-#### `BOOL NativeFadeMasterVolume(float target_scalar, int fade_ms)`
-* **기능**: 오디오 출력을 `target_scalar`(0.0~1.0)까지 지정된 `fade_ms` 동안 부드러운 S-커브로 페이드다운합니다.
+* `DWORD NativeGetSystemIdleMilliseconds(void)`: `(DWORD)(GetTickCount() - lii.dwTime)` 모듈로 감산으로 49.7일 오버플로우 오차 없는 유휴 밀리초 반환.
+* `double NativeGetSystemIdleSeconds(void)`: 경과 유휴 시간(초) 반환.
+* `BOOL NativeIsSystemIdleFor(double target_seconds)`: 지정 유휴 기준 초과 여부 판별.
 
 ---
 
-### [H] DisplayDdcNative.dll
+### [J] `CommanderTcpDispatcherNative.dll` (`native/commander_tcp_dispatcher.cpp`)
+커맨더 전용 논블로킹 Winsock2 TCP/UDP 페이로드 및 ACK 송수신 엔진
 
-Dxva2.dll 및 VESA DDC/CI 기반 모니터 백라이트 하드웨어 밝기 제어기입니다.
-
-#### `int NativeSetHardwareBrightness(int brightness_percent)`
-* **기능**: 연결된 모니터의 하드웨어 백라이트 밝기(0~100%)를 직접 조절합니다.
-
----
-
-### [I] LowLevelInputIdleNative.dll
-
-Win32 `GetLastInputInfo` 기반 무동작 유휴 시간 감시 모듈입니다.
-
-#### `double NativeGetSystemIdleSeconds(void)`
-* **기능**: 마지막 키보드/마우스 입력 이후 경과된 유휴 시간(초)을 정밀 계산하여 반환합니다.
+* `int NativeSendRuleCommandWithAck(const char* ip, int port, const char* payload, int payload_len, int timeout_ms, char* out_ack_buf, int max_ack_len)`: `FIONBIO` + `select()` 정밀 타임아웃으로 TCP 연결/전송 및 JSON ACK 수신(수신 바이트 수 `>= 0`, 오류/타임아웃 `-1`).
+* `BOOL NativeSendSingleRuleCommand(const char* ip, int port, const char* payload, int payload_len)`: 기본 `1500ms` 타임아웃 단일 대상 송신.
+* `BOOL NativeBroadcastCommandFast(int port, const char* payload, int payload_len)`: LAN UDP 브로드캐스트 초고속 송출.
 
 ---
 
-### [J] CommanderTcpDispatcherNative.dll
+### [K] `CommanderPingScannerNative.dll` (`native/commander_ping_scanner.c`)
+커맨더 전용 32스레드 병렬 ICMP Echo + `SendARP` 스캐너 및 Wake-on-LAN 송출기
 
-커맨더(`PowerNetworkScheduler.exe`) 전용 Winsock2 비동기 소켓 스케줄 배포 엔진입니다.
-
-#### `BOOL NativeSendSingleRuleCommand(const char* ip, int port, const char* payload, int payload_len)`
-* **기능**: 대상 PC(TCP 9988)로 암호화 스케줄 봉투를 1.5s 타임아웃 백그라운드 소켓 스레드로 초고속 발송합니다.
-
----
-
-### [K] CommanderPingScannerNative.dll
-
-커맨더 타워 전용 `IcmpSendEcho` ICMP/ARP LAN PC 생존 스캐너 및 WoL 매직 패킷 송출기입니다.
-
-#### `BOOL NativePingSingleTarget(const char* ip_str, DWORD timeout_ms, DWORD* out_rtt_ms)`
-* **기능**: 서브프로세스 생성 없이 C 레벨 원자적 ICMP Ping으로 대상 PC 활성화 상태를 스캔합니다.
-
-#### `BOOL NativeSendWakeOnLan(const char* mac_hex_str, int port)`
-* **기능**: 원격 꺼진 PC 기상을 위한 Wake-on-LAN Magic Packet (6*0xFF + 16*MAC)을 송출합니다.
+* `BOOL NativePingSingleTarget(const char* ip_str, DWORD timeout_ms, DWORD* out_rtt_ms)`: `IcmpSendEcho` 단일 IP 생존 및 RTT(ms) 측정.
+* `BOOL NativeSendArpProbe(const char* ip_str, char* out_mac_str, int max_mac_len)`: `SendARP`로 L2 MAC 주소(`XX:XX:XX:XX:XX:XX`) 즉시 조회.
+* `int NativeBatchScanLanTargets(TargetPcStatus* entries, int count, DWORD timeout_ms)`: 최대 32개 Win32 워커 스레드로 `entries[]` 배열(`ip`, `is_online`, `round_trip_ms`, `mac_address`)을 병렬 스캔(온라인 호스트 수 반환).
+* `BOOL NativeSendWakeOnLanEx(const char* mac_hex_str, const char* broadcast_ip, int port)`: 전역 브로드캐스트 + 지정 서브넷 브로드캐스트로 102바이트 WoL 매직 패킷 송출.
+* `BOOL NativeSendWakeOnLan(const char* mac_hex_str, int port)`: 기본 WoL 매직 패킷 브로드캐스트 송출.
 
 ---
 
-## 🐍 3. 파이썬 연동 (`native_bridge.py`)
+### [L] `PowerExecNative.dll` (`native/power_exec_native.c`) *(신규)*
+Win32 토큰 특권(`SE_SHUTDOWN_NAME`) 획득 및 서브프로세스 없는 OS 전원 실행 엔진
 
-파이썬 코드에서는 복잡한 C API를 직접 호출하지 않고, **`native_bridge.py`** 모듈을 통해 아래와 같이 안전하게 사용합니다:
+* `BOOL NativeEnableShutdownPrivilege(void)`: `OpenProcessToken` + `AdjustTokenPrivileges(SE_SHUTDOWN_NAME)` + `GetLastError() == ERROR_SUCCESS` 엄격 검증.
+* `BOOL NativeCheckPowerCapabilities(int* out_can_suspend, int* out_can_hibernate, int* out_has_shutdown_priv)`: ACPI S3/S4 지원 여부 및 종료 특권 보유 여부 조회.
+* `BOOL NativeExecuteSystemShutdown(BOOL reboot, BOOL force, DWORD timeout_sec, const wchar_t* reason)`: `InitiateSystemShutdownExW` (실패 시 `ExitWindowsEx` 폴백) 기반 OS 종료/재시작.
+* `BOOL NativeExecuteSuspendState(BOOL hibernate, BOOL force_critical)`: 정식 C ABI `SetSuspendState(hibernate, force_critical, FALSE)` 호출로 `rundll32` 스택 손상 없이 절전(S3)/최대 절전(S4) 진입(RTC 웨이크업 타이머 활성 유지).
+* `BOOL NativeExecuteLogoff(BOOL force)`: `ExitWindowsEx(EWX_LOGOFF | ...)` 기반 로그아웃.
+* `BOOL NativeAbortSystemShutdown(void)`: 진행 중인 `InitiateSystemShutdownExW` 카운트다운 즉시 취소.
+
+---
+
+## 🐍 파이썬 통합 브리지 (`native_bridge.py`)
 
 ```python
 import native_bridge
 
-# 1. 하드웨어 웨이크업 타이머 가동 (1시간 뒤 절전 상태여도 PC 자동 기상)
-success = native_bridge.set_hardware_wake_timer(3600.0)
+# 1. 12대 DLL 런타임 로드 현황 진단
+status_map = native_bridge.get_native_modules_status()
 
-# 2. 절전 방지 플래그 설정
-native_bridge.set_sleep_prevention(prevent_sleep=True, keep_display=False)
+# 2. 종료/절전 직전 디스크 & 레지스트리 물리 동기화 + 네이티브 OS 전원 실행
+native_bridge.pre_shutdown_sync()
+native_bridge.execute_system_shutdown(reboot=False, force=True, timeout_sec=2)
+native_bridge.execute_suspend_state(hibernate=False, force_critical=True)
+native_bridge.execute_logoff(force=True)
 
-# 3. 무음 프로세스 트리 강제 종료
-killed_count = native_bridge.kill_process_tree_silent(target_pid)
+# 3. 컴퓨터실 50~254대 C 스레드풀 일괄 ICMP/ARP 스캔 및 논블로킹 TCP ACK 전송
+scan_map = native_bridge.batch_scan_lan_targets(["192.168.0.10", "192.168.0.11"], timeout_ms=280)
+ack_bytes = native_bridge.send_payload_with_ack("192.168.0.10", 9988, b'{"action":"query_status"}', timeout_ms=900)
+mac = native_bridge.resolve_mac_via_arp("192.168.0.10")
 
-# 4. 프로세스 이름 기반 일괄 종료
-killed_count = native_bridge.kill_process_by_name_silent("PowerController.exe")
-
-# 5. Windows Defender 방화벽 규칙 COM 초고속(0.05초) 일괄 등록
-registered_count = native_bridge.batch_register_firewall_suite(target_dir="C:\\PowerController", version_str="2.9.2")
-
-# 6. Windows Defender 방화벽 규칙 COM 초고속 소거
-removed_count = native_bridge.batch_remove_firewall_suite(version_str="2.9.2")
-
-# 7. Windows 세션 훅 가동 및 화면 잠금 실시간 감지
-native_bridge.start_session_hook()
-is_locked = native_bridge.is_session_locked()
-
-# 8. 하드웨어 배터리 / UPS 잔량 및 위험 수위(10%) 감지
-battery_info = native_bridge.get_battery_status()
-is_critical = native_bridge.is_battery_critical(threshold_percent=10)
-
-# 9. 초고속(0.0001초) 화면 잠금 및 모니터 절전 (PowerShell/rundll32 대체)
-native_bridge.lock_workstation_fast()
-native_bridge.turn_off_monitor_fast()
-
-# 10. 스케줄 데이터 전자 서명 및 무결성 검증 (ScheduleCrypto)
-sig = native_bridge.generate_schedule_hmac(json_data)
-is_valid = native_bridge.verify_schedule_signature(json_data, sig)
-
-# 11. 스케줄 봉투 암호화 및 복호화
-encrypted_b64 = native_bridge.encrypt_schedule_payload(json_data)
-decrypted_json = native_bridge.decrypt_schedule_payload(encrypted_b64)
+# 4. 방화벽 COM 일괄 등록 / 유휴 감시 / 디스플레이 DDC / 오디오 페이드
+native_bridge.batch_register_firewall_suite("C:\\Program Files\\PowerController", "2.9.2")
+idle_sec = native_bridge.get_system_idle_seconds()
+native_bridge.set_hardware_brightness(25)
+native_bridge.fade_master_volume_sync(0.0, 500)
 ```
-
-### 🛡️ Graceful Fallback (안전한 이중화 정책)
-* `PowerCoreNative.dll`, `NetBeaconEngine.dll`, `FirewallNative.dll`, `SysPowerHook.dll`, `ScheduleCrypto.dll` 파일이 대상 PC에 없거나 관리자 권한 제한으로 로드가 실패하더라도 시스템이 중단되지 않습니다.
-* `native_bridge.py` 내부에서 자동으로 기존 파이썬 표준 라이브러리(`ctypes.windll`, `subprocess.run(["taskkill", ...])`, `netsh advfirewall`, `socket`, `hashlib`, `hmac`, `base64`)로 투명하게 전환(Fallback)되어 **100% 하위 호환성을 완벽하게 보장**합니다.
 
 ---
 
-## 🛠️ 4. 컴파일 가이드라인 (Build Instructions)
+## 🛠️ 12대 DLL 수동 컴파일 명령 (MinGW-w64)
 
-전체 5대 순수 창작 DLL(`PowerCoreNative.dll`, `NetBeaconEngine.dll`, `FirewallNative.dll`, `SysPowerHook.dll`, `ScheduleCrypto.dll`)은 표준 C99, C++ 및 Windows COM으로 작성되어 Windows 표준 컴파일러로 손쉽게 빌드할 수 있습니다:
-
-### GCC (MinGW-w64)
 ```cmd
-# 1. PowerCoreNative.dll
-gcc -O2 -shared -o PowerCoreNative.dll native/power_core_native.c -lkernel32 -luser32
-
-# 2. NetBeaconEngine.dll (Winsock2 링크)
-gcc -O2 -shared -o NetBeaconEngine.dll native/net_beacon_engine.c -lkernel32 -luser32 -lws2_32
-
-# 3. FirewallNative.dll (COM / OLE 링크)
-g++ -O2 -shared -o FirewallNative.dll native/firewall_native.cpp -lole32 -loleaut32
-
-# 4. SysPowerHook.dll (WtsApi32 세션 훅 링크)
-gcc -O2 -shared -o SysPowerHook.dll native/sys_power_hook.c -lkernel32 -luser32 -lwtsapi32
-
-# 5. ScheduleCrypto.dll (순수 C 암호화 엔진)
-gcc -O2 -shared -o ScheduleCrypto.dll native/schedule_crypto.c -lkernel32
+gcc -O2 -shared -o PowerCoreNative.dll            native/power_core_native.c           -lkernel32 -luser32
+gcc -O2 -shared -o NetBeaconEngine.dll            native/net_beacon_engine.c           -lkernel32 -luser32 -lws2_32
+g++ -O2 -shared -o FirewallNative.dll             native/firewall_native.cpp           -lole32 -loleaut32
+gcc -O2 -shared -o SysPowerHook.dll               native/sys_power_hook.c              -lkernel32 -luser32 -lwtsapi32
+gcc -O2 -shared -o ScheduleCrypto.dll             native/schedule_crypto.c             -lkernel32 -ladvapi32
+gcc -O2 -shared -o DiskFlushNative.dll            native/disk_flush_native.c           -lkernel32 -ladvapi32
+g++ -O2 -shared -o AudioDimmerNative.dll          native/audio_dimmer_native.cpp       -lkernel32 -lole32
+g++ -O2 -shared -o DisplayDdcNative.dll           native/display_ddc_native.cpp        -lkernel32 -luser32 -ldxva2
+gcc -O2 -shared -o LowLevelInputIdleNative.dll    native/low_level_input_idle_native.c -lkernel32 -luser32
+g++ -O2 -shared -o CommanderTcpDispatcherNative.dll native/commander_tcp_dispatcher.cpp -lkernel32 -lws2_32
+gcc -O2 -shared -o CommanderPingScannerNative.dll native/commander_ping_scanner.c      -lkernel32 -lws2_32 -liphlpapi
+gcc -O2 -shared -o PowerExecNative.dll            native/power_exec_native.c           -lkernel32 -luser32 -ladvapi32 -lpowrprof
 ```
-
-### MSVC (cl.exe / Visual Studio Native Tools)
-```cmd
-# 1. PowerCoreNative.dll
-cl /O2 /LD native/power_core_native.c /Fe:PowerCoreNative.dll kernel32.lib user32.lib
-
-# 2. NetBeaconEngine.dll (Winsock2 링크)
-cl /O2 /LD native/net_beacon_engine.c /Fe:NetBeaconEngine.dll kernel32.lib user32.lib ws2_32.lib
-
-# 3. FirewallNative.dll (COM / OLE 링크)
-cl /O2 /EHsc /LD native/firewall_native.cpp /Fe:FirewallNative.dll ole32.lib oleaut32.lib
-
-# 4. SysPowerHook.dll (WtsApi32 세션 훅 링크)
-cl /O2 /LD native/sys_power_hook.c /Fe:SysPowerHook.dll kernel32.lib user32.lib wtsapi32.lib
-
-# 5. ScheduleCrypto.dll (순수 C 암호화 엔진)
-cl /O2 /LD native/schedule_crypto.c /Fe:ScheduleCrypto.dll kernel32.lib
-```
-
-`build.bat` 스크립트를 실행하면 시스템에 설치된 컴파일러를 자동으로 감지하여 빌드 단계에서 5대 순수 창작 DLL 전체를 자동 컴파일 생성하고 배포 패키지(`dist\PowerController\`)에 자동 배치합니다.
+> 루트 `build.bat` 또는 `python scripts/build_packages.py` 실행 시 시스템에 설치된 `gcc`/`clang`/`cl`을 자동 감지하여 12대 DLL 전체를 빌드·복사한 뒤 `PowerController.iss` 인스톨러에 번들링합니다.
