@@ -24,6 +24,7 @@ PowerController는 데스크톱 환경에서 컴퓨터의 전원(종료, 재시�
 │   ├── components/               # 공통 재사용 컴포넌트 폴더
 │   │   ├── CompactWidget.tsx     # 5종 디자인 테마 및 라이트 모드 고대비 치수를 지원하는 상단고정 위젯
 │   │   ├── DesktopAppView.tsx    # 네이티브 4창 시뮬레이터 (메인·원격스케줄러·공유주입기·DeviceController)
+│   │   ├── LabNetworkFleetPanel.tsx # 50대 컴퓨터실 통합 관제 타워 (그리드/테이블·CSV·순차 WOL·병렬 배치)
 │   │   ├── DeviceControllerModal.tsx # 웹 전용 개별 네트워크 디바이스 원격 제어판 모달
 │   │   ├── StartupTodayTasksModal.tsx # 부팅/시작 시 오늘 예약 작업 브리핑 팝업 모달
 │   │   ├── PowerSimulator.tsx    # 가상 전원 제어 시뮬레이터 (강제 종료 /f 배지 연동)
@@ -39,18 +40,20 @@ PowerController는 데스크톱 환경에서 컴퓨터의 전원(종료, 재시�
 │   ├── App.tsx                   # 메인 애플리케이션 상태 관리 및 뷰 조합
 │   └── index.css                 # Tailwind CSS 글로벌 스타일시트 및 폰트 정의
 ├── assets/                       # 프로젝트 정적 자산 및 아이콘 이미지
-├── native/                       # 11대 순수 창작 저수준 C/C++ 네이티브 DLL 소스
+├── native/                       # 12대 순수 창작 저수준 C/C++ 네이티브 DLL 소스
 │   ├── power_core_native.c       # PowerCoreNative.dll (초정밀 타이머, 절전방지락, 무음프로세스킬러)
 │   ├── net_beacon_engine.c       # NetBeaconEngine.dll (Winsock2 논블로킹 UDP 비콘 & 512 슬롯 링버퍼)
 │   ├── firewall_native.cpp       # FirewallNative.dll (Windows 방화벽 COM 직결 0.05초 일괄 트랜잭션)
 │   ├── sys_power_hook.c          # SysPowerHook.dll (세션 알림 감지, 배터리/UPS 위험 감시, 초고속 락)
-│   └── schedule_crypto.c         # ScheduleCrypto.dll (C99 SHA-256, HMAC 디지털 서명, Salt 암호화 봉투)
-│   └── ... (DiskFlushNative, AudioDimmerNative, DisplayDdcNative, LowLevelInputIdleNative 등)
+│   ├── schedule_crypto.c         # ScheduleCrypto.dll (C99 SHA-256, HMAC 디지털 서명, Salt 암호화 봉투)
+│   └── power_exec_native.c       # PowerExecNative.dll (Win32 SE_SHUTDOWN 특권·Direct C ABI 종료/절전)
+│   └── ... (DiskFlushNative, AudioDimmerNative, DisplayDdcNative, LowLevelInputIdleNative, CommanderTcpDispatcherNative, CommanderPingScannerNative)
 ├── docs/                         # 공식 기술 및 사용자 문서 폴더 (SemVer 체계)
 │   ├── README.md                 # 문서 허브 및 인덱스 가이드
 │   ├── patch_notes.md            # 버전별 상세 패치 내역 및 릴리즈 노트
-│   ├── dll_specification.md      # 5대 순수 창작 DLL C ABI 명세 및 컴파일 가이드
-│   ├── WorkLog.md                # 5단계 순수 창작 모듈화 로드맵 완료 내역 및 일자별 작업 로그
+│   ├── pure_custom_dll_architecture.md # 12대 순수 창작 DLL 동작 원리 · 감사 패치 · 아키텍처 명세
+│   ├── dll_specification.md      # 12대 순수 창작 DLL C ABI 명세 및 컴파일 가이드
+│   ├── WorkLog.md                # 12대 순수 창작 모듈화 로드맵 완료 내역 및 일자별 작업 로그
 │   ├── versioning_policy.md      # Semantic Versioning 3단계 규약 및 버전 산정 기준
 │   ├── security_guidelines.md    # 네트워크 통신 아키텍처 및 보안 운영 지침
 │   ├── desktop_troubleshooting_guide.md # 데스크톱 앱 변경사항 미반영 원인, APPDATA 격리, 빌드 가이드
@@ -62,7 +65,7 @@ PowerController는 데스크톱 환경에서 컴퓨터의 전원(종료, 재시�
 │   ├── LICENSE_ko.txt            # 한국어 표준 라이선스 전문
 │   └── LICENSE_en.txt            # 영문 표준 라이선스 전문
 ├── PowerController.iss           # Inno Setup 6 공식 윈도우 인스톨러 컴파일 스크립트
-├── native_bridge.py              # 5대 DLL 동적 바인딩 및 파이썬 Graceful Fallback 이중화 레이어
+├── native_bridge.py              # 12대 DLL 동적 바인딩 및 파이썬 Graceful Fallback 이중화 레이어
 ├── main.py                       # Python 백그라운드 엔진 & 시스템 트레이 메인 스크립트
 ├── network_scheduler.py          # 독립형 원격 네트워크 스케줄러 (TCP 9988 & 즉시 전원 제어)
 ├── schedule_share_builder.py     # 스케줄 임베딩 무설치 동기화기 빌더

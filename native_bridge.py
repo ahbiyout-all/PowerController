@@ -1175,7 +1175,6 @@ def encrypt_schedule_payload(plaintext: str, master_key: str = "") -> str:
             pass
 
     # Pure Python Cryptographic Fallback
-    import os
     import hmac
     import hashlib
     import base64
@@ -1388,6 +1387,40 @@ def fade_master_volume_sync(target_scalar: float = 0.0, fade_ms: int = 3000) -> 
     return False
 
 
+def get_master_volume() -> float:
+    """현재 시스템 마스터 오디오 볼륨(0.0~1.0, 미지원 시 -1.0)을 조회합니다."""
+    _init_audiodimmer_dll()
+    if _IS_AUDIODIMMER_LOADED and _AUDIODIMMER_DLL:
+        try:
+            return float(_AUDIODIMMER_DLL.NativeGetMasterVolume())
+        except Exception:
+            pass
+    return -1.0
+
+
+def set_master_volume(level_scalar: float) -> bool:
+    """시스템 마스터 오디오 볼륨을 level_scalar(0.0~1.0)로 즉시 설정합니다."""
+    _init_audiodimmer_dll()
+    if _IS_AUDIODIMMER_LOADED and _AUDIODIMMER_DLL:
+        try:
+            clamped = max(0.0, min(1.0, float(level_scalar)))
+            return bool(_AUDIODIMMER_DLL.NativeSetMasterVolume(ctypes.c_float(clamped)))
+        except Exception:
+            pass
+    return False
+
+
+def set_master_mute(mute: bool = True) -> bool:
+    """시스템 마스터 오디오 음소거 상태를 즉시 설정합니다."""
+    _init_audiodimmer_dll()
+    if _IS_AUDIODIMMER_LOADED and _AUDIODIMMER_DLL:
+        try:
+            return bool(_AUDIODIMMER_DLL.NativeSetMasterMute(1 if mute else 0))
+        except Exception:
+            pass
+    return False
+
+
 # ==============================================================================
 # 10. DisplayDdcNative.dll: Hardware VESA DDC/CI Backlight Brightness Control
 # ==============================================================================
@@ -1433,6 +1466,11 @@ def set_hardware_brightness_sync(brightness_percent: int) -> int:
         except Exception:
             pass
     return 0
+
+
+def set_hardware_brightness(brightness_percent: int) -> int:
+    """set_hardware_brightness_sync의 표준 별칭입니다."""
+    return set_hardware_brightness_sync(brightness_percent)
 
 
 def get_hardware_brightness() -> int:
@@ -1506,6 +1544,30 @@ def get_system_idle_seconds() -> float:
         except Exception:
             pass
     return 0.0
+
+
+def get_system_idle_ms() -> int:
+    """마지막 사용자 입력 이후 경과된 유휴 시간(밀리초)을 32비트 롤오버 보정과 함께 반환합니다."""
+    _init_inputidle_dll()
+    if _IS_INPUTIDLE_LOADED and _INPUTIDLE_DLL:
+        try:
+            return int(_INPUTIDLE_DLL.NativeGetSystemIdleMilliseconds())
+        except Exception:
+            pass
+    return int(get_system_idle_seconds() * 1000.0)
+
+
+def is_system_idle_for(target_seconds: float) -> bool:
+    """사용자가 target_seconds 초 이상 비활성(유휴) 상태인지 반환합니다."""
+    if target_seconds <= 0:
+        return False
+    _init_inputidle_dll()
+    if _IS_INPUTIDLE_LOADED and _INPUTIDLE_DLL:
+        try:
+            return bool(_INPUTIDLE_DLL.NativeIsSystemIdleFor(ctypes.c_double(float(target_seconds))))
+        except Exception:
+            pass
+    return get_system_idle_seconds() >= float(target_seconds)
 
 
 # ==============================================================================

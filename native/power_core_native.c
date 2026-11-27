@@ -38,7 +38,7 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
             EnsureCriticalSectionInitialized();
             break;
         case DLL_PROCESS_DETACH:
-            if (g_csInitialized) {
+            if (lpvReserved == NULL && g_csInitialized) {
                 EnterCriticalSection(&g_csTimer);
                 if (g_hWakeTimer != NULL) {
                     CancelWaitableTimer(g_hWakeTimer);

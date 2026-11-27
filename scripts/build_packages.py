@@ -18,19 +18,22 @@ if hasattr(sys.stdout, "reconfigure"):
 if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
+ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BUILD_DIR = os.path.join(ROOT_DIR, "build_output")
+PC_DIR = os.path.join(BUILD_DIR, "pc")
+RELEASE_ASSETS_DIR = os.path.join(ROOT_DIR, "release_assets")
+
+
 def get_app_version():
     try:
-        with open("package.json", "r", encoding="utf-8") as f:
+        with open(os.path.join(ROOT_DIR, "package.json"), "r", encoding="utf-8") as f:
             data = json.load(f)
             return data.get("version", "2.9.2").strip()
     except Exception:
         return "2.9.2"
 
+
 APP_VER = get_app_version()
-ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-BUILD_DIR = os.path.join(ROOT_DIR, "build_output")
-PC_DIR = os.path.join(BUILD_DIR, "pc")
-RELEASE_ASSETS_DIR = os.path.join(ROOT_DIR, "release_assets")
 
 def build_web_assets():
     dist_index = os.path.join(ROOT_DIR, "dist", "index.html")
@@ -112,14 +115,10 @@ def build_pc_installer():
                 os.path.join(ROOT_DIR, "network_scheduler.py")
             ], cwd=ROOT_DIR, check=False)
 
-        if os.path.exists(os.path.join(ROOT_DIR, "apply_shared_schedules.py")):
-            subprocess.run([
-                py_exe, "-m", "PyInstaller",
-                "--onefile", "--noconsole", "--noconfirm",
-                *icon_arg,
-                "--name=ApplySharedSchedules",
-                os.path.join(ROOT_DIR, "apply_shared_schedules.py")
-            ], cwd=ROOT_DIR, check=False)
+        rules_json = os.path.join(ROOT_DIR, "power_scheduler_rules.json")
+        share_builder = os.path.join(ROOT_DIR, "schedule_share_builder.py")
+        if os.path.exists(share_builder) and os.path.exists(rules_json):
+            subprocess.run([py_exe, share_builder], cwd=ROOT_DIR, check=False)
 
     # 1.5) Compile 12 Pure Custom Native DLLs (Windows host / MinGW / Clang / MSVC)
     native_specs = [

@@ -264,7 +264,20 @@ POWERHOOK_API BOOL NativeStartSessionHook(void) {
         g_hInitEvent = NULL;
     }
 
-    return g_HookRunning;
+    if (!g_HookRunning) {
+        if (g_WorkerThreadId != 0) {
+            PostThreadMessage(g_WorkerThreadId, WM_QUIT, 0, 0);
+        }
+        if (g_hWorkerThread != NULL) {
+            WaitForSingleObject(g_hWorkerThread, 500);
+            CloseHandle(g_hWorkerThread);
+            g_hWorkerThread = NULL;
+        }
+        g_WorkerThreadId = 0;
+        return FALSE;
+    }
+
+    return TRUE;
 }
 
 /*

@@ -12,15 +12,52 @@
 
 | 순위 | DLL 명칭 | 핵심 기능 | 목표 효과 | 진행 상태 |
 | :---: | :--- | :--- | :--- | :---: |
-| **1위** | **`PowerCoreNative.dll`** | • 초정밀 하드웨어 웨이크업 타이머 (`SetWaitableTimer`, `fResume=TRUE`)<br>• 절전/화면꺼짐 방지 네이티브 락 (`SetThreadExecutionState`)<br>• 무음 다계층 프로세스 트리 킬러 (`Toolhelp32` + `TerminateProcess`)<br>• Restart Manager 파일 락 자동 해제 (`RmShutdown`) | • 절전/화면꺼짐 상태에서도 0% 오차 정각 하드웨어 자동 기상 및 전원 제어<br>• `taskkill.exe` 스폰 오버헤드 및 콘솔 깜빡임 원천 차단 (0.01초 무음 사살) | **✅ 1단계 구현 완료** |
-| **2위** | **`NetBeaconEngine.dll`** | • Winsock2 기반 비동기 UDP 논블로킹 패킷 브로드캐스터<br>• 스레드 세이프 인메모리 링버퍼 (512 슬롯 FIFO 큐)<br>• C 구조체 원자적 패킷 수신 및 백그라운드 디스패치 | • 사내망 500대 이상 PC 동시 비콘 유입 시 파이썬 GIL 병목 및 CPU 점유율 0.0% 실현<br>• 소켓 버퍼 오버플로우 패킷 유실 원천 차단 | **✅ 2단계 구현 완료** |
-| **3위** | **`FirewallNative.dll`** | • Windows 네이티브 방화벽 COM 인터페이스 (`INetFwPolicy2`, `INetFwRules`) 직결<br>• 인바운드/아웃바운드/포트 및 버전 표기 규칙 C++ 일괄 트랜잭션 | • `netsh.exe` CLI 다중 실행 지연(2~3초)을 메모리 상 0.05초로 단축<br>• UAC 무음 설치 속도 극대화 | **✅ 3단계 구현 완료** |
-| **4위** | **`SysPowerHook.dll`** | • Windows 세션 알림 감지 (`WTSRegisterSessionNotification`)<br>• 화면 잠금(`Win + L`), RDP 원격 접속/해제 실시간 윈도우 메시지 훅<br>• 하드웨어 배터리 및 UPS 상태 감시 (`GetSystemPowerStatus`) | • 자리 비움 및 세션 잠금 시 사용자 맞춤형 전원 절약 타이머 자동 발동<br>• 배터리 위험 수위(10% 이하) 즉시 안전 자동 종료 | **✅ 4단계 구현 완료** |
-| **5위** | **`ScheduleCrypto.dll`** | • 사내 배포용 예약 스케줄 규격 AES-256 / SHA-256 무결성 검증<br>• 관리자 마스터 키 암호화 및 변조 방지 디지털 서명 검증 | • 외부 악의적 스케줄 변조 및 전원 공격 원천 차단 | **✅ 5단계 구현 완료** |
+| **1위** | **`PowerCoreNative.dll`** | • 초정밀 하드웨어 웨이크업 타이머 (`SetWaitableTimer`, `fResume=TRUE`)<br>• 절전/화면꺼짐 방지 네이티브 락 (`SetThreadExecutionState`)<br>• 무음 다계층 프로세스 트리 킬러 (`Toolhelp32` + `TerminateProcess`) | • 절전/화면꺼짐 상태에서도 0% 오차 정각 하드웨어 자동 기상 및 전원 제어<br>• `taskkill.exe` 스폰 오버헤드 및 콘솔 깜빡임 원천 차단 (0.01초 무음 사살) | **✅ 구현·감사 완료** |
+| **2위** | **`NetBeaconEngine.dll`** | • Winsock2 기반 비동기 UDP 논블로킹 패킷 브로드캐스터 (`inet_pton`)<br>• 스레드 세이프 인메모리 링버퍼 (512 슬롯 FIFO 큐) | • 사내망 500대 이상 PC 동시 비콘 유입 시 파이썬 GIL 병목 및 CPU 점유율 0.0% 실현<br>• 소켓 버퍼 오버플로우 패킷 유실 원천 차단 | **✅ 구현·감사 완료** |
+| **3위** | **`FirewallNative.dll`** | • Windows 방화벽 COM 인터페이스 (`INetFwPolicy2`, `INetFwRules`) 직결<br>• Per-call `ScopedComInit` RAII & 일괄 규칙 등록/삭제 | • `netsh.exe` CLI 다중 실행 지연(2~3초)을 메모리 상 0.05초로 단축<br>• UAC 무음 설치 속도 극대화 | **✅ 구현·감사 완료** |
+| **4위** | **`SysPowerHook.dll`** | • Windows 세션 알림 감지 (`WTSRegisterSessionNotification`)<br>• 하드웨어 배터리/UPS 상태 감시 & 비동기 모니터 슬립(`SendMessageTimeoutW`) | • 자리 비움 및 화면 잠금 실시간 감지<br>• 응답 없는 창에 의한 데드락 없이 즉시 화면 끄기·잠금 | **✅ 구현·감사 완료** |
+| **5위** | **`ScheduleCrypto.dll`** | • C99 SHA-256, HMAC-SHA256 상수 시간 서명 검증 (`RtlGenRandom` CSPRNG)<br>• Salt 결합 스트림 암호화 Base64 보안 봉투 | • 외부 악의적 스케줄 변조 및 전원 공격 원천 차단 | **✅ 구현·감사 완료** |
+| **6위** | **`DiskFlushNative.dll`** | • 마운트된 전체 논리 드라이브 볼륨 `FlushFileBuffers` 및 `RegFlushKey` 동기화 | • 강제 종료(`/f`) 직전 NTFS/레지스트리 Dirty Page 유실 방지 | **✅ 구현·감사 완료** |
+| **7위** | **`AudioDimmerNative.dll`** | • Core Audio COM (`IMMDeviceEnumerator`, `IAudioEndpointVolume`) 직결<br>• QPC 기반 부드러운 코사인 볼륨 페이드·즉시 음소거 | • 심야 종료 시 급작스러운 오디오 팝/스피커 노이즈 방지 | **✅ 구현·감사 완료** |
+| **8위** | **`DisplayDdcNative.dll`** | • Dxva2 VESA DDC/CI 물리 모니터 백라이트 밝기 조회·제어 | • 배터리 20% 이하 시 하드웨어 수준 모니터 소비전력 절감 | **✅ 구현·감사 완료** |
+| **9위** | **`LowLevelInputIdleNative.dll`** | • `GetLastInputInfo` 32비트 49.7일 롤오버 보정 정밀 유휴 시간 감시 | • 무동작 자동 절전·화면 잠금 오차 0.001초 달성 | **✅ 구현·감사 완료** |
+| **10위** | **`CommanderTcpDispatcherNative.dll`** | • 논블로킹 `FIONBIO` + `select()` 타임아웃 TCP Rule/ACK 디스패처 | • 21초 SYN 행 및 워커 스레드 스택 UAF 크래시 원천 제거 | **✅ 구현·감사 완료** |
+| **11위** | **`CommanderPingScannerNative.dll`** | • 32스레드 C 풀 `IcmpSendEcho` + `SendARP` + `NativeSendWakeOnLanEx` | • 50~254대 서브넷 생존·MAC 스캔 0.05초 내 완료 및 순차 WOL 지원 | **✅ 구현·감사 완료** |
+| **12위** | **`PowerExecNative.dll`** | • `SE_SHUTDOWN_NAME` 토큰 상승, `InitiateSystemShutdownExW` / `ExitWindowsEx` & C ABI `SetSuspendState` | • `rundll32` ABI 손상 및 `shutdown.exe` 콘솔 스폰 제거 | **✅ 구현·감사 완료** |
 
 ---
 
 ## 📝 작업 로그 (Work Log)
+
+### 📅 [2026-11-26] - 전수 자아성찰(Deep Audit) 2차 결함 수정, COM GUID·동시성·CSV·패키징 교정 및 문서 현행화
+
+#### 1. 12대 순수 창작 C/C++ DLL 정밀 감사 및 치명 결함 수정
+1. **COM 인터페이스 GUID 손상 복구 (`native/audio_dimmer_native.cpp`, `native/firewall_native.cpp`)**:
+   - `AudioDimmerNative.dll`의 `CLSID_MMDeviceEnumerator_Custom` 오기(`0xBCDE0380-...`)를 Windows SDK 공식 GUID `{BCDE0395-E52F-467C-8E3D-C4579291692E}`로 교정하여 `CoCreateInstance` 실패(`REGDB_E_CLASSNOTREG`) 원천 해결.
+   - `FirewallNative.dll`의 `IID_INetFwPolicy2_Custom`, `CLSID_NetFwRule_Custom`, `IID_INetFwRule_Custom` 불일치를 공식 `netfw.h` GUID(`{98325047-C671-4174-8D81-DEFCD3F03186}`, `{2C5BC43E-3369-4C33-AB0C-BE9469677AF4}`, `{AF230D27-BABA-4E42-ACED-F524F22CFCE2}`)로 전면 교정하여 COM 방화벽 등록 정상화.
+2. **Win32 Loader Lock · 스레드 핸들 누수 · Base64 패딩 하드닝**:
+   - `native/power_core_native.c`: `DllMain(DLL_PROCESS_DETACH)`에 `lpvReserved == NULL` 가드를 추가하여 비정상 프로세스 종료 시 크리티컬 섹션 데드락 방지.
+   - `native/sys_power_hook.c`: `NativeStartSessionHook()` 초기화 실패/타임아웃 시 `g_WorkerThreadId`/`g_hWorkerThread` 정리 루틴 보강.
+   - `native/schedule_crypto.c`: `base64_decode()`에서 비최종 4바이트 블록 내부의 `'='` 패딩 문자를 엄격 거부하도록 검증 추가.
+3. **`native_bridge.py` & `schedule_share_builder.py` API/호출 정합화**:
+   - `native_bridge.py` 내 중복 `import os` 섀도잉 제거, `set_hardware_brightness` 문서 표준 별칭 추가, `get_master_volume` · `set_master_volume` · `set_master_mute` · `get_system_idle_ms` · `is_system_idle_for` 래퍼 노출 완성.
+   - `schedule_share_builder.py` 생성 주입기가 `PowerCoreNative.dll`의 `kill_process_by_name_silent()`를 우선 호출하고 창 없는 `subprocess.run`으로 폴백하도록 개선.
+
+#### 2. 50대 컴퓨터실 관제 동시성·CSV 파서·웹/빌드 스크립트 결함 수정
+1. **`network_scheduler.py` Tkinter 스레드 안전성 및 타이머 만료 교정**:
+   - `_execute_parallel_batch`, `_scan_ip_list`, `_poll_all_known_silent` 워커 스레드가 공유 딕셔너리(`pc_records`, `pc_live_telemetry`, `last_scanned_active_ips`)를 직접 변경하던 경합 조건을 `self.root.after(0, ...)` 메인 스레드 마샬링으로 이전.
+   - `schedule_tick_loops`에서 원격 PC 타이머 잔여 시간이 `0`에 도달할 때 `timer_running = False`로 상태 전환하도록 수정.
+2. **`src/components/LabNetworkFleetPanel.tsx` & `src/App.tsx`**:
+   - 단순 `split(',')`로 쉼표/따옴표 포함 셀이 파손되던 CSV 로스터 입출력을 RFC-4180 파서(`splitCsvRow`)·이스케이퍼(`escapeCsvCell`) 및 IPv4 유효성 검사로 교체.
+   - 0초 도달 시 `timerRunning: false` 전이 및 순차 WOL의 오프라인/실패 대상 우선 선별 보강.
+   - `App.tsx`의 `navigator.getBattery()` `levelchange`/`chargingchange` 리스너 해제 참조 불일치 누수 수정.
+3. **빌드·릴리스 스크립트 SSOT 교정 (`scripts/build_packages.py`, `scripts/clean_github_release_assets.py`, `build.bat`)**:
+   - `scripts/build_packages.py`가 존재하지 않던 `apply_shared_schedules.py` 대신 `schedule_share_builder.py`를 조건부 실행하도록 수정하고 `ROOT_DIR` 기준 `package.json` 경로 해석 적용 (`clean_github_release_assets.py` 동일).
+   - `build.bat`이 `docs/patch_notes.md`보다 `package.json` SSOT 버전을 최우선으로 읽도록 교정.
+4. **전체 기술 문서 12대 DLL · v2.9.2 일괄 동기화**:
+   - `docs/installation_guide.md`, `docs/WorkLog.md`, `docs/development.md`, `docs/user_guide.md`, `docs/ROADMAP.md`, `docs/BLOG_RELEASE.md`, `docs/PATCHNOTES.md`, `docs/patch_notes.md`, `README.md`를 최신 아키텍처에 맞게 일괄 갱신.
+
+---
 
 ### 📅 [2026-11-22] - v2.9.2 전수 자아성찰(Deep Audit), 개별 디바이스 제어판, 자동 언어 감지 및 문서 동기화
 

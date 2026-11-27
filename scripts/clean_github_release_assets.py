@@ -21,9 +21,11 @@ if hasattr(sys.stderr, "reconfigure"):
 REPO_OWNER = "AhBiYout-all"
 REPO_NAME = "PowerController"
 
+ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 def get_app_version():
     try:
-        with open("package.json", "r", encoding="utf-8") as f:
+        with open(os.path.join(ROOT_DIR, "package.json"), "r", encoding="utf-8") as f:
             return json.load(f).get("version", "2.9.2").strip()
     except Exception:
         return "2.9.2"

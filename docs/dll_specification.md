@@ -1,7 +1,7 @@
 # PowerController 12대 순수 창작 DLL 명세서 (DLL C ABI Specification)
 
 **버전**: v2.9.2  
-**갱신 일자**: 2026-10-17  
+**갱신 일자**: 2026-11-26  
 
 ---
 

@@ -2931,21 +2931,22 @@ class NetworkSchedulerApp:
 
                     if success:
                         ok_cnt += 1
-                        self.last_scanned_active_ips.add(ip)
                     else:
                         fail_cnt += 1
                         new_failed.append(ip)
 
-                    cur = self.pc_live_telemetry.get(ip, {})
-                    cur.update(t_upd)
-                    self.pc_live_telemetry[ip] = cur
                     if log_msg:
                         self.log_append(log_msg)
 
-                    self.root.after(
-                        0,
-                        lambda d=done, t=total, o=ok_cnt, f=fail_cnt, lb=label: self._update_progress_ui(d, t, o, f, lb),
-                    )
+                    def _apply_step(target_ip=ip, is_ok=success, upd=dict(t_upd), d=done, t=total, o=ok_cnt, f=fail_cnt, lb=label):
+                        if is_ok:
+                            self.last_scanned_active_ips.add(target_ip)
+                        cur = self.pc_live_telemetry.get(target_ip, {})
+                        cur.update(upd)
+                        self.pc_live_telemetry[target_ip] = cur
+                        self._update_progress_ui(d, t, o, f, lb)
+
+                    self.root.after(0, _apply_step)
 
             def finish():
                 self.batch_in_progress = False
@@ -3028,10 +3029,10 @@ class NetworkSchedulerApp:
                 list(pool.map(probe, ip_list))
 
             active_ip_set = {x[0] for x in active_ips}
-            changed = False
-
-            # Register responding PCs or entire planned range
             ordered_register = ip_list if auto_register_all else sorted(active_ip_set, key=ip_sort_key)
+            staged_records = []
+            staged_telemetry = {}
+
             for idx, ip in enumerate(ordered_register):
                 seat_idx = start_seat + idx
                 beacon_info = DISCOVERED_CLIENTS.get(ip, {})
@@ -3044,30 +3045,11 @@ class NetworkSchedulerApp:
                     or (get_mac_from_arp(ip) if ip in active_ip_set else "")
                 )
                 host = resp_info.get("device") or beacon_info.get("hostname") or f"LAB-{format_seat_no(seat_idx)}"
-
-                if ip not in self.pc_records:
-                    self.pc_records[ip] = {
-                        "hostname": host,
-                        "mac": mac,
-                        "group": target_group,
-                        "seat_no": format_seat_no(seat_idx, prefix=seat_prefix),
-                        "row": (idx // cols) + 1,
-                        "col": (idx % cols) + 1,
-                        "memo": "Range Scan" if auto_register_all else "LAN Scan",
-                    }
-                    changed = True
-                else:
-                    if mac and not self.pc_records[ip].get("mac"):
-                        self.pc_records[ip]["mac"] = mac
-                        changed = True
-                    if resp_info.get("device") and self.pc_records[ip].get("hostname", "").startswith(("PC-", "LAB-")):
-                        self.pc_records[ip]["hostname"] = resp_info["device"]
-                        changed = True
+                staged_records.append((ip, idx, seat_idx, host, mac, resp_info))
 
                 if ip in active_ip_set:
-                    self.last_scanned_active_ips.add(ip)
                     lat = next((l for (rip, _, l, _) in active_ips if rip == ip), 1)
-                    self.pc_live_telemetry[ip] = {
+                    staged_telemetry[ip] = {
                         "status": "online",
                         "latency_ms": lat,
                         "rules_count": resp_info.get("count", beacon_info.get("rules_count", 0)),
@@ -3077,10 +3059,35 @@ class NetworkSchedulerApp:
                         "last_ack": datetime.now().strftime("%H:%M:%S"),
                     }
 
-            if changed:
-                self.save_pc_groups_data()
-
             def done_ui():
+                changed = False
+                for ip, idx, seat_idx, host, mac, resp_info in staged_records:
+                    if ip not in self.pc_records:
+                        self.pc_records[ip] = {
+                            "hostname": host,
+                            "mac": mac,
+                            "group": target_group,
+                            "seat_no": format_seat_no(seat_idx, prefix=seat_prefix),
+                            "row": (idx // cols) + 1,
+                            "col": (idx % cols) + 1,
+                            "memo": "Range Scan" if auto_register_all else "LAN Scan",
+                        }
+                        changed = True
+                    else:
+                        if mac and not self.pc_records[ip].get("mac"):
+                            self.pc_records[ip]["mac"] = mac
+                            changed = True
+                        if resp_info.get("device") and self.pc_records[ip].get("hostname", "").startswith(("PC-", "LAB-")):
+                            self.pc_records[ip]["hostname"] = resp_info["device"]
+                            changed = True
+
+                for ip, tele in staged_telemetry.items():
+                    self.last_scanned_active_ips.add(ip)
+                    self.pc_live_telemetry[ip] = tele
+
+                if changed:
+                    self.save_pc_groups_data()
+
                 self.btn_scan.config(state="normal", text=self.t("btn_scan"))
                 self.refresh_group_combobox()
                 self.refresh_pc_roster_view()
@@ -3160,7 +3167,11 @@ class NetworkSchedulerApp:
                 return ip, resp
 
             with ThreadPoolExecutor(max_workers=min(24, max(4, len(targets)))) as pool:
-                for ip, resp in pool.map(check_one, targets):
+                results = list(pool.map(check_one, targets))
+
+            def apply_poll():
+                now_str = datetime.now().strftime("%H:%M:%S")
+                for ip, resp in results:
                     if resp.get("success"):
                         self.last_scanned_active_ips.add(ip)
                         self.pc_live_telemetry[ip] = {
@@ -3170,13 +3181,15 @@ class NetworkSchedulerApp:
                             "timer_running": resp.get("timer_running", False),
                             "remaining_seconds": resp.get("remaining_seconds", 0),
                             "active_mode": resp.get("active_mode", ""),
-                            "last_ack": datetime.now().strftime("%H:%M:%S"),
+                            "last_ack": now_str,
                         }
                     else:
                         cur = self.pc_live_telemetry.get(ip, {})
                         cur["status"] = "offline"
                         self.pc_live_telemetry[ip] = cur
-            self.root.after(0, self.refresh_pc_roster_view)
+                self.refresh_pc_roster_view()
+
+            self.root.after(0, apply_poll)
 
         threading.Thread(target=poll_worker, daemon=True).start()
 
@@ -3189,7 +3202,10 @@ class NetworkSchedulerApp:
             timer_changed = False
             for ip, tele in self.pc_live_telemetry.items():
                 if tele.get("timer_running") and tele.get("remaining_seconds", 0) > 0:
-                    tele["remaining_seconds"] = max(0, tele["remaining_seconds"] - 1)
+                    next_sec = max(0, tele["remaining_seconds"] - 1)
+                    tele["remaining_seconds"] = next_sec
+                    if next_sec == 0:
+                        tele["timer_running"] = False
                     timer_changed = True
             if timer_changed and not self.batch_in_progress:
                 self.refresh_pc_roster_view()

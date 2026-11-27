@@ -2,7 +2,7 @@
 # (Pure Custom Native DLL Architecture, Operating Principles & Audit Report)
 
 **문서 버전**: v2.9.2  
-**갱신 일자**: 2026-10-17  
+**갱신 일자**: 2026-11-26  
 **프로젝트**: PowerController Suite (`PowerController.exe`, `PowerNetworkScheduler.exe`, `ApplySharedSchedules.exe`)  
 **저작권**: Copyright (c) 2026 AhBiYout. All rights reserved.
 
@@ -70,7 +70,7 @@ Native     Native      Hook      Native      InputIdle  Native     + DisplayDdc 
 | 6 | `disk_flush_native.c` | `DiskFlushNative.dll` | `FlushFileBuffers`, `RegFlushKey`, `GetLogicalDriveStringsW` | 종료/절전 직전 NTFS/FAT 볼륨 캐시 및 레지스트리 하이브 강제 동기화 |
 | 7 | `audio_dimmer_native.cpp` | `AudioDimmerNative.dll` | `IMMDeviceEnumerator`, `IAudioEndpointVolume`, QPC 타이머 | 마스터 오디오 S-커브 페이드아웃 및 음소거 |
 | 8 | `display_ddc_native.cpp` | `DisplayDdcNative.dll` | `dxva2.dll` VESA DDC/CI (`Set/GetMonitorBrightness`) | 물리 모니터 하드웨어 백라이트 밝기 제어(0~100% 정규화) |
-| 9 | `low_level_input_idle_native.c` | `LowLevelInputIdleNative.c` ➔ `.dll` | `GetLastInputInfo`, 32비트 모듈로 감산 | 사용자 무동작 유휴 시간(ms/sec) 정밀 측정 |
+| 9 | `low_level_input_idle_native.c` | `LowLevelInputIdleNative.dll` | `GetLastInputInfo`, 32비트 모듈로 감산 | 사용자 무동작 유휴 시간(ms/sec) 정밀 측정 |
 | 10 | `commander_tcp_dispatcher.cpp` | `CommanderTcpDispatcherNative.dll` | Winsock2 `FIONBIO` + `select()` + `recv()` ACK | 50~500대 PC 원격 제어 JSON 페이로드 논블로킹 송수신 |
 | 11 | `commander_ping_scanner.c` | `CommanderPingScannerNative.dll` | `IcmpSendEcho`, `SendARP`, 32스레드 C 풀, WoL UDP | 컴퓨터실 50~254대 병렬 생존/MAC 스캔 및 매직 패킷 송출 |
 | **12** | **`power_exec_native.c`** *(신규)* | **`PowerExecNative.dll`** | `AdjustTokenPrivileges(SE_SHUTDOWN_NAME)`, `InitiateSystemShutdownExW`, `ExitWindowsEx`, `SetSuspendState` | **서브프로세스 없는 Win32 네이티브 전원 실행/취소 엔진** |
@@ -124,18 +124,18 @@ v2.9.2 전수 감사를 통해 기존 11개 C/C++ DLL 소스 및 `native_bridge.
 
 | 모듈 | 발견된 결함 / 위험 (Audit Finding) | 적용된 수정 및 개선 내용 |
 | :--- | :--- | :--- |
-| **`schedule_crypto.c`** | ① Base64 디코드 테이블 `memset(dtable, 0x80, 256)`이 `int dtable[256]`(1024바이트)의 첫 64개 원소만 초기화하여 ASCII `>= 64` 문자의 스택 쓰레기값 참조 버그 존재<br>② 미시드 `rand() % 256` 예측 가능 Salt 사용<br>③ `memcmp` HMAC 비교로 타이밍 누출 가능 및 빈 평문 `malloc(0)` 위험 | ① 256개 원소 전체를 `-1`로 초기화 + `len % 4 == 0` 검증<br>② OS CSPRNG `RtlGenRandom`(`advapi32!SystemFunction036`) + QPC/PID/TID SHA-256 엔트로피 폴백 적용<br>③ `constant_time_compare()` 도입 및 빈 평문 방어 |
+| **`schedule_crypto.c`** | ① Base64 디코드 테이블 `memset(dtable, 0x80, 256)`이 `int dtable[256]`(1024바이트)의 첫 64개 원소만 초기화하여 ASCII `>= 64` 문자의 스택 쓰레기값 참조 버그 존재<br>② 미시드 `rand() % 256` 예측 가능 Salt 사용 및 `memcmp` 타이밍 누출<br>③ 비최종 4문자 블록 내 `'='` 포함 등 잘못된 Base64 패딩 허용 가능성 | ① 256개 원소 전체를 `-1`로 초기화 + `len % 4 == 0` 검증 + `'='` 패딩 위치/개수 엄격 검증<br>② OS CSPRNG `RtlGenRandom`(`advapi32!SystemFunction036`) + QPC/PID/TID SHA-256 엔트로피 폴백 적용<br>③ `constant_time_compare()` 도입 및 빈 평문 방어 |
 | **`commander_tcp_dispatcher.cpp`** | ① 블로킹 `connect()`가 `SO_SNDTIMEO`를 무시해 최대 21초 대기하는 동안 호출 함수의 `WaitForSingleObject(2000)`이 먼저 리턴하여 워커 스레드가 해제된 스택 변수(`job`)에 쓰는 **Use-After-Return 메모리 손상 위험** 존재<br>② `inet_addr()` 비표준 처리 및 `WSACleanup()` 누락 | ① 비동기 `FIONBIO` + `connect()` + `select()` 정밀 타임아웃 동기 호출로 구조 전면 개선(스택 UAF 원천 제거)<br>② `inet_pton(AF_INET, ...)` 및 `DLL_PROCESS_DETACH` `WSACleanup()` 추가<br>③ JSON ACK 동시 수신 API `NativeSendRuleCommandWithAck` 신설 |
-| **`firewall_native.cpp`** | ① `DllMain` 내부 전역 COM 초기화(Loader Lock 데드락 위험) 및 멀티스레드 호출 시 타 스레드 COM 미초기화 실패<br>② `SysAllocString` NULL 체크 누락 및 `_snwprintf` NUL 미종단 가능성 | ① `DllMain` COM 호출 제거, 호출 스레드별 RAII `ScopedComInit` 적용 (`COINIT_MULTITHREADED` + `RPC_E_CHANGED_MODE` 폴백)<br>② `SysAllocString` NULL 검사, 강제 NUL 종단, 기본 버전 `L"2.9.2"` 반영 |
-| **`audio_dimmer_native.cpp`** | ① `DllMain` 전역 COM 초기화 문제<br>② `NativeFadeMasterVolume`이 150회 루프마다 `CoCreateInstance`로 엔드포인트를 재생성하여 COM 부하 및 페이드 시간 편차 발생 | ① per-call RAII `ScopedAudioCom` 전환<br>② 엔드포인트 1회 획득 재사용 + `QueryPerformanceCounter` 실측 경과 시간 코사인 곡선 페이드로 개편 |
+| **`firewall_native.cpp`** | ① **커스텀 COM GUID 불일치 (`IID_INetFwPolicy2`, `CLSID_NetFwRule`, `IID_INetFwRule`)로 `CoCreateInstance`/`QueryInterface` 실패 가능성**<br>② `DllMain` 내부 전역 COM 초기화(Loader Lock 데드락 위험) 및 `SysAllocString` NULL 체크 누락 | ① **Windows SDK 공식 GUID(`{98325047-...}`, `{2C5BC43E-...}`, `{AF230D27-...}`)로 정밀 복원**<br>② `DllMain` COM 호출 제거, 호출 스레드별 RAII `ScopedComInit` 적용<br>③ `SysAllocString` NULL 검사, 강제 NUL 종단, 기본 버전 `L"2.9.2"` 반영 |
+| **`audio_dimmer_native.cpp`** | ① **커스텀 `CLSID_MMDeviceEnumerator` 마지막 바이트 불일치 (`0xBCDE0380` 등)로 `REGDB_E_CLASSNOTREG` 실패**<br>② `DllMain` 전역 COM 초기화 문제 및 150회 루프 COM 반복 생성 | ① **공식 SDK `CLSID_MMDeviceEnumerator` (`{BCDE0395-E52F-467C-8E3D-C4579291692E}`) 복원**<br>② per-call RAII `ScopedAudioCom` 전환 및 단일 엔드포인트 재사용 + QPC 코사인 커브 페이드 |
 | **`net_beacon_engine.c`** | ① `NativeSendDirect`에서 deprecated `inet_addr()` 사용 시 잘못된 IP가 `INADDR_NONE`(`255.255.255.255` 브로드캐스트)으로 오인 전송되는 버그<br>② 리스너 스레드 포트 바인드 실패 시에도 `NativeStartBeaconListener`가 `TRUE` 반환<br>③ 512 슬롯 초과 시 최신 비콘 패킷 드롭 | ① `inet_pton` 엄격 검증 및 포트 범위(`1..65535`) 체크<br>② `g_hBindEvent` 수동 리셋 이벤트로 바인드 성패 동기 검증<br>③ 링버퍼 포화 시 가장 오래된 슬롯을 덮어쓰고 최신 비콘 유지 + `WSACleanup()` 추가 |
-| **`sys_power_hook.c`** | ① `NativeTurnOffMonitor`의 `SendMessage(HWND_BROADCAST, ...)`가 응답 없는 창이 하나라도 있으면 영구 블로킹(데드락)<br>② `DLL_PROCESS_DETACH` 시 `lpvReserved != NULL` 프로세스 종료 시점 스레드 대기 위험 | ① `SendMessageTimeoutW(..., SMTO_ABORTIFHUNG | SMTO_BLOCK, 500, ...)` + `SendNotifyMessageW` 폴백 적용<br>② `lpvReserved == NULL` 가드, `RegisterClassExA` 실패 처리 및 `UnregisterClassA` 정리, 64슬롯 큐 덮어쓰기 정책 적용 |
-| **`power_core_native.c`** | ① 고정 크기 `allNodes[1024]` 초과 환경(다중 탭 브라우저/대형 서버)에서 프로세스 누락 및 PID 재사용 순환 트리 시 무한 재귀 가능<br>② 자기 자신 프로세스 PID 조기 종료 가능<br>③ 웨이크 타이머 `seconds` 극대값 `LONGLONG` 오버플로우 가능 | ① `realloc` 동적 확장(1024 ➔ 최대 16384개) + `visited[]` 사이클 가드 + 재귀 깊이 64 제한<br>② `GetCurrentProcessId()` 자기 자신 종료 제외<br>③ `seconds` 상한(10년) 클램핑 및 최소 `-1` 단위 보장 |
+| **`sys_power_hook.c`** | ① `NativeTurnOffMonitor`의 `SendMessage(HWND_BROADCAST, ...)` 영구 블로킹(데드락) 위험<br>② `NativeStartSessionHook()` 초기화 실패/타임아웃 시 `g_hWorkerThread` 핸들 및 `g_WorkerThreadId` 누수 가능성 | ① `SendMessageTimeoutW(..., SMTO_ABORTIFHUNG | SMTO_BLOCK, 500, ...)` + `SendNotifyMessageW` 폴백 적용<br>② `g_HookRunning == FALSE` 실패 경로 핸들/스레드 ID 정리 및 `lpvReserved == NULL` 가드, 64슬롯 큐 덮어쓰기 적용 |
+| **`power_core_native.c`** | ① 고정 크기 `allNodes[1024]` 초과 환경 프로세스 누락 및 순환 트리 무한 재귀 가능<br>② `DLL_PROCESS_DETACH` 시 프로세스 종료(`lpvReserved != NULL`) 상태에서도 `CriticalSection` 진입/삭제 시도 위험 | ① `realloc` 동적 확장(1024 ➔ 최대 16384개) + `visited[]` 사이클 가드 + `GetCurrentProcessId()` 자기 자신 제외<br>② `lpvReserved == NULL` 가드 추가로 프로세스 종료 데드락 원천 차단 및 `seconds` 상한 클램핑 |
 | **`display_ddc_native.cpp`** | ① 전역 `CRITICAL_SECTION` 미초기화 및 `g_hDxva2Lib` 미해제<br>② 모니터 VESA `dwMin..dwMax` 비선형 범위 무시<br>③ 명세된 `NativeGetHardwareBrightness` 미구현 | ① `EnsureDxvaCS()` + `FreeLibrary` 해제<br>② `GetMonitorBrightness` 기반 동적 범위 스케일링<br>③ `NativeGetHardwareBrightness()` 정식 구현 |
 | **`disk_flush_native.c`** | ① 비관리자 환경에서 전체 볼륨 핸들 열기 실패 시 부분 성공 판단 오류 (`flushed > 0`만 검사)<br>② 단일 드라이브/단일 파일 플러시 부재 | ① `NativeFlushSingleDrive`, `NativeFlushFilePath` 추가<br>② `NativePreShutdownSync`가 `HKCU` 레지스트리 플러시 성공도 반영하도록 개선 |
 | **`low_level_input_idle_native.c`** | ① `currentTick >= dwTime` 분기 시 49.7일 롤오버 경계에서 `1ms` 오차(`0xFFFFFFFF - dwTime + currentTick`) | ① C 표준 부호 없는 32비트 감산 `(DWORD)(currentTick - lii.dwTime)` 단일식으로 1ms 오차 제거 |
 | **`commander_ping_scanner.c`** | ① `NativeSendWakeOnLan` 단독 호출 시 `WSAStartup` 미호출로 인한 `WSANOTINITIALISED (10093)` 실패 버그<br>② C 레벨 다중 PC 일괄 스캔 API 부재 | ① 스레드 안전 `EnsureScanWsa()` + `WSACleanup()` 추가<br>② `NativeSendWakeOnLanEx`(서브넷 브로드캐스트 병행) 및 32스레드 C 풀 `NativeBatchScanLanTargets` 신설 |
-| **`native_bridge.py` & 앱 통합** | ① `lock_workstation_fast()` 예외 블록 내 `import os`로 인해 `UnboundLocalError` 발생 잠재 버그<br>② 6개 신규 DLL 및 `PowerExecNative`가 `main.py`, `network_scheduler.py`, `build.bat`, `.iss`, `build_packages.py`에 부분 누락 | ① `import os` 섀도잉 제거 및 전 12개 DLL C ABI 바인딩 완성<br>② `main.py`·`network_scheduler.py`·`installer.py`·`build.bat`·`PowerController.iss`·`build_packages.py`·`scriptGenerators.ts` 전면 통합 |
+| **`native_bridge.py` & 앱 통합** | ① `lock_workstation_fast()` 및 `encrypt_schedule_payload()` 내 로컬 `import os` 섀도잉(`UnboundLocalError`) 위험<br>② 문서 명세 `set_hardware_brightness` 및 Core Audio·Idle 래퍼 함수 누락 | ① 로컬 `import os` 섀도잉 전면 제거 및 `set_hardware_brightness`, `get_master_volume`, `set_master_volume`, `set_master_mute`, `get_system_idle_ms`, `is_system_idle_for` 래퍼 완비<br>② `main.py`·`network_scheduler.py`·`schedule_share_builder.py`·`installer.py`·`build.bat`·`PowerController.iss`·`build_packages.py`·`scriptGenerators.ts` 전면 통합 |
 
 ---
 

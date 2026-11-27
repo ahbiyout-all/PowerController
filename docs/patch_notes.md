@@ -5,11 +5,14 @@
 
 ---
 
-## [v2.9.2] - 2026-10-17 (개별 디바이스 제어판, 자동 언어 감지, 4대 테마 고대비 및 전수 감사 픽스)
+## [v2.9.2] - 2026-11-26 (50대 컴퓨터실 통합 관제, 12대 순수 창작 DLL, 표준 6단계 설치 & 2차 전수 감사 픽스)
 
-### 🖥️ 1. 개별 디바이스 원격 제어판 (`DeviceController`) & 사내 커맨더 타워 확장
-- **개별 PC 즉시 원격 제어 패널 신설**: 웹 사이드바/뷰 및 데스크톱 네이티브 뷰(`DeviceController.exe`)에서 사내망 탐지 PC별로 **종료(Shutdown), 재시작(Restart), 절전(Sleep), 화면끔(Screen Off), 비상 알람(Alarm)**을 개별 또는 다중 선택하여 즉시 송출.
-- **실시간 원격 실행 ACK 콘솔**: TCP 9988 직결 제어 명령 전송 결과를 실시간 타임스탬프 콘솔로 모니터링.
+### 🖥️ 1. 50대 컴퓨터실 통합 원격 제어 타워 (`PowerNetworkScheduler`) & 개별 디바이스 제어판 (`DeviceController`)
+- **50대 컴퓨터실 병렬 관제 엔진 & 재시도(`ThreadPoolExecutor` / Bounded Worker)**: `network_scheduler.py`에 최대 24스레드 병렬 TCP/UDP 배치 디스패처, 실시간 진행률 바(`Done / Total · OK · Fail`), 및 실패 PC 원클릭 재시도(`Retry Failed`) 탑재.
+- **좌석 배치 그리드 뷰(`5/8/10`열) ↔ 정렬 가능한 상세 목록 뷰**: 웹 대시보드(`Lab Fleet 50` 탭), 데스크톱 네이티브 뷰(`PowerNetworkScheduler.exe`), 독립형 Python 앱 모두에서 단일 로스터 상태 기반 2종 뷰 즉시 전환 및 그룹·상태·키워드 필터 제공.
+- **IP 대역 스캐너 · RFC-4180 CSV 좌석 일괄 등록 · 교시별 프로필 & 순차 WOL**: `start_ip–end_ip` IPv4 범위 자동 좌석 배정, `seat_no,ip,mac,hostname,group,row,col,memo` CSV 가져오기/내보내기, 일과·교시별 다중 규칙 번들 일괄 배포, 스위치 과부하 방지 `100ms~1000ms` 순차 WOL 기상 및 15초 실시간 생존·타이머 폴링 지원.
+- **독립형 전송기 OS 언어 자동 감지(KO/EN) & `main.py` 원격 응답 확장**: Windows/Linux OS 로케일 자동 감지 + 상단 `KO | EN | Auto` 실시간 전환 및 `network_pc_groups.json` 저장, `main.py` 원격 즉시 제어(`sleep`/`screenoff`/`lock`/`alarm`) + 실시간 타이머 폴링 응답(`query_status`) 확장.
+- **개별 PC 즉시 원격 제어 패널**: 웹 사이드바/뷰 및 데스크톱 네이티브 뷰(`DeviceController.exe`)에서 등록된 50대 PC별로 **종료(Shutdown), 재시작(Restart), 절전(Sleep), 화면끔(Screen Off), 비상 알람(Alarm)**을 개별 또는 다중 선택하여 즉시 송출.
 
 ### 🌐 2. 브라우저/OS 기본 언어 자동 감지 & 동적 다국어 스크립트 생성
 - **자동 감지 및 수동 토글 공존 (`src/utils/i18n.ts`)**: 최초 방문 시 `navigator.language` 기반 한국어/영어(`KO`/`EN`) 자동 감지(`auto`), 수동 전환(`manual`) 및 `Auto Reset` 복원 기능 지원.
@@ -20,18 +23,19 @@
 - **고대비 시인성 극대화**: 밝은 테마 환경에서 하드코딩된 어두운 카드/텍스트(`bg-[#18181b]`, `text-slate-200` 등)가 묻히거나 반전되는 문제를 전면 교정하고 고대비 텍스트 컬러(`text-[#0f172a]`, `text-[#2c2217]`) 및 패널/입력창 토큰 적용.
 - **`CompactWidget` 슬림 바(`minimal_bar`) 설정 드로어 복구**: 슬림 바 위젯에서도 설정 버튼 클릭 시 플로팅 설정 드로어가 정상 렌더링되도록 수정하고 `App.tsx`의 위젯 디자인 식별자(`cyber_hud`, `minimal_bar`, `retro_led`, `clean_card`) 및 레거시 마이그레이션 일원화.
 
-### 🐛 4. 전 영역 자아성찰(Deep Audit) 버그 수정 및 안정화
-- **타이머 카운트다운 및 정시 예약 정확도 개선**: `App.tsx`와 `DesktopAppView.tsx`의 카운트다운 완료·경고음 호출을 React 상태 업데이터 밖의 `useEffect`로 분리하여 StrictMode 이중 실행 방지, `DesktopAppView` 특정 시각 예약(`schedule`) 24시간 롤오버 계산 및 시작 로그 표기 보정.
+### 🐛 4. 전 영역 자아성찰(Deep Audit) 1·2차 버그 수정 및 안정화
+- **타이머 카운트다운·스레드 안전성·리소스 누수 교정**: `App.tsx`와 `DesktopAppView.tsx`의 카운트다운 완료·경고음 호출 분리, `App.tsx` `navigator.getBattery()` `levelchange`/`chargingchange` 리스너 참조 동일성 보장으로 해제 누수 제거, `network_scheduler.py` 백그라운드 스레드 공유 딕셔너리 갱신의 Tkinter `root.after(0, ...)` 마샬링 및 0초 도달 시 `timer_running=False` 전환, `LabNetworkFleetPanel.tsx` RFC-4180 CSV 파서/IPv4 검증 및 오프라인 대상 우선 WOL 정렬 적용.
 - **iFrame 안전 UX & UI 다듬기**: 웹 뷰의 네이티브 `confirm()` 호출 제거 및 인앱 토스트 교체, `FavoritesManager` 6모드 그리드 2행 고아 버튼 정렬(`grid-cols-3 sm:grid-cols-6`), `BatteryHistoryChart` 및 `StartupTodayTasksModal` 누락 다국어 문구 현지화.
-- **버전 동기화(`sync_version.py`) 및 GitHub 저장소 경로 일원화**: `main.py`의 `GITHUB_REPO_OWNER`를 `AhBiYout-all`로 수정, `sync_version.py`의 `network_scheduler.py`(`APP_VERSION`) 및 `index.html`(`og:title`) 정규식 교정, 배포 스크립트 및 워크플로 버전 기본값을 `v2.9.2`로 통합.
+- **버전 동기화(`sync_version.py`) 및 빌드·릴리즈 스크립트 SSOT 일원화**: `main.py`의 `GITHUB_REPO_OWNER`를 `AhBiYout-all`로 수정, `scripts/build_packages.py` 및 `scripts/clean_github_release_assets.py`가 `ROOT_DIR/package.json`을 읽도록 수정(미존재 `apply_shared_schedules.py` 참조 제거), `build.bat`이 `package.json` SSOT를 최우선 참조하도록 개선.
 
-### 📦 5. Inno Setup 6 인스톨러 폴더 풀림(Unpacked Multi-File) & 방화벽 사전 무음 등록
-- **폴더 풀림(Unpacked Multi-File) 설치 구현**: PyInstaller `--onedir` 빌드 디렉터리(`dist\PowerController\*`) 트리 및 필수 네이티브 C/C++ DLL들을 개별 파일 구조로 전개, 기존 설치 감지 시 클린 설치(`Clean Install`) / 덮어쓰기 선택 다이얼로그 및 `/SILENT`, `/VERYSILENT`, `/CLEAN=1` 지원.
+### 📦 5. Inno Setup 6 표준 설치 흐름 · 프로그램 추가/제거 정식 등록 · 방화벽 무음 등록
+- **표준 설치 진행 순서 구현 (`PowerController.iss` & `scriptGenerators.ts`)**: `기존 실행 중인 앱 강제 종료` → `기존 설치 감지 시 삭제(클린 설치)/덮어쓰기 질의` → `라이선스 선언(KO/EN)` → `설치(Unpacked Multi-File)` → `완료 화면(wpFinished) 바탕화면 바로가기 체크` → `앱 바로 실행` 순서로 정밀 구성.
+- **Windows 프로그램 추가/제거 정식 등록 & 레거시 키 정리**: `Uninstallable=yes`, `CreateUninstallRegKey=yes`, `UninstallDisplayName`, `UninstallDisplayIcon`, `UninstallFilesDir` 명시 및 레거시 Python 설치 키 중복 정리.
 - **Windows Defender Firewall 사전 무음 등록**: 메인(`PowerController.exe`), 커맨더(`PowerNetworkScheduler.exe`), 전용 포트(TCP 9988, UDP 9985, UDP 9986) 및 버전 표기 명칭(`PowerController v2.9.2`) 동시 등록 및 제거 시 자동 정리.
 
 ### ⚙️ 6. 12대 순수 창작 네이티브 DLL 고도화 · 전수 감사 패치 · `PowerExecNative.dll` 신설
-- **신규 12번째 순수 창작 DLL `PowerExecNative.dll`**: `SE_SHUTDOWN_NAME` 토큰 권한 상승 후 `InitiateSystemShutdownExW` / `ExitWindowsEx` 및 정식 C ABI `SetSuspendState` 직결 호출로 `shutdown.exe` / `rundll32` 없이 시스템 종료·재시작·절전·최대 절전·로그아웃 수행 및 `DiskFlushNative` 사전 디스크/레지스트리 플러시 연계.
-- **기존 11대 DLL 전수 감사 결함 패치**: `ScheduleCrypto.dll` Base64 테이블 초기화·`RtlGenRandom`·상수 시간 HMAC 수정, `CommanderTcpDispatcherNative.dll` 논블로킹 `select()` 전환으로 스택 UAF 크래시 제거 및 ACK 수신 API 신설, `CommanderPingScannerNative.dll` 32스레드 C ICMP/ARP 병렬 스캐너 신설, `FirewallNative`/`AudioDimmer` COM RAII 전환, `NetBeaconEngine`/`SysPowerHook`/`PowerCoreNative`/`DisplayDdc`/`InputIdle` 안정화 및 12대 DLL 빌드·인스톨러 파이프라인 통합.
+- **신규 12번째 순수 창작 DLL `PowerExecNative.dll` (`native/power_exec_native.c`)**: `SE_SHUTDOWN_NAME` 토큰 특권 획득 후 `InitiateSystemShutdownExW` / `ExitWindowsEx` 및 정식 C ABI `SetSuspendState` 직결 호출로 `shutdown.exe` / `rundll32` 없이 시스템 종료·재시작·절전·최대 절전·로그아웃 수행 및 `DiskFlushNative` 사전 디스크/레지스트리 플러시 연계.
+- **기존 11대 DLL 1·2차 전수 감사 결함 패치**: `AudioDimmerNative`/`FirewallNative` 손상된 COM GUID 공식 SDK 값 복원 및 RAII 전환, `PowerCoreNative` `lpvReserved == NULL` 디태치 가드, `SysPowerHook` 스레드 핸들 정리, `ScheduleCrypto` Base64 테이블·엄격 패딩 검증·`RtlGenRandom`·상수 시간 HMAC 수정, `CommanderTcpDispatcherNative` 논블로킹 `select()` 전환으로 스택 UAF 크래시 제거 및 ACK 수신 API 신설, `CommanderPingScannerNative` 32스레드 C ICMP/ARP 병렬 스캐너 신설, `NetBeaconEngine`/`DisplayDdc`/`InputIdle`/`native_bridge.py` 안정화 및 12대 DLL 빌드·인스톨러 파이프라인 통합.
 
 ---
 

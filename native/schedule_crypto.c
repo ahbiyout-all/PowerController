@@ -201,16 +201,24 @@ static int base64_decode(const char *src, unsigned char *out, size_t max_out) {
 
     size_t j = 0;
     for (size_t i = 0; i < len; i += 4) {
-        int a = dtable[(unsigned char)src[i]];
-        int b = dtable[(unsigned char)src[i + 1]];
-        int c = dtable[(unsigned char)src[i + 2]];
-        int d = dtable[(unsigned char)src[i + 3]];
+        unsigned char c0 = (unsigned char)src[i];
+        unsigned char c1 = (unsigned char)src[i + 1];
+        unsigned char c2 = (unsigned char)src[i + 2];
+        unsigned char c3 = (unsigned char)src[i + 3];
+        if (c0 == '=' || c1 == '=') return -1;
+        if ((c2 == '=' || c3 == '=') && (i + 4 < len)) return -1;
+        if (c2 == '=' && c3 != '=') return -1;
+
+        int a = dtable[c0];
+        int b = dtable[c1];
+        int c = dtable[c2];
+        int d = dtable[c3];
         if (a < 0 || b < 0 || c < 0 || d < 0) return -1;
 
         unsigned int triple = ((unsigned int)a << 18) | ((unsigned int)b << 12) | ((unsigned int)c << 6) | (unsigned int)d;
         if (j < max_out) out[j++] = (unsigned char)((triple >> 16) & 0xFF);
-        if (src[i + 2] != '=' && j < max_out) out[j++] = (unsigned char)((triple >> 8) & 0xFF);
-        if (src[i + 3] != '=' && j < max_out) out[j++] = (unsigned char)(triple & 0xFF);
+        if (c2 != '=' && j < max_out) out[j++] = (unsigned char)((triple >> 8) & 0xFF);
+        if (c3 != '=' && j < max_out) out[j++] = (unsigned char)(triple & 0xFF);
     }
     return (int)j;
 }

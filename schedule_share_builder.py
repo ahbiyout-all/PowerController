@@ -170,11 +170,19 @@ def inject_schedule():
         s.close()
     except Exception:
         pass
-    try:
-        os.system("taskkill /f /t /im PowerController.exe >nul 2>&1")
-        time.sleep(1)
-    except Exception:
-        pass
+    killed_native = False
+    if NATIVE_AVAILABLE and hasattr(native_bridge, "kill_process_by_name_silent"):
+        try:
+            killed_native = native_bridge.kill_process_by_name_silent("PowerController.exe") > 0
+        except Exception:
+            killed_native = False
+    if not killed_native and os.name == "nt":
+        try:
+            flags = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
+            subprocess.run(["taskkill", "/f", "/t", "/im", "PowerController.exe"], capture_output=True, creationflags=flags)
+        except Exception:
+            pass
+    time.sleep(1)
         
     # 2. 백업 생성 (기존 규칙 백업)
     if os.path.exists(rule_file_path):

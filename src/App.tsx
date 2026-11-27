@@ -502,13 +502,17 @@ export default function App() {
       });
     };
 
+    const onBatteryEvent = () => {
+      if (batteryManager) syncBatteryState(batteryManager);
+    };
+
     // Client-side Battery API integration (Hardware-level accuracy in Chromium/Edge/Chrome/Electron)
     if (typeof navigator !== 'undefined' && 'getBattery' in navigator) {
       (navigator as any).getBattery().then((bm: any) => {
         batteryManager = bm;
         syncBatteryState(bm);
-        bm.addEventListener('levelchange', () => syncBatteryState(bm));
-        bm.addEventListener('chargingchange', () => syncBatteryState(bm));
+        bm.addEventListener('levelchange', onBatteryEvent);
+        bm.addEventListener('chargingchange', onBatteryEvent);
       }).catch(() => {});
     }
 
@@ -569,8 +573,8 @@ export default function App() {
       clearInterval(intervalId);
       if (batteryManager) {
         try {
-          batteryManager.removeEventListener('levelchange', () => syncBatteryState(batteryManager));
-          batteryManager.removeEventListener('chargingchange', () => syncBatteryState(batteryManager));
+          batteryManager.removeEventListener('levelchange', onBatteryEvent);
+          batteryManager.removeEventListener('chargingchange', onBatteryEvent);
         } catch {}
       }
     };

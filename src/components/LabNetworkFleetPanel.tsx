@@ -196,6 +196,50 @@ function intToIp(num: number): string {
   return [(num >>> 24) & 255, (num >>> 16) & 255, (num >>> 8) & 255, num & 255].join('.');
 }
 
+function splitCsvRow(line: string): string[] {
+  const cells: string[] = [];
+  let cur = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (i + 1 < line.length && line[i + 1] === '"') {
+          cur += '"';
+          i++;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        cur += ch;
+      }
+    } else if (ch === '"') {
+      inQuotes = true;
+    } else if (ch === ',') {
+      cells.push(cur.trim());
+      cur = '';
+    } else {
+      cur += ch;
+    }
+  }
+  cells.push(cur.trim());
+  return cells;
+}
+
+function escapeCsvCell(value: unknown): string {
+  const raw = String(value ?? '').replace(/\r?\n/g, ' ');
+  if (raw.includes(',') || raw.includes('"')) {
+    return `"${raw.replace(/"/g, '""')}"`;
+  }
+  return raw;
+}
+
+function isValidIpv4(ip: string): boolean {
+  const parts = ip.split('.');
+  if (parts.length !== 4) return false;
+  return parts.every(p => /^\d{1,3}$/.test(p) && Number(p) >= 0 && Number(p) <= 255);
+}
+
 function parseCsvRoster(csvText: string): LabDevice[] {
   const lines = csvText
     .replace(/^\uFEFF/, '')
@@ -203,22 +247,22 @@ function parseCsvRoster(csvText: string): LabDevice[] {
     .map(l => l.trim())
     .filter(Boolean);
   if (lines.length < 2) return [];
-  const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+  const headers = splitCsvRow(lines[0]).map(h => h.toLowerCase().replace(/^\uFEFF/, ''));
   const devices: LabDevice[] = [];
   for (let i = 1; i < lines.length; i++) {
-    const cells = lines[i].split(',').map(c => c.trim());
+    const cells = splitCsvRow(lines[i]);
     const rowObj: Record<string, string> = {};
     headers.forEach((h, idx) => {
       rowObj[h] = cells[idx] || '';
     });
-    const ip = rowObj['ip'] || rowObj['ip_address'];
-    if (!ip) continue;
+    const ip = rowObj['ip'] || rowObj['ip_address'] || rowObj['host_ip'];
+    if (!ip || !isValidIpv4(ip)) continue;
     const seatNo = rowObj['seat_no'] || rowObj['seat'] || String(i).padStart(2, '0');
-    const mac = (rowObj['mac'] || '').toUpperCase();
-    const hostname = rowObj['hostname'] || rowObj['host'] || `LAB-${seatNo}`;
+    const mac = (rowObj['mac'] || rowObj['mac_address'] || '').toUpperCase();
+    const hostname = rowObj['hostname'] || rowObj['host'] || rowObj['pc_name'] || `LAB-${seatNo}`;
     const group = rowObj['group'] || 'Default';
-    const rowNum = parseInt(rowObj['row'] || '0', 10) || Math.floor((i - 1) / 10) + 1;
-    const colNum = parseInt(rowObj['col'] || '0', 10) || ((i - 1) % 10) + 1;
+    const rowNum = parseInt(rowObj['row'] || '0', 10) || Math.floor((devices.length) / 10) + 1;
+    const colNum = parseInt(rowObj['col'] || '0', 10) || (devices.length % 10) + 1;
     devices.push({
       ip,
       seatNo,
@@ -227,7 +271,7 @@ function parseCsvRoster(csvText: string): LabDevice[] {
       group,
       row: rowNum,
       col: colNum,
-      memo: rowObj['memo'] || '',
+      memo: rowObj['memo'] || rowObj['note'] || '',
       status: i % 9 === 0 ? 'offline' : 'online',
       latencyMs: i % 9 === 0 ? undefined : 2 + (i % 7),
       rulesCount: 1,
@@ -326,7 +370,8 @@ export const LabNetworkFleetPanel: React.FC<LabNetworkFleetPanelProps> = ({
         const next = prev.map(d => {
           if (d.timerRunning && d.remainingSeconds && d.remainingSeconds > 0) {
             changed = true;
-            return { ...d, remainingSeconds: d.remainingSeconds - 1 };
+            const nextRem = d.remainingSeconds - 1;
+            return { ...d, remainingSeconds: nextRem, timerRunning: nextRem > 0 };
           }
           return d;
         });
@@ -495,7 +540,7 @@ export const LabNetworkFleetPanel: React.FC<LabNetworkFleetPanelProps> = ({
     if (batchRunning) return;
     const offlineSelected = selectedIps.filter(ip => {
       const d = devices.find(x => x.ip === ip);
-      return d && d.mac;
+      return d && d.mac && d.status !== 'online';
     });
     const fallbackTargets =
       offlineSelected.length > 0
@@ -590,7 +635,11 @@ export const LabNetworkFleetPanel: React.FC<LabNetworkFleetPanelProps> = ({
   const handleExportCsv = () => {
     const header = 'seat_no,ip,mac,hostname,group,row,col,memo';
     const body = devices
-      .map(d => `${d.seatNo},${d.ip},${d.mac},${d.hostname},${d.group},${d.row},${d.col},${d.memo || ''}`)
+      .map(d =>
+        [d.seatNo, d.ip, d.mac, d.hostname, d.group, d.row, d.col, d.memo || '']
+          .map(escapeCsvCell)
+          .join(',')
+      )
       .join('\n');
     const blob = new Blob([`\uFEFF${header}\n${body}`], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);

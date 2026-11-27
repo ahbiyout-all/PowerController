@@ -20,14 +20,14 @@ PowerController는 단순한 타이머 프로그램을 넘어, **윈도우 네�
 
 ### 🌟 핵심 주요 기능
 - **⚡ 6대 핵심 전원 관리 모드**: 시스템 종료(Shutdown), 다시 시작(Reboot), 절전 모드(Sleep), 화면 끄기(Monitor Off), 로그아웃(Sign out), 사운드 알람(Alarm) 지원
-- **🎛️ 개별 디바이스 원격 제어판 (`DeviceController`) & 사내 원격 관제 (`PowerNetworkScheduler`)**: 동일 네트워크 내 최대 500대 PC 실시간 스캔, 전용 제어판 모달/창에서 개별 PC별 즉시 종료(Shutdown)·다시시작(Reboot)·절전(Sleep) 원클릭 트리거 및 브로드캐스트 공유 지원
-- **🌐 브라우저/OS 언어 자동 감지(`KO`/`EN`) & 동적 다국어 스크립트 생성**: 첫 방문 시 사용자 브라우저/OS 언어를 자동 감지(수동 전환 및 Auto Reset 지원)하여 웹 대시보드, 데스크톱 네이티브 뷰, 그리고 실시간 생성되는 Python/Inno Setup 스크립트 주석까지 동적 변환
+- **🏫 50대 컴퓨터실 통합 원격 관제 (`Lab Fleet 50` & `PowerNetworkScheduler`) & 개별 제어판 (`DeviceController`)**: 5/8/10열 좌석 배치 그리드 뷰와 상세 목록 뷰 상호 전환, IP 대역 스캔 및 RFC-4180 CSV 좌석 일괄 등록, 24스레드 병렬 전송·실패 PC 원클릭 재시도, 교시별 프로필 일괄 배포, 순차 Wake-on-LAN(WOL) 기상 및 15초 실시간 생존·타이머 폴링 지원
+- **🌐 브라우저/OS 언어 자동 감지(`KO`/`EN`) & 동적 다국어 스크립트 생성**: 첫 방문 시 사용자 브라우저/OS 언어를 자동 감지(수동 전환 및 Auto Reset 지원)하여 웹 대시보드, 데스크톱 네이티브 뷰, 독립형 네트워크 스케줄러, 그리고 실시간 생성되는 Python/Inno Setup 스크립트 주석까지 동적 변환
 - **🎨 4대 테마(다크/그레이/화이트/베이지) & 고대비 가독성**: 밝은 테마에서도 텍스트가 묻히지 않는 고대비 시인성 극대화 및 4개 데스크톱 창·설정 모달·위젯 전면 동기화
 - **🎛️ 깔끔한 풀다운(드롭다운) UI 인터페이스**: 복잡한 화면 분산을 방지하는 직관적인 풀다운 메뉴 및 기존 6분할 그리드 뷰 상호 전환 토글 지원
 - **📌 5종 디자인 상단 고정 컴팩트 위젯**: 네온 링(Neon Ring), 사이버 HUD(Cyber HUD), 슬림 바(Slim Bar), 레트로 LED(Retro LED), 클린 카드(Clean Card) 등 취향에 맞는 항상 위 플로팅 위젯 지원 (부드러운 페이드인·스케일 트랜지션 및 전 디자인 설정 드로어·라이트 테마 대비 지원)
 - **🔔 Pixabay 선별 7대 프리미엄 사운드 엔진**: 클래식 벨, 마림바, 크리스탈, SF 신스, 웨스트민스터 차임, 경고음, 버블 등 Web Audio / 네이티브 오디오 믹서 통합
 - **📊 배터리 텔레메트리 & 스마트 절전**: 60분 배터리 소모 트렌드 Recharts 시각화, 방전 예측 시간 계산, 15% 이하 지속 경고 토스트 및 20% 이하 위젯 저전력 모드
-- **🛡️ 11대 순수 창작 저수준 C/C++ 네이티브 DLL**: 하드웨어 웨이크업 타이머(`PowerCoreNative`), 락프리 링버퍼 네트워크 엔진(`NetBeaconEngine`), 방화벽 COM 직결(`FirewallNative`), 캐시 플러시(`DiskFlushNative`), Core Audio 디머(`AudioDimmerNative`), 유휴 시간 정밀 감지(`LowLevelInputIdleNative`) 등 탑재
+- **🛡️ 12대 순수 창작 저수준 C/C++ 네이티브 DLL**: 서브프로세스 없는 Win32 네이티브 전원 실행(`PowerExecNative`), 하드웨어 웨이크업 타이머(`PowerCoreNative`), 락프리 링버퍼 네트워크 엔진(`NetBeaconEngine`), 방화벽 COM 직결(`FirewallNative`), 32스레드 병렬 ICMP/ARP 스캐너(`CommanderPingScannerNative`), 논블로킹 TCP ACK 디스패처(`CommanderTcpDispatcherNative`), 캐시 플러시(`DiskFlushNative`), Core Audio 디머(`AudioDimmerNative`), 유휴 시간 정밀 감지(`LowLevelInputIdleNative`) 등 탑재
 - **⚡ 실행 중인 앱 강제 종료 플래그 (`/f`) 기본 적용**: 미저장 알림 창으로 인한 종료 멈춤 현상을 원천 방지하여 예약 작업의 100% 무인 집행 보장
 
 ---
@@ -117,12 +117,11 @@ Windows 전용 공식 인스톨러 설치 파일은 GitHub 공식 릴리즈 저�
 
 PowerController의 첫 릴리즈부터 현재까지의 전체 누적 패치 이력입니다:
 
-### [v2.9.2] - 2026-10-17
-- **개별 디바이스 원격 제어판 (`DeviceController`) 신설**: 네트워크 스캔된 PC마다 개별 즉시 종료/다시시작/절전 버튼 및 브로드캐스트 공유를 제공하는 전용 원격 제어판(웹 모달 & 데스크톱 4번째 창) 구축.
-- **브라우저/OS 언어 자동 감지(`KO`/`EN`) & 동적 다국어 스크립트 생성**: 첫 방문 자동 언어 감지 및 수동 전환(`Auto Reset`)과 연계하여 UI 레이블 및 생성되는 Python/Inno Setup 스크립트 주석을 동적으로 번역.
-- **4대 테마 고대비 가독성 전면 개선**: 다크, 그레이, 화이트, 베이지 4종 테마 전체 동기화 및 라이트 모드(웹 컴팩트 위젯, 데스크톱 4대 창 및 설정 모달) 고대비 시인성 보정.
-- **전수 코드 감사(Deep Audit) 안정화**: React 카운트다운/알림 타이머 순수성 개선, iFrame 내 차단형 `confirm()` 제거, 컴팩트 위젯 레거시 디자인 정규화 및 `minimal_bar` 설정 드로어 복구, `sync_version.py`·`og:title`·`GITHUB_REPO_OWNER`(`AhBiYout-all`) 정합성 확보.
-- **Inno Setup 6 폴더 풀림(Unpacked Multi-File) 패키징 & 방화벽 무음 등록**: PyInstaller `--onedir` 디렉터리 트리·네이티브 DLL 개별 파일 배포, 구버전 클린 설치/덮어쓰기 분기(`/CLEAN=1`), `PowerController v2.9.2` 방화벽 규칙 사전 등록.
+### [v2.9.2] - 2026-11-26
+- **50대 컴퓨터실 통합 원격 제어 타워 & 개별 디바이스 제어판**: 5/8/10열 좌석 배치 그리드/목록 뷰 전환, IP 대역 스캔, RFC-4180 CSV 일괄 매핑, 24스레드 병렬 전송 및 실패 재시도, 교시별 프로필 배포, 순차 WOL, OS 언어 자동 감지(`KO`/`EN`) 구축.
+- **12대 순수 창작 네이티브 DLL (`PowerExecNative.dll` 신설) & 전수 감사 패치**: Win32 네이티브 전원 실행(`PowerExecNative.dll`) 추가, COM GUID 정밀 복원(`AudioDimmerNative`/`FirewallNative`), LoaderLock/스레드 핸들 안전성, 엄격한 Base64 패딩 검증 및 32스레드 병렬 ICMP/ARP 스캐너 완비.
+- **Inno Setup 6 표준 6단계 설치 흐름 & 프로그램 추가/제거 정식 등록**: 실행 앱 강제 종료 → 삭제/덮어쓰기 질의 → 라이선스 → 설치(12대 DLL 개별 전개) → 바탕화면 바로가기 체크 → 앱 실행 순서 및 Windows 제어판 정식 등록.
+- **브라우저/OS 언어 자동 감지(`KO`/`EN`) · 4대 테마 고대비 · 2차 전수 감사(Deep Audit) 안정화**: React 카운트다운/배터리 리스너 정리, Tk 백그라운드 스레드 마샬링, iFrame 안전 토스트 전환, `package.json` 단일 버전 원천(`v2.9.2`) 및 빌드 스크립트 경로 정합성 확보.
 
 ### [v2.9.1] - 2026-10-09
 - **GitHub Releases 기반 실시간 자동 업데이트**: 인앱 버전 비교 및 다운로드 팝업(`UpdateModal`) 연동.

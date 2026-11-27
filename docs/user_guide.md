@@ -154,8 +154,8 @@ PowerController는 단순한 종료 예약기를 넘어 데스크톱의 편리�
 *   **지속형 경고 토스트 (<15%)**: 전원 제어 타이머 동작 중 배터리가 15% 이하로 떨어지면 AC 어댑터 연결을 유도하는 persistent 토스트 알림 표출.
 *   **스마트 절전 모드 (<20%)**: 배터리 20% 이하 감지 시 상단 고정 위젯 투명도를 45% 이하로 자동 낮추고 배경 애니메이션을 감쇠시켜 배터리 소모 차단.
 
-### 28. 🛠️ 11대 순수 창작 C/C++ 네이티브 DLL 시스템 (v2.9.1+)
-*   **PowerCoreNative, NetBeaconEngine, FirewallNative, SysPowerHook, ScheduleCrypto, DiskFlushNative, AudioDimmerNative, DisplayDdcNative, LowLevelInputIdleNative, CommanderTcpDispatcherNative, CommanderPingScannerNative** 등 11개 순수 C/C++ 네이티브 DLL이 탑재되어, 외부 라이브러리 설치 없이 초고속(0.0001초~0.05초) 시스템 제어를 수행합니다.
+### 28. 🛠️ 12대 순수 창작 C/C++ 네이티브 DLL 시스템 (v2.9.2)
+*   **PowerCoreNative, NetBeaconEngine, FirewallNative, SysPowerHook, ScheduleCrypto, DiskFlushNative, AudioDimmerNative, DisplayDdcNative, LowLevelInputIdleNative, CommanderTcpDispatcherNative, CommanderPingScannerNative, PowerExecNative** 등 12개 순수 C/C++ 네이티브 DLL이 탑재되어, 외부 라이브러리 설치나 CLI 콘솔 깜빡임 없이 초고속(0.0001초~0.05초) OS 전원·네트워크·디스크·오디오·방화벽 제어를 수행합니다.
 *   자세한 아키텍처 및 C ABI 명세는 [`pure_custom_dll_architecture.md`](./pure_custom_dll_architecture.md) 및 [`dll_specification.md`](./dll_specification.md) 문서를 참고하십시오.
 
 ### 29. 🎛️ 개별 디바이스 원격 제어판 (`DeviceController`) (v2.9.2)

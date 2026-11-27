@@ -23,10 +23,10 @@
 - **고대비 시인성 극대화**: 밝은 테마 환경에서 하드코딩된 어두운 카드/텍스트(`bg-[#18181b]`, `text-slate-200` 등)가 묻히거나 반전되는 문제를 전면 교정하고 고대비 텍스트 컬러(`text-[#0f172a]`, `text-[#2c2217]`) 및 패널/입력창 토큰 적용.
 - **`CompactWidget` 슬림 바(`minimal_bar`) 설정 드로어 복구**: 슬림 바 위젯에서도 설정 버튼 클릭 시 플로팅 설정 드로어가 정상 렌더링되도록 수정하고 `App.tsx`의 위젯 디자인 식별자(`cyber_hud`, `minimal_bar`, `retro_led`, `clean_card`) 및 레거시 마이그레이션 일원화.
 
-### 🐛 4. 전 영역 자아성찰(Deep Audit) 버그 수정 및 안정화
-- **타이머 카운트다운 및 정시 예약 정확도 개선**: `App.tsx`와 `DesktopAppView.tsx`의 카운트다운 완료·경고음 호출을 React 상태 업데이터 밖의 `useEffect`로 분리하여 StrictMode 이중 실행 방지, `DesktopAppView` 특정 시각 예약(`schedule`) 24시간 롤오버 계산 및 시작 로그 표기 보정.
+### 🐛 4. 전 영역 자아성찰(Deep Audit) 1·2차 버그 수정 및 안정화
+- **타이머 카운트다운·스레드 안전성·리소스 누수 교정**: `App.tsx`와 `DesktopAppView.tsx`의 카운트다운 완료·경고음 호출 분리, `App.tsx` `navigator.getBattery()` `levelchange`/`chargingchange` 리스너 참조 동일성 보장으로 해제 누수 제거, `network_scheduler.py` 백그라운드 스레드(`_execute_parallel_batch`, `_scan_ip_list`, `_poll_all_known_silent`) 공유 딕셔너리 갱신의 Tkinter `root.after(0, ...)` 메인 스레드 마샬링 및 0초 도달 시 `timer_running=False` 전환, `LabNetworkFleetPanel.tsx` RFC-4180 CSV 파서/IPv4 검증 및 오프라인 대상 우선 WOL 정렬 적용.
 - **iFrame 안전 UX & UI 다듬기**: 웹 뷰의 네이티브 `confirm()` 호출 제거 및 인앱 토스트 교체, `FavoritesManager` 6모드 그리드 2행 고아 버튼 정렬(`grid-cols-3 sm:grid-cols-6`), `BatteryHistoryChart` 및 `StartupTodayTasksModal` 누락 다국어 문구 현지화.
-- **버전 동기화(`sync_version.py`) 및 GitHub 저장소 경로 일원화**: `main.py`의 `GITHUB_REPO_OWNER`를 `AhBiYout-all`로 수정, `sync_version.py`의 `network_scheduler.py`(`APP_VERSION`) 및 `index.html`(`og:title`) 정규식 교정, 배포 스크립트 및 워크플로 버전 기본값을 `v2.9.2`로 통합.
+- **버전 동기화(`sync_version.py`) 및 빌드·릴리즈 스크립트 SSOT 일원화**: `main.py`의 `GITHUB_REPO_OWNER`를 `AhBiYout-all`로 수정, `scripts/build_packages.py` 및 `scripts/clean_github_release_assets.py`가 실행 작업 디렉터리에 관계없이 `ROOT_DIR/package.json`을 읽도록 수정(미존재 `apply_shared_schedules.py` 참조 제거), `build.bat`이 `package.json` SSOT를 최우선 참조하도록 개선.
 
 ### 📦 5. Inno Setup 6 표준 설치 흐름 · 프로그램 추가/제거 정식 등록 · 방화벽 무음 등록
 - **표준 설치 진행 순서 구현 (`PowerController.iss` & `scriptGenerators.ts`)**: `기존 실행 중인 앱 강제 종료` → `기존 설치 감지 시 삭제(클린 설치)/덮어쓰기 질의` → `라이선스 선언(KO/EN)` → `설치(Unpacked Multi-File)` → `완료 화면(wpFinished) 바탕화면 바로가기 체크` → `앱 바로 실행` 순서로 정밀 구성.
@@ -35,13 +35,12 @@
 
 ### ⚙️ 6. 12대 순수 창작 네이티브 DLL 고도화 · 전수 감사 패치 · `PowerExecNative.dll` 신설
 - **신규 12번째 순수 창작 DLL `PowerExecNative.dll` (`native/power_exec_native.c`)**: `SE_SHUTDOWN_NAME` 프로세스 토큰 특권 획득 후 `InitiateSystemShutdownExW` / `ExitWindowsEx` 및 정식 C ABI `SetSuspendState`(기존 `rundll32` 스택 ABI 결함 해소)를 직접 호출하여 서브프로세스 없이 종료·재시작·절전(S3)·최대 절전(S4)·로그아웃 실행 및 `DiskFlushNative` 캐시 플러시 연계.
-- **기존 11대 DLL 전수 감사 및 결함 수정**:
-  - `ScheduleCrypto.dll`: Base64 디코드 테이블 256원소 전체 초기화 수정, OS CSPRNG(`RtlGenRandom`) 솔트 적용, `constant_time_compare` HMAC 검증.
-  - `CommanderTcpDispatcherNative.dll`: 비동기 `FIONBIO` + `select()` 타임아웃으로 기존 21초 SYN 대기 스택 UAF 크래시 원천 제거 및 `NativeSendRuleCommandWithAck` 신설.
-  - `CommanderPingScannerNative.dll`: 스레드 안전 `WSAStartup` 초기화 보강(`WSANOTINITIALISED` 수정), `NativeSendWakeOnLanEx` 및 32스레드 C 풀 `NativeBatchScanLanTargets` 병렬 스캐너 신설.
-  - `FirewallNative.dll` & `AudioDimmerNative.dll`: `DllMain` 전역 COM 초기화 제거 및 per-call RAII(`ScopedComInit`/`ScopedAudioCom`) 전환, Audio QPC 단일 엔드포인트 페이드 최적화.
-  - `NetBeaconEngine.dll`, `SysPowerHook.dll`, `PowerCoreNative.c`, `DisplayDdcNative.dll`, `LowLevelInputIdleNative.dll`, `DiskFlushNative.dll`: `inet_pton` 전환, `SendMessageTimeoutW` 데드락 방지, 동적 프로세스 트리 확장·사이클 가드, VESA min/max 정규화 및 `NativeGetHardwareBrightness` 구현, 32비트 롤오버 오차 제거.
-- **통합 빌드 및 배포 일원화**: `native_bridge.py`, `main.py`, `network_scheduler.py`, `installer.py`, `build.bat`, `PowerController.iss`, `scripts/build_packages.py`, `scriptGenerators.ts`에 12대 DLL 컴파일·번들·호출 파이프라인 완비 및 `docs/pure_custom_dll_architecture.md` · `docs/dll_specification.md` 상세 기술 등록.
+- **기존 11대 DLL 1·2차 전수 감사 및 결함 수정**:
+  - `AudioDimmerNative.dll` & `FirewallNative.dll`: **손상된 Windows SDK COM GUID (`CLSID_MMDeviceEnumerator`, `IID_INetFwPolicy2`, `CLSID_NetFwRule`, `IID_INetFwRule`) 공식 값 정밀 복원**, `DllMain` 전역 COM 제거 및 per-call RAII(`ScopedComInit`/`ScopedAudioCom`) 전환, Audio QPC 단일 엔드포인트 페이드 최적화.
+  - `ScheduleCrypto.dll`: Base64 디코드 테이블 256원소 전체 초기화, 비최종 4문자 블록 내 `'='` 포함 등 잘못된 Base64 패딩 엄격 거부, OS CSPRNG(`RtlGenRandom`) 솔트 적용, `constant_time_compare` HMAC 검증.
+  - `CommanderTcpDispatcherNative.dll` & `CommanderPingScannerNative.dll`: 비동기 `FIONBIO` + `select()` 타임아웃으로 스택 UAF 크래시 원천 제거, `NativeSendRuleCommandWithAck` 신설, 스레드 안전 `WSAStartup`, `NativeSendWakeOnLanEx` 및 32스레드 C 풀 `NativeBatchScanLanTargets` 병렬 스캐너 신설.
+  - `PowerCoreNative.c`, `SysPowerHook.c`, `NetBeaconEngine.c`, `DisplayDdcNative.dll`, `LowLevelInputIdleNative.dll`, `DiskFlushNative.dll`: `PowerCoreNative` `DLL_PROCESS_DETACH` `lpvReserved == NULL` 가드로 프로세스 종료 데드락 방지, `SysPowerHook` 타임아웃/초기화 실패 시 워커 스레드 핸들 누수 및 `g_WorkerThreadId` 정리, `inet_pton` 전환, `SendMessageTimeoutW` 데드락 방지, 동적 프로세스 트리 확장·사이클 가드, VESA min/max 정규화 및 `NativeGetHardwareBrightness` 구현, 32비트 롤오버 오차 제거.
+- **통합 빌드 및 브리지 일원화**: `native_bridge.py`(`encrypt_schedule_payload` 내 섀도우 `import os` 제거, `set_hardware_brightness` 및 Core Audio·Idle 래퍼 완비), `main.py`, `network_scheduler.py`, `schedule_share_builder.py`(무음 프로세스 종료 연계), `installer.py`, `build.bat`, `PowerController.iss`, `scripts/build_packages.py`, `scriptGenerators.ts`에 12대 DLL 컴파일·번들·호출 파이프라인 완비 및 `docs/pure_custom_dll_architecture.md` · `docs/dll_specification.md` 상세 기술 등록.
 
 ---
 

@@ -13,16 +13,16 @@ PowerController 배포 시스템은 전 세계 소프트웨어 배포 표준인 
 2. **폴더 풀림(Unpacked Multi-File) 개별 파일 설치 구조 (v2.9.1)**:
    - PyInstaller `--onedir` 빌드 결과물인 `dist\PowerController\*` 폴더 트리와 서브디렉터리(`_internal/`, DLL, `.pyd`, 리소스 등)를 압축 해제 시 개별 파일 형태로 온전히 설치하도록 구현.
    - 메인 프로그램뿐만 아니라 커맨더(`PowerNetworkScheduler.exe`), 스케줄 주입기(`ApplySharedSchedules.exe`), `Register_Firewall_Rules.bat`, 다국어 `docs/` 라이선스 문서 트리가 모두 개별 파일로 깨끗하게 전개.
-   - **5대 순수 창작 네이티브 DLL 자동 번들링**: `PowerCoreNative.dll`, `NetBeaconEngine.dll`, `FirewallNative.dll`, `SysPowerHook.dll`, `ScheduleCrypto.dll` 및 `native_bridge.py`가 프로그램 디렉터리에 완벽하게 설치.
-3. **기존 앱 설치 감지 시 삭제(클린)/덮어쓰기(업그레이드) 사용자 확인 분기 (v2.9.1)**:
-   - 시스템에 이전 버전이 이미 설치되어 있는 경우 대화상자를 표출하여 **"기존 버전을 먼저 완전히 삭제하고 새로 설치(Clean Install)"**할 것인지, **"기존 설정 및 파일 위에 덮어쓰기(Overwrite/Upgrade)"**할 것인지 물어보고 진행.
-   - 무인 설치(`/SILENT`, `/VERYSILENT`) 시에는 기본적으로 무중단 덮어쓰기로 안전 진행되며, `/CLEAN` 매개변수 전달 시 완전 무음 언인스톨 후 새로 설치.
-4. **공식 다국어 및 2종류 라이선스 연동 (v2.9.1)**:
+   - **12대 순수 창작 네이티브 DLL 자동 번들링**: `PowerCoreNative.dll`, `NetBeaconEngine.dll`, `FirewallNative.dll`, `SysPowerHook.dll`, `ScheduleCrypto.dll`, `DiskFlushNative.dll`, `AudioDimmerNative.dll`, `DisplayDdcNative.dll`, `LowLevelInputIdleNative.dll`, `CommanderTcpDispatcherNative.dll`, `CommanderPingScannerNative.dll`, `PowerExecNative.dll` 및 `native_bridge.py`가 프로그램 디렉터리에 완벽하게 설치.
+3. **표준 6단계 설치 흐름 & 기존 앱 감지 분기 (v2.9.2)**:
+   - `기존 실행 중인 앱 강제 종료` → `기존 설치 감지 시 삭제(클린 설치)/덮어쓰기 질의` → `라이선스 선언(KO/EN)` → `설치 및 프로그램 추가/제거 등록` → `완료 화면 바탕화면 바로가기 체크` → `앱 실행` 순으로 진행.
+   - 무인 설치(`/SILENT`, `/VERYSILENT`) 시에는 기본적으로 무중단 덮어쓰기로 안전 진행되며, `/CLEAN=1` 매개변수 전달 시 완전 무음 언인스톨 후 새로 설치.
+4. **공식 다국어 및 2종류 라이선스 연동 (v2.9.1+)**:
    - 한국어 선택 시 `docs\LICENSE_ko.txt`, 영어 선택 시 `docs\LICENSE_en.txt`가 설치 마법사에 네이티브로 자동 바인딩.
    - 파이썬 셋업 마법사(`installer.py`) 1단계 화면 상단에 `[ 🇰🇷 한국어 ]` / `[ 🇺🇸 English ]` 실시간 언어 전환 툴바 탑재.
-5. **원격 무인 설치 시 프로세스 미종료 및 파일 락(Hang) 원천 차단 (v2.9.1)**:
-   - 원격 배포 도구(GPO, Intune, PsExec)로 무인 설치(`/VERYSILENT /NORESTART` 또는 `--silent`) 시, 기존 트레이 백그라운드 프로세스가 잡고 있는 파일 락(`ERROR_SHARING_VIOLATION`)을 방지하기 위해 **다계층 강제 종료(`taskkill /F /T`, PowerShell, WMIC, TCP QUIT)** 및 **임시 파일 이름 변경(`.old_XXXX`) 락 우회** 기법을 선제 가동.
-6. **Windows 제어판 및 설정 앱 완벽 연동**: 표준 `unins000.exe`가 생성되어 제어판 '프로그램 추가/제거' 및 Windows 10/11 '설치된 앱'에 정식 아이콘, 버전, 게시자(`cisnet.co.kr`), 설치 위치, 링크가 깔끔하게 등록.
+5. **원격 무인 설치 시 프로세스 미종료 및 파일 락(Hang) 원천 차단 (v2.9.1+)**:
+   - 원격 배포 도구(GPO, Intune, PsExec)로 무인 설치(`/VERYSILENT /NORESTART` 또는 `--silent`) 시, 기존 트레이 백그라운드 프로세스가 잡고 있는 파일 락(`ERROR_SHARING_VIOLATION`)을 방지하기 위해 **다계층 강제 종료(`PowerCoreNative` · `taskkill /F /T` · PowerShell · WMIC · TCP QUIT)** 및 **임시 파일 이름 변경(`.old_XXXX`) 락 우회** 기법을 선제 가동.
+6. **Windows 제어판 및 설정 앱 완벽 연동**: 표준 `unins000.exe`가 생성되어 제어판 '프로그램 추가/제거' 및 Windows 10/11 '설치된 앱'에 정식 아이콘, 버전, 게시자(`cisnet.co.kr`), 설치 위치, 링크가 깔끔하게 등록 (`Uninstallable=yes`, `CreateUninstallRegKey=yes`).
 7. **Windows Defender Firewall 사전 무음 등록 (메인 & 커맨더 버전 표기 명칭 포함, v2.9.2)**:
    - 프로그램 실행 전 설치 단계(`ssPostInstall`)에서 관리자 권한을 활용하여 **메인(`PowerController.exe`) 및 커맨더(`PowerNetworkScheduler.exe`) 2개 프로그램 모두**와 전용 통신 포트(TCP 9988, UDP 9985, UDP 9986)를 Windows 방화벽에 사전에 조용히(`SW_HIDE`) 자동 등록.
    - 버전 정보가 붙은 이름(`PowerController v2.9.2`, `PowerNetworkScheduler v2.9.2`)도 함께 등록하여 첫 실행 시 공용 네트워크 보안 경고창이 일절 뜨지 않도록 사전 원천 차단.
@@ -45,7 +45,7 @@ PowerController 배포 시스템은 전 세계 소프트웨어 배포 표준인 
            PowerController - Automated Build & Packaging Suite
                   Publisher: cisnet.co.kr | Author: AhBiYout
 ===============================================================================
-[*] Target Version Detected: v2.8.0
+[*] Target Version Detected: v2.9.2
 [*] Semantic Version Rule: MAJOR.MINOR.PATCH
 
  [SELECT BUILD OPTION]
@@ -236,7 +236,7 @@ Windows 탐색기에서 생성된 실행 파일(`.exe`)을 마우스 우클릭�
 
 | 대상 플랫폼 | 산출물 경로 | 용량 | 패키지 구성 및 설치 방식 |
 | :--- | :--- | :--- | :--- |
-| 💻 **PC (Windows)** | `build_output/pc/PowerController-v2.9.2-Windows.zip` | 약 4.0MB | Inno Setup 설치 마법사 소스(`.iss`), Python 메인 엔진, 11대 네이티브 DLL, 웹 대시보드 산출물, 방화벽 등록 스크립트 |
+| 💻 **PC (Windows)** | `release_assets/PowerController_Setup_v2.9.2.exe`<br>(`build_output/pc/PowerController_Setup_v2.9.2.exe`) | 공식 인스톨러 | Inno Setup 6 Unpacked Multi-File 설치 마법사(`.iss`), Python 메인·50대 관제 커맨더 엔진, **12대 순수 창작 C/C++ 네이티브 DLL**, 웹 대시보드 산출물, 방화벽 등록 스크립트 |
 
 * 모바일(스마트폰/태블릿)에서는 웹 브라우저 접속을 통해 실시간 반응형 원격 리모컨(PWA)으로 침대나 외부에서 PC 전원을 원격으로 제어할 수 있습니다.
 
